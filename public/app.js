@@ -937,7 +937,7 @@ function viewSettings() {
   }));
   $('#invite-create').addEventListener('click', async () => {
     $('#invite-error').textContent = '';
-    try { const { invite } = await api('/invites', { method: 'POST' }); await loadInvites(); shareInvite(invite.code); }
+    try { const { invite } = await api('/invites', { method: 'POST' }); await loadInvites(); showInviteQr(invite.code, invite.expiresAt); }
     catch (err) { $('#invite-error').textContent = err.message; }
   });
   $('#wipe-form').addEventListener('submit', async (e) => {
@@ -1190,13 +1190,64 @@ async function loadInvites() {
         <div class="text-xs muted" style="margin-top:2px">${i.status === 'used' ? (i.usedBy ? `<a href="#/u/${esc(i.usedBy.username)}">@${esc(i.usedBy.username)}</a> さんが登録` : '登録済み')
           : i.status === 'open' ? `期限: ${new Date(i.expiresAt).toLocaleDateString('ja-JP')}` : ''}</div>
       </div>
-      ${i.status === 'open' ? `<button class="btn btn-secondary btn-sm" data-share="${esc(i.code)}" type="button">送る</button><button class="icon-btn" data-del="${esc(i.code)}" aria-label="削除" type="button">${icon('trash')}</button>` : ''}
+      ${i.status === 'open' ? `<button class="btn btn-outline btn-sm" data-qr="${esc(i.code)}" data-exp="${i.expiresAt}" type="button">QR</button><button class="btn btn-secondary btn-sm" data-share="${esc(i.code)}" type="button">送る</button><button class="icon-btn" data-del="${esc(i.code)}" aria-label="削除" type="button">${icon('trash')}</button>` : ''}
     </div>`).join('') + '</div>' : '';
   $$('[data-share]', el).forEach((b) => b.addEventListener('click', () => shareInvite(b.dataset.share)));
+  $$('[data-qr]', el).forEach((b) => b.addEventListener('click', () => showInviteQr(b.dataset.qr, Number(b.dataset.exp))));
   $$('[data-del]', el).forEach((b) => b.addEventListener('click', async () => {
     if (!(await confirmDialog({ title: '招待リンクを削除しますか？', body: 'このリンクでは登録できなくなります。', ok: '削除する', danger: true }))) return;
     await api('/invites/' + b.dataset.del, { method: 'DELETE' }); loadInvites(); toast('招待リンクを削除しました');
   }));
+}
+// 招待の QR コード: 対面ならカメラで読み取ってもらう。画像として保存・共有もできる
+function showInviteQr(code, expiresAt) {
+  const exp = new Date(expiresAt).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' });
+  openPanel('招待QRコード', `<div class="qr-wrap">
+      <div class="qr-box"><img class="qr-img" src="/api/invites/${encodeURIComponent(code)}/qr.svg" alt="招待リンクのQRコード" width="280" height="280"></div>
+      <p class="qr-lead">スマホのカメラで読み取ると、IppO の登録画面が開きます</p>
+      <div class="qr-code"><span>招待コード</span><code>${esc(code)}</code></div>
+      <p class="text-xs muted">1人だけ使えます · ${exp}まで有効</p>
+      <div class="qr-actions">
+        <button class="btn btn-outline" type="button" id="qr-save">${icon('file')}画像を保存</button>
+        <button class="btn btn-primary" type="button" id="qr-share">${icon('send')}リンクを送る</button>
+      </div>
+      <p class="text-xs muted qr-hint">読み取りにくい時は、画面を明るくしてください</p>
+    </div>`, (root) => {
+    $('#qr-share', root).addEventListener('click', () => shareInvite(code));
+    $('#qr-save', root).addEventListener('click', () => saveInviteQr(code, exp, $('.qr-img', root)));
+    $('.qr-img', root).addEventListener('error', () => { $('.qr-box', root).innerHTML = emptyState({ icon: 'alert', title: 'このリンクは使えません', text: '使用済みか、期限が切れています。' }); });
+  });
+}
+// QR を「招待カード」の PNG 画像にして保存 (スマホは共有メニューから写真に保存・LINE などへ送信)
+async function saveInviteQr(code, exp, img) {
+  try {
+    if (!img.complete) await new Promise((r, j) => { img.onload = r; img.onerror = j; });
+    const W = 900, H = 1180, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d');
+    const font = (w, s) => `${w} ${s}px -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+    g.fillStyle = '#f5f6fa'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(60, 60, W - 120, H - 120, 48); g.fill();
+    // ブランドマーク + 見出し
+    g.strokeStyle = '#4b55f0'; g.lineWidth = 12; g.beginPath(); g.arc(W / 2 - 92, 170, 26, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#4b55f0'; g.beginPath(); g.arc(W / 2 - 92, 170, 8, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1f2766'; g.font = font(800, 56); g.textBaseline = 'middle'; g.fillText('IppO', W / 2 - 46, 172);
+    g.textAlign = 'center'; g.fillStyle = '#191d2e'; g.font = font(700, 40); g.fillText('IppO に招待されました', W / 2, 270);
+    g.drawImage(img, W / 2 - 300, 330, 600, 600);
+    g.fillStyle = '#7c8399'; g.font = font(500, 28); g.fillText('カメラで読み取って登録してください', W / 2, 980);
+    g.fillStyle = '#4b55f0'; g.font = `700 40px ui-monospace, Menlo, monospace`; g.fillText(code, W / 2, 1040);
+    g.fillStyle = '#7c8399'; g.font = font(500, 24); g.fillText(`1人だけ使えます · ${exp}まで有効`, W / 2, 1090);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    const file = new File([blob], `ippo-invite-${code}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
+      try { await navigator.share({ files: [file], title: 'IppO への招待' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = file.name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('QRコードの画像を保存しました', 'success');
+  } catch { toast('画像を保存できませんでした', 'error'); }
 }
 // 招待リンクを開いた時: コードを確認して登録画面を出す
 async function viewInviteLanding(code) {
@@ -1339,6 +1390,8 @@ let lastHash = null;
 function route() {
   if (viewCleanup) { viewCleanup(); viewCleanup = null; }
   closeMenu();
+  // 画面を移ったら、開いたままのウィンドウ (QR・確認など) を閉じる (ログイン画面は除く)
+  $$('dialog[open]').forEach((d) => { if (d.id !== 'auth-dialog') closeModal(d); });
   currentCommunity = null;
   const h = location.hash.slice(1) || '/';
   // 別の画面に移った時だけ、先頭に戻してフェードイン

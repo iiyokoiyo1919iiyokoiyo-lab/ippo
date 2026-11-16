@@ -4,6 +4,30 @@ const https = require('https');
 const dns = require('dns');
 const net = require('net');
 const crypto = require('crypto');
+const qrcode = require('qrcode-generator');
+
+// QR コードを SVG で作る (真ん中に IppO のマーク。誤り訂正レベル H なので一部を隠しても読み取れる)
+function qrSvg(text) {
+  const qr = qrcode(0, 'H');
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount(), q = 4, size = n + q * 2;
+  let logo = Math.round(n * 0.22); if (logo % 2 === 0) logo += 1;          // マークの大きさ (モジュール数)
+  const c0 = Math.floor((n - logo) / 2), c1 = c0 + logo;                    // マークを置く範囲
+  let d = '';
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (x >= c0 - 1 && x <= c1 && y >= c0 - 1 && y <= c1) continue;         // マークの周りは空ける
+    if (qr.isDark(y, x)) d += `M${x + q} ${y + q}h1v1h-1z`;
+  }
+  const cx = size / 2, r = logo / 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">` +
+    `<rect width="${size}" height="${size}" fill="#fff"/>` +
+    `<path d="${d}" fill="#1f2766"/>` +
+    `<rect x="${cx - r - 0.5}" y="${cx - r - 0.5}" width="${logo + 1}" height="${logo + 1}" rx="${(logo + 1) * 0.28}" fill="#fff"/>` +
+    `<circle cx="${cx}" cy="${cx}" r="${r * 0.68}" fill="none" stroke="#4b55f0" stroke-width="${r * 0.36}" shape-rendering="geometricPrecision"/>` +
+    `<circle cx="${cx}" cy="${cx}" r="${r * 0.2}" fill="#4b55f0" shape-rendering="geometricPrecision"/>` +
+    `</svg>`;
+}
 
 // ---------- 今日の質問 ----------
 const QUESTIONS = [
@@ -326,6 +350,17 @@ module.exports = function install(app, ctx) {
     db.prepare('INSERT INTO invites (code, creator_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(code, req.user.id, Date.now(), Date.now() + INVITE_DAYS * 86400_000);
     res.json({ invite: inviteOut(qInvite.get(code)) });
   });
+  // 招待リンクの QR コード (作った本人だけが取得できる。使用済み・期限切れは出さない)
+  app.get('/api/invites/:code/qr.svg', requireAuth, (req, res) => {
+    const inv = qInvite.get(normCode(req.params.code));
+    if (!inv || inv.creator_id !== req.user.id) return res.status(404).end();
+    if (inv.used_by || inv.used_at || inv.expires_at < Date.now()) return res.status(410).end();
+    const url = `${req.protocol}://${req.get('host')}/#/invite/${inv.code}`;
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(qrSvg(url));
+  });
+
   app.delete('/api/invites/:code', requireAuth, (req, res) => {
     const r = db.prepare('DELETE FROM invites WHERE code = ? AND creator_id = ? AND used_by IS NULL AND used_at IS NULL').run(normCode(req.params.code), req.user.id);
     res.json({ ok: r.changes > 0 });

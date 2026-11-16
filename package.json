@@ -12,6 +12,7 @@
   "dependencies": {
     "express": "^4.22.3",
     "playwright": "^1.63.0",
+    "qrcode-generator": "^1.4.4",
     "ws": "^8.23.0"
   }
 }
