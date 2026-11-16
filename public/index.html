@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IppO</title>
+<meta name="description" content="IppO — リンクを仮想ブラウザで安全に開けるSNS">
+<meta property="og:title" content="IppO">
+<meta property="og:description" content="リンクを仮想ブラウザで安全に開けるSNS">
+<meta name="theme-color" content="#0e9f6e">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="layout">
+  <nav class="side">
+    <a class="logo" href="#/"><span class="logo-mark">◉</span> IppO</a>
+    <a href="#/" data-nav="home">🏠 <span>ホーム</span></a>
+    <a href="#/search" data-nav="search">🔍 <span>検索</span></a>
+    <a href="#/me" data-nav="me" id="nav-me">👤 <span>プロフィール</span></a>
+    <button class="btn primary post-btn" id="open-compose">投稿する</button>
+    <div class="me-box" id="me-box"></div>
+  </nav>
+  <main id="main"></main>
+  <aside class="right">
+    <div class="card info">
+      <h3>🛡 仮想ブラウザ</h3>
+      <p>投稿内のリンクはサーバー上の使い捨てブラウザで開かれます。あなたの端末にはサイトの画面だけが届き、スクリプトやCookieは端末に入りません。閉じると履歴も全て破棄されます。</p>
+    </div>
+    <div class="card" id="suggest"><h3>おすすめユーザー</h3><div class="list"></div></div>
+  </aside>
+</div>
+
+<!-- 投稿モーダル -->
+<dialog id="compose-dialog" class="modal">
+  <form method="dialog" class="compose-modal">
+    <div class="modal-head"><button class="icon-btn" value="cancel">✕</button></div>
+    <div id="compose-modal-slot"></div>
+  </form>
+</dialog>
+
+<!-- 認証モーダル -->
+<dialog id="auth-dialog" class="modal">
+  <form id="auth-form" class="auth">
+    <h2 id="auth-title">ログイン</h2>
+    <input name="username" placeholder="ユーザー名" autocomplete="username" required>
+    <input name="displayName" placeholder="表示名（任意）" class="reg-only">
+    <input name="password" type="password" placeholder="パスワード（8文字以上）" autocomplete="current-password" required>
+    <p class="error" id="auth-error"></p>
+    <button class="btn primary" type="submit" id="auth-submit">ログイン</button>
+    <p class="muted"><a href="#" id="auth-toggle">アカウントを作成</a></p>
+  </form>
+</dialog>
+
+<!-- 仮想ブラウザ -->
+<div id="vb" class="vb hidden" aria-hidden="true">
+  <div class="vb-window">
+    <div class="vb-bar">
+      <button class="icon-btn" data-vb="back" title="戻る">←</button>
+      <button class="icon-btn" data-vb="forward" title="進む">→</button>
+      <button class="icon-btn" data-vb="reload" title="再読み込み">⟳</button>
+      <form id="vb-addr-form" class="vb-addr">
+        <span class="vb-shield" title="仮想環境で隔離中">🛡 隔離中</span>
+        <input id="vb-addr" spellcheck="false" autocomplete="off">
+      </form>
+      <span class="vb-timer" id="vb-timer"></span>
+      <button class="icon-btn" data-vb="close" title="閉じて破棄">✕</button>
+    </div>
+    <div class="vb-stage" id="vb-stage">
+      <canvas id="vb-canvas" width="1280" height="720" tabindex="0"></canvas>
+      <textarea id="vb-ime" aria-hidden="true"></textarea>
+      <div class="vb-overlay" id="vb-overlay">仮想環境を起動中…</div>
+      <div class="vb-toast" id="vb-toast"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# VPS などで使う場合: docker compose up -d --build
+services:
+  ippo:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VB_MAX_SESSIONS: "4"
+    volumes:
+      - ippo-data:/data
+    shm_size: "1gb"   # Chromium の共有メモリ不足対策
+    init: true
+volumes:
+  ippo-data:

@@ -1,0 +1,17 @@
+{
+  "name": "ippo",
+  "version": "1.0.0",
+  "description": "仮想ブラウザ搭載のX型SNS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.22.3",
+    "playwright": "^1.63.0",
+    "ws": "^8.23.0"
+  }
+}
