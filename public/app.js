@@ -174,6 +174,7 @@ function renderMe() {
     $('#login-btn').addEventListener('click', () => openAuth());
   }
   loadSuggest();
+  refreshDmBadge();
 }
 
 async function loadSuggest() {
@@ -251,7 +252,7 @@ async function viewUser(username) {
     main.innerHTML = `<div class="head"><h2>${esc(user.displayName)}</h2></div>
       <div class="profile-head"><div class="banner"></div>
         <div class="top">${avatar(user, 'lg')}
-          ${isMe ? '<button class="btn outline" id="edit-profile">プロフィールを編集</button>' : me ? `<button class="btn ${user.followed ? 'outline' : ''} follow-btn" data-user="${esc(user.username)}" data-on="${user.followed ? 1 : 0}">${user.followed ? 'フォロー中' : 'フォロー'}</button>` : ''}
+          ${isMe ? '<button class="btn outline" id="edit-profile">プロフィールを編集</button>' : me ? `<span class="profile-btns"><a class="btn outline dm-btn" href="#/dm/${esc(user.username)}" title="メッセージを送る">✉️</a><button class="btn ${user.followed ? 'outline' : ''} follow-btn" data-user="${esc(user.username)}" data-on="${user.followed ? 1 : 0}">${user.followed ? 'フォロー中' : 'フォロー'}</button></span>` : ''}
         </div>
         <h2>${esc(user.displayName)}</h2><div class="muted">@${esc(user.username)}</div>
         ${user.bio ? `<p>${richText(user.bio)}</p>` : ''}
@@ -278,10 +279,19 @@ async function viewSearch(q) {
     (posts.length ? posts.map((p) => renderPost(p)).join('') : '<div class="empty">該当する投稿はありません</div>');
 }
 
+let viewCleanup = null;
 function route() {
+  if (viewCleanup) { viewCleanup(); viewCleanup = null; }
   const h = location.hash.slice(1) || '/';
   document.querySelectorAll('.side [data-nav]').forEach((a) => a.classList.remove('active'));
+  refreshDmBadge();
   let m;
+  if (h.startsWith('/dm')) {
+    $('[data-nav=dm]').classList.add('active');
+    if (!me) { openAuth(); location.hash = '#/'; return; }
+    if ((m = h.match(/^\/dm\/([A-Za-z0-9_]+)/))) return viewDmThread(m[1]);
+    return viewDmList();
+  }
   if ((m = h.match(/^\/p\/(\d+)/))) return viewPost(m[1]);
   if ((m = h.match(/^\/u\/([A-Za-z0-9_]+)/))) return viewUser(m[1]);
   if (h === '/me') { if (!me) { openAuth(); location.hash = '#/'; return; } location.hash = '#/u/' + me.username; return; }
@@ -290,6 +300,124 @@ function route() {
   viewHome();
 }
 window.addEventListener('hashchange', route);
+
+// =====================================================================
+// ダイレクトメッセージ
+// =====================================================================
+async function refreshDmBadge() {
+  const badge = $('#dm-badge');
+  if (!me) return badge.classList.add('hidden');
+  try {
+    const { unread } = await api('/dm/unread', { noAuthPrompt: true });
+    badge.textContent = unread > 99 ? '99+' : unread;
+    badge.classList.toggle('hidden', !unread);
+  } catch {}
+}
+setInterval(() => { if (!document.hidden) refreshDmBadge(); }, 20_000);
+
+async function viewDmList() {
+  main.innerHTML = `<div class="head"><h2>メッセージ</h2></div>
+    <form class="search-box" id="dm-new"><input name="u" placeholder="ユーザー名を入力して新しいメッセージ (例: alice)" autocomplete="off"></form>
+    <div id="dm-list"><div class="empty">読み込み中…</div></div>`;
+  $('#dm-new').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = e.target.u.value.trim().replace(/^@/, '');
+    if (u) location.hash = '#/dm/' + encodeURIComponent(u);
+  });
+  const load = async () => {
+    const { conversations } = await api('/dm');
+    $('#dm-list').innerHTML = conversations.length ? conversations.map((c) => `
+      <a class="dm-row${c.unread ? ' unread' : ''}" href="#/dm/${esc(c.user.username)}">
+        ${avatar(c.user)}
+        <div class="dm-row-body">
+          <div class="meta"><b>${esc(c.user.displayName)}</b><span>@${esc(c.user.username)}</span><span>·</span><span>${timeAgo(c.last.createdAt)}</span></div>
+          <div class="dm-preview">${c.last.mine ? 'あなた: ' : ''}${esc(c.last.content)}</div>
+        </div>
+        ${c.unread ? `<b class="badge">${c.unread}</b>` : ''}
+      </a>`).join('') : '<div class="empty">まだメッセージはありません。<br>相手のプロフィールの ✉️ から送れます。</div>';
+  };
+  await load().catch((e) => { $('#dm-list').innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+  const t = setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 10_000);
+  viewCleanup = () => clearInterval(t);
+}
+
+function dmBubble(m) {
+  const d = new Date(m.createdAt);
+  return `<div class="dm-msg ${m.mine ? 'mine' : 'theirs'}" data-id="${m.id}">
+    <div class="dm-bubble">${richText(m.content)}</div>
+    <div class="dm-time">${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}</div>
+  </div>`;
+}
+
+async function viewDmThread(username) {
+  main.innerHTML = `<div class="head dm-head"><h2><a href="#/dm" style="color:inherit">←</a> <span id="dm-peer">@${esc(username)}</span></h2></div>
+    <div class="dm-thread" id="dm-thread"><div class="empty">読み込み中…</div></div>
+    <form class="dm-composer" id="dm-form">
+      <textarea name="c" rows="1" placeholder="メッセージを入力" maxlength="1000"></textarea>
+      <button class="btn primary" type="submit" disabled>送信</button>
+    </form>`;
+  const thread = $('#dm-thread'), form = $('#dm-form'), ta = form.c, btn = $('button', form);
+  let lastId = 0, firstId = 0, stopped = false;
+  const atBottom = () => window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+  const scrollBottom = () => window.scrollTo(0, document.body.scrollHeight);
+  const append = (msgs) => {
+    const fresh = msgs.filter((m) => !thread.querySelector(`.dm-msg[data-id="${m.id}"]`));
+    if (!fresh.length) return;
+    thread.querySelector('.empty')?.remove();
+    thread.insertAdjacentHTML('beforeend', fresh.map(dmBubble).join(''));
+    lastId = Math.max(lastId, ...fresh.map((m) => m.id));
+  };
+  try {
+    const { user, messages, hasMore } = await api('/dm/' + encodeURIComponent(username));
+    $('#dm-peer').innerHTML = `<a href="#/u/${esc(user.username)}" style="color:inherit">${esc(user.displayName)}</a> <span class="muted" style="font-size:14px;font-weight:400">@${esc(user.username)}</span>`;
+    thread.innerHTML = messages.length ? '' : `<div class="empty">${esc(user.displayName)}さんにメッセージを送ってみましょう</div>`;
+    append(messages);
+    firstId = messages[0]?.id || 0;
+    if (hasMore) {
+      thread.insertAdjacentHTML('afterbegin', '<button class="more" id="dm-more" type="button">前のメッセージを読み込む</button>');
+      const moreBtn = $('#dm-more');
+      moreBtn.addEventListener('click', async () => {
+        const r = await api(`/dm/${encodeURIComponent(username)}?before=${firstId}`);
+        moreBtn.insertAdjacentHTML('afterend', r.messages.map(dmBubble).join(''));
+        firstId = r.messages[0]?.id || firstId;
+        if (!r.hasMore) moreBtn.remove();
+      });
+    }
+    scrollBottom();
+    refreshDmBadge();
+  } catch (e) {
+    thread.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+    form.remove();
+    return;
+  }
+  // 入力欄: 内容に合わせて高さを伸ばす。PC は Enter で送信 (Shift+Enter で改行)。日本語変換中の Enter では送信しない
+  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; btn.disabled = !ta.value.trim(); });
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia('(pointer: fine)').matches) { e.preventDefault(); form.requestSubmit(); }
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const content = ta.value.trim();
+    if (!content) return;
+    btn.disabled = true;
+    try {
+      const { message } = await api('/dm/' + encodeURIComponent(username), { method: 'POST', body: { content } });
+      ta.value = ''; ta.dispatchEvent(new Event('input'));
+      append([message]); scrollBottom();
+    } catch (err) { alert(err.message); btn.disabled = false; }
+    ta.focus();
+  });
+  // 新着を定期的に取得 (画面を離れたら止める)
+  const poll = async () => {
+    if (stopped || document.hidden) return;
+    try {
+      const { messages } = await api(`/dm/${encodeURIComponent(username)}?after=${lastId}`, { noAuthPrompt: true });
+      if (messages.length) { const stick = atBottom(); append(messages); if (stick) scrollBottom(); }
+    } catch {}
+  };
+  const t = setInterval(poll, 4000);
+  viewCleanup = () => { stopped = true; clearInterval(t); };
+}
 
 // =====================================================================
 // 仮想ブラウザ クライアント

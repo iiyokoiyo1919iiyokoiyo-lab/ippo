@@ -41,6 +41,23 @@ CREATE TABLE IF NOT EXISTS follows (
   followee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   PRIMARY KEY (follower_id, followee_id)
 );
+-- ダイレクトメッセージ (1対1)
+CREATE TABLE IF NOT EXISTS dm_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dm_pair ON dm_messages(sender_id, recipient_id, id);
+CREATE INDEX IF NOT EXISTS idx_dm_recipient ON dm_messages(recipient_id, id);
+-- どこまで読んだか (未読数の計算用)
+CREATE TABLE IF NOT EXISTS dm_reads (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  peer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  last_read_id INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, peer_id)
+);
 `);
 
 module.exports = db;

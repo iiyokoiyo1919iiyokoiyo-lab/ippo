@@ -259,6 +259,74 @@ function follow(on) {
 app.post('/api/users/:username/follow', requireAuth, writeLimit, follow(true));
 app.delete('/api/users/:username/follow', requireAuth, writeLimit, follow(false));
 
+// ---------- ダイレクトメッセージ ----------
+// 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
+const dmLimit = rateLimit({ windowMs: 60 * 1000, max: 30, key: (req) => 'dm' + req.user.id });
+const qLastRead = db.prepare('SELECT last_read_id FROM dm_reads WHERE user_id = ? AND peer_id = ?');
+const qUnreadFrom = db.prepare('SELECT COUNT(*) AS n FROM dm_messages WHERE sender_id = ? AND recipient_id = ? AND id > ?');
+const qMarkRead = db.prepare(`INSERT INTO dm_reads (user_id, peer_id, last_read_id) VALUES (?, ?, ?)
+  ON CONFLICT(user_id, peer_id) DO UPDATE SET last_read_id = MAX(last_read_id, excluded.last_read_id)`);
+const dmOut = (m, me) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_id === me.id });
+
+function unreadFrom(me, peerId) {
+  const last = qLastRead.get(me.id, peerId)?.last_read_id || 0;
+  return qUnreadFrom.get(peerId, me.id, last).n;
+}
+
+// 会話一覧
+app.get('/api/dm', requireAuth, (req, res) => {
+  const me = req.user;
+  const rows = db.prepare(`SELECT peer, MAX(id) AS last_id FROM (
+      SELECT CASE WHEN sender_id = ? THEN recipient_id ELSE sender_id END AS peer, id
+      FROM dm_messages WHERE sender_id = ? OR recipient_id = ?)
+    GROUP BY peer ORDER BY last_id DESC LIMIT 50`).all(me.id, me.id, me.id);
+  const conversations = rows.map((r) => {
+    const peer = qUser.get(r.peer);
+    if (!peer) return null;
+    return { user: publicUser(peer), last: dmOut(db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.last_id), me), unread: unreadFrom(me, peer.id) };
+  }).filter(Boolean);
+  res.json({ conversations });
+});
+
+// 未読の合計 (ナビのバッジ用)
+app.get('/api/dm/unread', requireAuth, (req, res) => {
+  const me = req.user;
+  const peers = db.prepare('SELECT DISTINCT sender_id AS peer FROM dm_messages WHERE recipient_id = ?').all(me.id);
+  res.json({ unread: peers.reduce((n, p) => n + unreadFrom(me, p.peer), 0) });
+});
+
+function findPeer(req, res) {
+  const peer = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+  if (!peer) { res.status(404).json({ error: 'ユーザーが見つかりません' }); return null; }
+  if (peer.id === req.user.id) { res.status(400).json({ error: '自分にはメッセージを送れません' }); return null; }
+  return peer;
+}
+
+// 1つの会話のメッセージ (after: それより新しいもの / before: それより古いもの)
+app.get('/api/dm/:username', requireAuth, (req, res) => {
+  const me = req.user, peer = findPeer(req, res);
+  if (!peer) return;
+  const after = Number(req.query.after) || 0;
+  const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
+  const pair = '((sender_id = $me AND recipient_id = $peer) OR (sender_id = $peer AND recipient_id = $me))';
+  const rows = after
+    ? db.prepare(`SELECT * FROM dm_messages WHERE ${pair} AND id > $after ORDER BY id ASC LIMIT 100`).all({ $me: me.id, $peer: peer.id, $after: after })
+    : db.prepare(`SELECT * FROM (SELECT * FROM dm_messages WHERE ${pair} AND id < $before ORDER BY id DESC LIMIT 50) ORDER BY id ASC`).all({ $me: me.id, $peer: peer.id, $before: before });
+  if (rows.length) qMarkRead.run(me.id, peer.id, rows[rows.length - 1].id);
+  res.json({ user: profile(peer, me), messages: rows.map((m) => dmOut(m, me)), hasMore: !after && rows.length === 50 });
+});
+
+app.post('/api/dm/:username', requireAuth, dmLimit, (req, res) => {
+  const me = req.user, peer = findPeer(req, res);
+  if (!peer) return;
+  const content = String(req.body?.content || '').trim();
+  if (!content) return res.status(400).json({ error: 'メッセージを入力してください' });
+  if ([...content].length > 1000) return res.status(400).json({ error: '1000文字以内で送信してください' });
+  const r = db.prepare('INSERT INTO dm_messages (sender_id, recipient_id, content, created_at) VALUES (?, ?, ?, ?)').run(me.id, peer.id, content, Date.now());
+  qMarkRead.run(me.id, peer.id, Number(r.lastInsertRowid));
+  res.json({ message: dmOut(db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.lastInsertRowid), me) });
+});
+
 app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ---------- 仮想ブラウザ WebSocket ----------
