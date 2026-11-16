@@ -166,6 +166,63 @@ function videoEmbed(url) {
 }
 function firstUrl(text) { const m = text.match(URL_RE); return m ? m[0] : null; }
 
+// ---------- YouTube ----------
+// 再生ボタンを押すまで YouTube には接続しない (サムネイルとタイトルは IppO のサーバー経由)。
+// 再生は YouTube 公式の埋め込みプレーヤー (Cookie なしモード: youtube-nocookie.com)
+function youtubeInfo(url) {
+  let u; try { u = new URL(url); } catch { return null; }
+  const host = u.hostname.replace(/^(www|m|music)\./, '');
+  let id = null;
+  if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    if (u.pathname === '/watch') id = u.searchParams.get('v');
+    else { const m = u.pathname.match(/^\/(shorts|embed|live|v)\/([^/?#]+)/); if (m) id = m[2]; }
+  }
+  if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+  // 開始位置: t=90 / t=1m30s / start=90
+  const t = u.searchParams.get('t') || u.searchParams.get('start') || '';
+  let start = 0;
+  const hms = t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/);
+  if (hms) start = (+hms[1] || 0) * 3600 + (+hms[2] || 0) * 60 + (+hms[3] || 0);
+  return { id, start, shorts: u.pathname.startsWith('/shorts/') };
+}
+function youtubeCard(yt, url) {
+  return `<div class="yt" data-yt="${yt.id}" data-start="${yt.start}">
+    <button class="yt-card${yt.shorts ? ' yt-shorts' : ''}" type="button" aria-label="YouTube 動画を再生">
+      <img class="yt-thumb" src="/api/yt/${yt.id}/thumb" alt="" loading="lazy" decoding="async">
+      <span class="yt-play">${icon('play')}</span>
+      <span class="yt-meta"><span class="yt-title">YouTube 動画</span><span class="yt-author"></span></span>
+    </button>
+    <div class="yt-note"><span class="yt-note-text">${icon('globe', 'ic-sm')}再生すると YouTube に接続（Cookie なし）</span>
+      <span class="vlink" data-url="${esc(url)}">${icon('shield')}仮想ブラウザで開く</span></div>
+  </div>`;
+}
+// タイトルを読み込む (表示された YouTube カードごとに1回)
+const ytTitles = new Map();
+async function fillYoutubeTitles(root = document) {
+  for (const el of $$('.yt[data-yt]:not([data-filled])', root)) {
+    el.dataset.filled = '1';
+    const id = el.dataset.yt;
+    if (!ytTitles.has(id)) ytTitles.set(id, api('/yt/' + id, { noAuthPrompt: true }).catch(() => null));
+    const info = await ytTitles.get(id);
+    if (info && el.isConnected) {
+      $('.yt-title', el).textContent = info.title || 'YouTube 動画';
+      $('.yt-author', el).textContent = info.author || '';
+      $('.yt-card', el).setAttribute('aria-label', `${info.title} を再生`);
+    }
+  }
+}
+new MutationObserver(() => fillYoutubeTitles(main)).observe(main, { childList: true, subtree: true });
+// サムネイルが読み込めなかった時は画像を外して無地の背景にする
+document.addEventListener('error', (e) => { if (e.target.classList?.contains('yt-thumb')) e.target.remove(); }, true);
+// 再生: その場で公式プレーヤーに差し替える
+function playYoutube(el) {
+  const id = el.dataset.yt, start = Number(el.dataset.start) || 0;
+  const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&rel=0&modestbranding=1${start ? '&start=' + start : ''}`;
+  $('.yt-card', el).outerHTML = `<div class="yt-frame${$('.yt-card', el).classList.contains('yt-shorts') ? ' yt-shorts' : ''}"><iframe src="${src}" title="YouTube 動画プレーヤー"
+    allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`;
+}
+
 // ---------- 共通部品 ----------
 function pageHead({ title, sub = '', back = null, actions = '', tabs = '' }) {
   return `<header class="page-head${tabs ? ' with-tabs' : ''}">
@@ -192,7 +249,10 @@ function renderPost(item, { focus = false, fresh = false } = {}) {
   const ctx = item.type === 'repost' ? `<div class="post-ctx">${icon('repeat')}${esc(item.by.displayName)}さんがリポスト</div>` : '';
   const url = firstUrl(p.content);
   let media = '';
-  if (url && isVideoUrl(url) && me) {
+  const yt = url && youtubeInfo(url);
+  if (yt) {
+    media = youtubeCard(yt, url);
+  } else if (url && isVideoUrl(url) && me) {
     media = videoEmbed(url);
   } else if (url) {
     let host = url; try { host = new URL(url).hostname; } catch {}
@@ -244,10 +304,12 @@ function popButton(btn) { btn.classList.remove('pop'); void btn.offsetWidth; btn
 
 // 投稿の操作 (イベント委譲)
 main.addEventListener('click', async (e) => {
+  const ytCard = e.target.closest('.yt-card');
+  if (ytCard) { e.preventDefault(); e.stopPropagation(); return playYoutube(ytCard.closest('.yt')); }
   const link = e.target.closest('[data-url]');
   if (link) { e.preventDefault(); e.stopPropagation(); return VB.open(link.dataset.url); }
   const postEl = e.target.closest('.post[data-id]');
-  if (!postEl || e.target.closest('a, video')) return;
+  if (!postEl || e.target.closest('a, video, iframe, .yt-frame')) return;
   const id = postEl.dataset.id;
   const more = e.target.closest('[data-menu]');
   if (more) return openPostMenu(more, postEl);
@@ -1194,7 +1256,7 @@ function dmBubble(m) {
   const d = new Date(m.createdAt);
   return `<div class="dm-msg ${m.mine ? 'mine' : 'theirs'}" data-id="${m.id}">
     <div class="dm-bubble">${richText(m.content)}</div>
-    ${(() => { const u = firstUrl(m.content); return u && isVideoUrl(u) ? videoEmbed(u) : ''; })()}
+    ${(() => { const u = firstUrl(m.content); if (!u) return ''; const yt = youtubeInfo(u); return yt ? youtubeCard(yt, u) : isVideoUrl(u) ? videoEmbed(u) : ''; })()}
     <div class="dm-time">${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}</div>
   </div>`;
 }

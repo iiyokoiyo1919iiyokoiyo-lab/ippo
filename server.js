@@ -18,6 +18,7 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; " +
+    "frame-src https://www.youtube-nocookie.com; " +
     "frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');

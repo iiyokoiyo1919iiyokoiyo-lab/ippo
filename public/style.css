@@ -779,3 +779,27 @@ a.list-item:hover, button.list-item:hover { background: var(--surface-2); }
 .admin-badge-label { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 7px; margin-left: 8px; border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: 750; vertical-align: 5px; letter-spacing: .02em; }
 .admin-badge-label .ic { width: 15px; height: 15px; color: var(--accent); }
 .post-name .admin-badge { margin-left: -2px; }
+
+/* YouTube (再生前はサムネイル、押すと公式プレーヤー) */
+.yt { display: flex; flex-direction: column; gap: 6px; }
+.yt-card, .yt-frame { position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: linear-gradient(135deg, #1b2050, #30368a); }
+.yt-card { padding: 0; border: 0; cursor: pointer; color: #fff; text-align: left; }
+.yt-shorts { aspect-ratio: 9 / 16; max-width: 300px; }
+.yt-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform var(--t3) var(--ease); }
+.yt-card:hover .yt-thumb { transform: scale(1.02); }
+.yt-card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, .7) 100%); }
+.yt-play { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; background: rgba(15, 18, 40, .62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); transition: transform var(--t2) var(--ease-spring), background var(--t1); }
+.yt-play .ic { width: 26px; height: 26px; fill: #fff; stroke: #fff; margin-left: 3px; }
+.yt-card:hover .yt-play { background: var(--accent); transform: translate(-50%, -50%) scale(1.06); }
+.yt-card:active .yt-play { transform: translate(-50%, -50%) scale(.94); }
+.yt-meta { position: absolute; z-index: 1; left: 14px; right: 14px; bottom: 12px; display: flex; flex-direction: column; gap: 1px; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.yt-title { font-weight: 700; font-size: var(--fs-md); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.yt-author { font-size: var(--fs-xs); opacity: .85; }
+.yt-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.yt-note { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; font-size: var(--fs-xs); color: var(--text-3); }
+.yt-note .ic { width: 13px; height: 13px; }
+.yt-note .vlink { margin-left: auto; font-size: var(--fs-xs); }
+.dm-msg .yt { width: min(320px, 70vw); margin-top: 4px; }
+.yt-note-text { display: inline-flex; align-items: center; gap: 4px; }
+/* リンクの盾アイコンと URL を同じ行に保つ */
+.vlink { display: inline-block; max-width: 100%; overflow-wrap: anywhere; vertical-align: bottom; }

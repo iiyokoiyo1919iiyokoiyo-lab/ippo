@@ -450,6 +450,60 @@ module.exports = function install(app, ctx) {
     res.json({ ok: true });
   });
 
+  // ======================= YouTube (再生ボタンを押すまで利用者の端末は YouTube に接続しない) =======================
+  // サムネイルとタイトルは IppO のサーバーが代わりに取得する。接続先は YouTube の固定ホストだけ
+  const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+  const ytLimit = rateLimit({ windowMs: 60 * 1000, max: 120 });
+  const ytInfo = new Map();   // id → { title, author, at }
+  const ytThumb = new Map();  // id → { type, body, at }
+  const remember = (map, key, val, max = 300) => { map.set(key, val); if (map.size > max) map.delete(map.keys().next().value); };
+  function fetchFixed(url, maxBytes) {
+    return new Promise((resolve, reject) => {
+      const r = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IppO/1.0)' }, timeout: 8000 }, (res) => {
+        if (res.statusCode !== 200) { res.resume(); return reject(new Error('status ' + res.statusCode)); }
+        const chunks = []; let size = 0;
+        res.on('data', (c) => { size += c.length; if (size > maxBytes) { r.destroy(); reject(new Error('too large')); } else chunks.push(c); });
+        res.on('end', () => resolve({ type: res.headers['content-type'] || '', body: Buffer.concat(chunks) }));
+      });
+      r.on('timeout', () => r.destroy(new Error('timeout')));
+      r.on('error', reject);
+    });
+  }
+  // タイトル・投稿者 (YouTube の oEmbed)
+  app.get('/api/yt/:id', ytLimit, async (req, res) => {
+    const id = req.params.id;
+    if (!YT_ID.test(id)) return res.status(400).json({ error: 'IDが正しくありません' });
+    const hit = ytInfo.get(id);
+    if (hit && Date.now() - hit.at < 6 * 3600_000) return res.json(hit.data);
+    try {
+      const { body } = await fetchFixed(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`, 64 * 1024);
+      const j = JSON.parse(body.toString('utf8'));
+      const data = { title: String(j.title || '').slice(0, 200), author: String(j.author_name || '').slice(0, 100) };
+      remember(ytInfo, id, { data, at: Date.now() });
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.json(data);
+    } catch {
+      res.status(404).json({ error: '動画の情報を取得できませんでした' });
+    }
+  });
+  // サムネイル画像
+  app.get('/api/yt/:id/thumb', ytLimit, async (req, res) => {
+    const id = req.params.id;
+    if (!YT_ID.test(id)) return res.status(400).end();
+    let hit = ytThumb.get(id);
+    if (!hit || Date.now() - hit.at > 24 * 3600_000) {
+      try {
+        const r = await fetchFixed(`https://i.ytimg.com/vi/${id}/hqdefault.jpg`, 512 * 1024);
+        if (!/^image\/(jpeg|png|webp)/.test(r.type)) throw new Error('not image');
+        hit = { type: r.type, body: r.body, at: Date.now() };
+        remember(ytThumb, id, hit, 200);
+      } catch { return res.status(404).end(); }
+    }
+    res.setHeader('Content-Type', hit.type);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.end(hit.body);
+  });
+
   // ======================= 動画の読み込み (中継) =======================
   // 動画はサーバーが代わりに取得して流す。利用者の IP アドレスは動画の配信元に伝わらない。
   // 内部ネットワーク宛は DNS 解決の段階で遮断する (仮想ブラウザと同じ方針)
