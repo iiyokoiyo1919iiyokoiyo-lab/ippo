@@ -300,6 +300,8 @@ const VB = (() => {
   const root = $('#vb'), canvas = $('#vb-canvas'), ctx = canvas.getContext('2d');
   const ime = $('#vb-ime'), addr = $('#vb-addr'), overlay = $('#vb-overlay'), toastEl = $('#vb-toast'), timerEl = $('#vb-timer');
   let ws = null, endAt = 0, timer = null, toastT = null, pendingMove = null, drawing = false;
+  let vp = { width: 1280, height: 720 }; // リモート側の表示サイズ (CSS ピクセル)
+  const stage = $('#vb-stage');
 
   const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
   const toast = (msg) => { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 3500); };
@@ -311,7 +313,13 @@ const VB = (() => {
     document.body.style.overflow = 'hidden';
     overlay.textContent = '🛡 仮想環境を起動中…'; overlay.classList.remove('hidden');
     addr.value = url;
-    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/vb?url=${encodeURIComponent(url)}`);
+    // スマホでは画面いっぱいに、スマホ版のサイトとして表示する
+    const mobile = matchMedia('(max-width: 640px)').matches;
+    const bar = $('.vb-bar').getBoundingClientRect().height || 48;
+    vp = mobile ? { width: Math.round(window.innerWidth), height: Math.round(window.innerHeight - bar) } : { width: 1280, height: 720 };
+    stage.style.aspectRatio = `${vp.width} / ${vp.height}`;
+    const q = mobile ? `&m=1&w=${vp.width}&h=${vp.height}` : '';
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/vb?url=${encodeURIComponent(url)}${q}`);
     ws.binaryType = 'blob';
     ws.onmessage = async (ev) => {
       if (typeof ev.data !== 'string') {
@@ -326,10 +334,14 @@ const VB = (() => {
         return;
       }
       const m = JSON.parse(ev.data);
-      if (m.t === 'hello') { endAt = Date.now() + m.ttl; tick(); timer = setInterval(tick, 1000); }
+      if (m.t === 'hello') { vp = m.viewport; stage.style.aspectRatio = `${vp.width} / ${vp.height}`; endAt = Date.now() + m.ttl; tick(); timer = setInterval(tick, 1000); }
       else if (m.t === 'state') { if (document.activeElement !== addr) addr.value = m.url; }
       else if (m.t === 'loading') { if (document.activeElement !== addr) addr.value = m.url; }
       else if (m.t === 'notice') toast(m.msg);
+      else if (m.t === 'focus' && lastPointer === 'touch') {
+        if (m.editable) { if (document.activeElement !== ime) kbdFloat.classList.remove('hidden'); }
+        else { kbdFloat.classList.add('hidden'); if (document.activeElement === ime) ime.blur(); }
+      }
       else if (m.t === 'ended') { overlay.textContent = '🛡 ' + m.msg; overlay.classList.remove('hidden'); }
     };
     ws.onclose = () => { if (!root.classList.contains('hidden') && overlay.classList.contains('hidden')) { overlay.textContent = '🛡 セッションは終了し、データは破棄されました'; overlay.classList.remove('hidden'); } clearInterval(timer); };
@@ -340,6 +352,7 @@ const VB = (() => {
     if (ws) { ws.onclose = null; ws.close(); ws = null; }
     clearInterval(timer);
     root.classList.add('hidden'); root.setAttribute('aria-hidden', 'true');
+    $('#vb-kbd-float').classList.add('hidden'); $('#vb-ime').blur();
     document.body.style.overflow = '';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -352,15 +365,21 @@ const VB = (() => {
   // 画面上の座標 → リモートのビューポート座標
   function pos(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: Math.round((e.clientX - r.left) * canvas.width / r.width), y: Math.round((e.clientY - r.top) * canvas.height / r.height) };
+    return { x: Math.round((e.clientX - r.left) * vp.width / r.width), y: Math.round((e.clientY - r.top) * vp.height / r.height) };
   }
   const BTN = ['left', 'middle', 'right'];
 
   // マウス / タッチ
-  let touch = null;
+  let touch = null, lastPointer = 'mouse';
+  const kbdFloat = $('#vb-kbd-float');
+  const openKeyboard = () => { kbdFloat.classList.add('hidden'); ime.value = ''; ime.focus({ preventScroll: true }); };
+  // ボタンのタップ (ユーザー操作) の中でフォーカスしないと iPhone ではキーボードが開かない
+  kbdFloat.addEventListener('pointerdown', (e) => { e.preventDefault(); openKeyboard(); });
   canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    ime.focus({ preventScroll: true });
+    lastPointer = e.pointerType;
+    // マウス操作ではすぐにキー入力を受け付ける。タッチではキーボードが開いてしまうのでフォーカスしない
+    if (e.pointerType !== 'touch') ime.focus({ preventScroll: true });
     canvas.setPointerCapture(e.pointerId);
     if (e.pointerType === 'touch') { touch = { ...pos(e), sx: e.clientX, sy: e.clientY, lx: e.clientX, ly: e.clientY, moved: false }; return; }
     send({ t: 'down', ...pos(e), button: BTN[e.button] || 'left' });
@@ -370,7 +389,7 @@ const VB = (() => {
       if (!touch) return;
       const dx = touch.lx - e.clientX, dy = touch.ly - e.clientY;
       if (Math.abs(e.clientX - touch.sx) + Math.abs(e.clientY - touch.sy) > 8) touch.moved = true;
-      if (touch.moved) { const r = canvas.width / canvas.getBoundingClientRect().width; send({ t: 'wheel', x: touch.x, y: touch.y, dx: dx * r, dy: dy * r }); }
+      if (touch.moved) { const r = vp.width / canvas.getBoundingClientRect().width; send({ t: 'wheel', x: touch.x, y: touch.y, dx: dx * r, dy: dy * r }); }
       touch.lx = e.clientX; touch.ly = e.clientY;
       return;
     }
@@ -413,7 +432,9 @@ const VB = (() => {
   root.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vb]');
     if (!b) { if (e.target === root) close(); return; }
-    if (b.dataset.vb === 'close') close(); else send({ t: b.dataset.vb });
+    if (b.dataset.vb === 'close') close();
+    else if (b.dataset.vb === 'kbd') { if (document.activeElement === ime) ime.blur(); else openKeyboard(); }
+    else send({ t: b.dataset.vb });
   });
   $('#vb-addr-form').addEventListener('submit', (e) => { e.preventDefault(); send({ t: 'goto', url: addr.value }); addr.blur(); canvas.focus(); });
 

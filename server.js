@@ -271,7 +271,9 @@ server.on('upgrade', (req, socket, head) => {
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
   const user = userFromReq(req);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
-  wss.handleUpgrade(req, socket, head, (ws) => vb.handleConnection(ws, u.searchParams.get('url'), user.id));
+  wss.handleUpgrade(req, socket, head, (ws) => vb.handleConnection(ws, u.searchParams.get('url'), user.id, {
+    mobile: u.searchParams.get('m') === '1', width: u.searchParams.get('w'), height: u.searchParams.get('h'),
+  }));
 });
 
 const PORT = Number(process.env.PORT || 3000);

@@ -7,7 +7,15 @@ const { chromium } = require('playwright');
 const dns = require('dns').promises;
 const net = require('net');
 
-const VIEWPORT = { width: 1280, height: 720 };
+const DESKTOP = { width: 1280, height: 720 };
+// スマホから開いた場合はスマホ版のサイトを表示する (Android Chrome として振る舞う)
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+
+function pickViewport(opts = {}) {
+  if (!opts.mobile) return { viewport: DESKTOP, mobile: false, scale: 1 };
+  const clamp = (v, lo, hi, d) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || d));
+  return { viewport: { width: clamp(opts.width, 320, 600, 390), height: clamp(opts.height, 400, 1000, 700) }, mobile: true, scale: 2 };
+}
 const MAX_SESSIONS = Number(process.env.VB_MAX_SESSIONS || 4);
 const SESSION_TTL_MS = Number(process.env.VB_TTL_MS || 10 * 60 * 1000);
 const IDLE_MS = 3 * 60 * 1000;
@@ -72,8 +80,9 @@ function getBrowser() {
 const sessions = new Set();
 
 class VirtualSession {
-  constructor(ws) {
+  constructor(ws, opts) {
     this.ws = ws;
+    Object.assign(this, pickViewport(opts));
     this.closed = false;
     this.page = null;
     this.cdp = null;
@@ -87,12 +96,12 @@ class VirtualSession {
   async start(url) {
     const browser = await getBrowser();
     this.context = await browser.newContext({
-      viewport: VIEWPORT,
+      viewport: this.viewport,
+      ...(this.mobile ? { isMobile: true, hasTouch: true, deviceScaleFactor: this.scale, userAgent: MOBILE_UA } : {}),
       acceptDownloads: false,
       serviceWorkers: 'block',
       permissions: [],
       locale: 'ja-JP',
-      userAgent: undefined,
     });
     // 全リクエストを検査して内部アドレスを遮断
     await this.context.route('**/*', async (route) => {
@@ -143,7 +152,7 @@ class VirtualSession {
       cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
     });
     await cdp.send('Page.startScreencast', {
-      format: 'jpeg', quality: 70, maxWidth: VIEWPORT.width, maxHeight: VIEWPORT.height, everyNthFrame: 1,
+      format: 'jpeg', quality: 70, maxWidth: this.viewport.width * this.scale, maxHeight: this.viewport.height * this.scale, everyNthFrame: 1,
     });
     if (old && isPopup) {
       if (oldCdp) oldCdp.detach().catch(() => {});
@@ -183,14 +192,17 @@ class VirtualSession {
     if (this.closed || !this.page) return;
     this.lastActive = Date.now();
     const p = this.page;
-    const clampX = (v) => Math.max(0, Math.min(VIEWPORT.width, Number(v) || 0));
-    const clampY = (v) => Math.max(0, Math.min(VIEWPORT.height, Number(v) || 0));
+    const clampX = (v) => Math.max(0, Math.min(this.viewport.width, Number(v) || 0));
+    const clampY = (v) => Math.max(0, Math.min(this.viewport.height, Number(v) || 0));
     const button = ['left', 'middle', 'right'].includes(msg.button) ? msg.button : 'left';
     try {
       switch (msg.t) {
         case 'move': await p.mouse.move(clampX(msg.x), clampY(msg.y)); break;
         case 'down': await p.mouse.move(clampX(msg.x), clampY(msg.y)); await p.mouse.down({ button }); break;
-        case 'up': await p.mouse.move(clampX(msg.x), clampY(msg.y)); await p.mouse.up({ button }); break;
+        case 'up':
+          await p.mouse.move(clampX(msg.x), clampY(msg.y)); await p.mouse.up({ button });
+          this.reportFocus();
+          break;
         case 'wheel':
           await p.mouse.move(clampX(msg.x), clampY(msg.y));
           await p.mouse.wheel(Math.max(-2000, Math.min(2000, Number(msg.dx) || 0)), Math.max(-2000, Math.min(2000, Number(msg.dy) || 0)));
@@ -209,6 +221,31 @@ class VirtualSession {
     } catch { /* ページ遷移中の操作エラーは無視 */ }
   }
 
+  // クリック後、フォーカスが文字入力できる要素にあるかを利用者側へ伝える (スマホのキーボード表示に使う)
+  async reportFocus() {
+    await new Promise((r) => setTimeout(r, 80));
+    let editable = false;
+    for (const frame of this.page.frames()) {
+      try {
+        editable = await frame.evaluate(() => {
+          if (!document.hasFocus()) return false;
+          let el = document.activeElement;
+          while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+          if (!el) return false;
+          if (el.isContentEditable) return true;
+          if (el.tagName === 'TEXTAREA') return !el.readOnly && !el.disabled;
+          if (el.tagName === 'INPUT') {
+            const t = (el.type || 'text').toLowerCase();
+            return !el.readOnly && !el.disabled && !['button', 'submit', 'reset', 'checkbox', 'radio', 'range', 'color', 'file', 'image', 'hidden'].includes(t);
+          }
+          return false;
+        });
+      } catch { editable = false; }
+      if (editable) break;
+    }
+    this.send({ t: 'focus', editable });
+  }
+
   async close(reason) {
     if (this.closed) return;
     this.closed = true;
@@ -221,14 +258,14 @@ class VirtualSession {
   }
 }
 
-function handleConnection(ws, startUrl, userId) {
+function handleConnection(ws, startUrl, userId, opts) {
   // 同じユーザーの古いセッションは閉じる (1ユーザー1セッション)
   for (const old of sessions) if (old.userId === userId) old.close('別の画面で仮想ブラウザを開いたため終了しました');
   if (sessions.size >= MAX_SESSIONS) {
     ws.send(JSON.stringify({ t: 'ended', msg: '仮想環境が混み合っています。しばらくしてから再度お試しください' }));
     return ws.close();
   }
-  const s = new VirtualSession(ws);
+  const s = new VirtualSession(ws, opts);
   s.userId = userId;
   sessions.add(s);
   ws.on('message', (data, isBinary) => {
@@ -237,7 +274,7 @@ function handleConnection(ws, startUrl, userId) {
     s.handle(msg);
   });
   ws.on('close', () => s.close());
-  s.send({ t: 'hello', viewport: VIEWPORT, ttl: SESSION_TTL_MS });
+  s.send({ t: 'hello', viewport: s.viewport, ttl: SESSION_TTL_MS });
   s.start(startUrl).catch((e) => {
     s.send({ t: 'ended', msg: '仮想環境の起動に失敗しました: ' + String(e.message).split('\n')[0] });
     s.close();
