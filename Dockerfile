@@ -11,7 +11,7 @@ RUN npm ci --omit=dev \
  && npx playwright install --with-deps --only-shell chromium \
  && rm -rf /var/lib/apt/lists/* /root/.npm
 
-COPY server.js db.js vbrowser.js docker-entrypoint.sh ./
+COPY *.js docker-entrypoint.sh ./
 COPY public ./public
 
 RUN useradd --create-home --uid 10001 ippo \
