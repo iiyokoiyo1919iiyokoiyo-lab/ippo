@@ -222,6 +222,58 @@ module.exports = function install(app, ctx) {
   ctx.isCommunityMember = (communityId, user) => !!qIsMember.get(communityId, user.id);
   ctx.todayJst = todayJst;
 
+  // ======================= 通知 =======================
+  // 既存のデータ (返信・メンション・リポスト・いいね・フォロー) から読み取るだけ。データベースの構造は変えない。
+  // いいね・フォローには日時の記録がないので、追加された順 (rowid) で並べる
+  const notifLimit = rateLimit({ windowMs: 60 * 1000, max: 240, key: (req) => 'nt' + req.user.id });
+  function notificationsFor(me) {
+    const mine = 'SELECT id FROM posts WHERE user_id = $me AND repost_of IS NULL';
+    const replies = db.prepare(`SELECT * FROM posts WHERE reply_to IN (${mine}) AND user_id != $me ORDER BY id DESC LIMIT 50`).all({ $me: me.id });
+    const reposts = db.prepare(`SELECT * FROM posts WHERE repost_of IN (${mine}) AND user_id != $me ORDER BY id DESC LIMIT 50`).all({ $me: me.id });
+    const like = '%@' + me.username.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
+    const mentions = db.prepare(`SELECT * FROM posts WHERE content LIKE $like ESCAPE '\\' AND user_id != $me AND repost_of IS NULL
+      AND (reply_to IS NULL OR reply_to NOT IN (${mine})) ORDER BY id DESC LIMIT 50`).all({ $me: me.id, $like: like })
+      .filter((p) => new RegExp('(^|[^\\w])@' + me.username + '(?![A-Za-z0-9_])', 'i').test(p.content));
+    const likes = db.prepare(`SELECT l.rowid AS rid, l.user_id, l.post_id FROM likes l JOIN posts p ON p.id = l.post_id
+      WHERE p.user_id = $me AND l.user_id != $me ORDER BY l.rowid DESC LIMIT 100`).all({ $me: me.id });
+    const follows = db.prepare('SELECT rowid AS rid, follower_id FROM follows WHERE followee_id = ? ORDER BY rowid DESC LIMIT 50').all(me.id);
+    return { replies, reposts, mentions, likes, follows };
+  }
+  app.get('/api/notifications', requireAuth, notifLimit, (req, res) => {
+    const me = req.user, n = notificationsFor(me);
+    const user = (id) => publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id));
+    const activity = [
+      ...n.replies.map((p) => ({ type: 'reply', at: p.created_at, user: user(p.user_id), post: hydrate(p, me) })),
+      ...n.mentions.map((p) => ({ type: 'mention', at: p.created_at, user: user(p.user_id), post: hydrate(p, me) })),
+      ...n.reposts.map((p) => ({ type: 'repost', at: p.created_at, user: user(p.user_id), post: hydrate(db.prepare('SELECT * FROM posts WHERE id = ?').get(p.repost_of), me) })),
+    ].filter((a) => a.user && a.post).sort((a, b) => b.at - a.at).slice(0, 60);
+    // いいねは投稿ごとにまとめる
+    const byPost = new Map();
+    for (const l of n.likes) {
+      if (!byPost.has(l.post_id)) byPost.set(l.post_id, { rid: l.rid, users: [] });
+      const g = byPost.get(l.post_id);
+      if (g.users.length < 5) g.users.push(user(l.user_id));
+      g.total = (g.total || 0) + 1;
+    }
+    const likes = [...byPost.entries()].map(([postId, g]) => {
+      const p = db.prepare('SELECT * FROM posts WHERE id = ?').get(postId);
+      return p && { rid: g.rid, users: g.users.filter(Boolean), total: g.total, post: hydrate(p, me) };
+    }).filter(Boolean);
+    const follows = n.follows.map((f) => ({ rid: f.rid, user: user(f.follower_id) })).filter((f) => f.user);
+    res.json({
+      activity, likes, follows,
+      cursor: { at: activity[0]?.at || 0, like: n.likes[0]?.rid || 0, follow: n.follows[0]?.rid || 0 },
+    });
+  });
+  // 未読数 (既読の位置は端末側で記録し、ここに渡す)
+  app.get('/api/notifications/unread', requireAuth, notifLimit, (req, res) => {
+    const me = req.user, n = notificationsFor(me);
+    const at = Number(req.query.at) || 0, likeR = Number(req.query.like) || 0, followR = Number(req.query.follow) || 0;
+    const count = [...n.replies, ...n.mentions, ...n.reposts].filter((p) => p.created_at > at).length
+      + n.likes.filter((l) => l.rid > likeR).length + n.follows.filter((f) => f.rid > followR).length;
+    res.json({ unread: count });
+  });
+
   // ======================= 招待制 =======================
   // INVITE_ONLY=0 にすると誰でも登録できる (既定は招待制)
   const INVITE_ONLY = process.env.INVITE_ONLY !== '0';
