@@ -98,7 +98,7 @@ function extractWords(text) {
 }
 
 module.exports = function install(app, ctx) {
-  const { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb } = ctx;
+  const { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb, isAdmin } = ctx;
 
   // ======================= 今日の質問 =======================
   app.get('/api/question', (req, res) => {
@@ -154,6 +154,7 @@ module.exports = function install(app, ctx) {
     owner: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(c.owner_id)),
     members: qMembers.get(c.id).n,
     joined: me ? !!qIsMember.get(c.id, me.id) : false,
+    canDelete: me ? me.id === c.owner_id || isAdmin(me) : false,
     isOwner: me ? me.id === c.owner_id : false,
   });
   const communityLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, key: (req) => 'cc' + req.user.id });
@@ -207,7 +208,7 @@ module.exports = function install(app, ctx) {
   app.delete('/api/communities/:slug', requireAuth, (req, res) => {
     const c = qCommunityBySlug.get(req.params.slug);
     if (!c) return res.status(404).json({ error: 'コミュニティが見つかりません' });
-    if (c.owner_id !== req.user.id) return res.status(403).json({ error: '削除できるのは作成者だけです' });
+    if (c.owner_id !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: '削除できるのは作成者と管理者だけです' });
     db.prepare('DELETE FROM communities WHERE id = ?').run(c.id); // 投稿・メンバーも一緒に消える
     res.json({ ok: true });
   });
@@ -342,6 +343,15 @@ module.exports = function install(app, ctx) {
         !crypto.timingSafeEqual(Buffer.from(hashPw(password, u.salt), 'hex'), Buffer.from(u.pass_hash, 'hex')))
       return res.status(401).json({ error: 'パスワードが違います' });
 
+    const token = (req.headers.cookie || '').match(/ippo_session=([0-9a-f]+)/)?.[1] || '';
+    if (!eraseUser(u.id, mode, token)) return res.status(500).json({ error: '削除に失敗しました。もう一度お試しください' });
+    if (mode === 'account') res.setHeader('Set-Cookie', 'ippo_session=; Path=/; Max-Age=0');
+    res.json({ ok: true, mode });
+  });
+
+  // ユーザーのデータを完全に消す。mode = 'content' は履歴のみ、'account' はアカウントごと
+  function eraseUser(userId, mode, keepToken = '') {
+    const u = { id: userId };
     vb.closeUser(u.id); // 開いている仮想ブラウザも閉じて破棄
     ctx.invalidateTrends();
     db.exec('BEGIN');
@@ -363,18 +373,81 @@ module.exports = function install(app, ctx) {
       } else {
         db.prepare("UPDATE users SET bio = '' WHERE id = ?").run(u.id);
         // 他の端末のログインも切る (この端末だけ残す)
-        const token = (req.headers.cookie || '').match(/ippo_session=([0-9a-f]+)/)?.[1] || '';
-        db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, token);
+        db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, keepToken);
       }
       db.exec('COMMIT');
     } catch (e) {
       db.exec('ROLLBACK');
-      return res.status(500).json({ error: '削除に失敗しました。もう一度お試しください' });
+      return false;
     }
     // 消したデータが WAL (書き込み途中のファイル) に残らないよう、本体に書き戻して空にする
     try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch {}
-    if (mode === 'account') res.setHeader('Set-Cookie', 'ippo_session=; Path=/; Max-Age=0');
-    res.json({ ok: true, mode });
+    return true;
+  }
+
+  // ======================= 管理者 =======================
+  // すべてサーバー側で管理者か確認する。管理者は ADMIN_USERS で指定 (server.js)
+  const requireAdmin = (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'ログインが必要です' });
+    if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけが使える機能です' });
+    next();
+  };
+  const adminLimit = rateLimit({ windowMs: 60 * 1000, max: 120, key: (req) => 'adm' + req.user.id });
+  const count = (sql, ...a) => db.prepare(sql).get(...a).n;
+
+  app.get('/api/admin/stats', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const day = Date.now() - 86400_000, week = Date.now() - 7 * 86400_000;
+    res.json({
+      users: count('SELECT COUNT(*) AS n FROM users'),
+      usersWeek: count('SELECT COUNT(*) AS n FROM users WHERE created_at > ?', week),
+      posts: count('SELECT COUNT(*) AS n FROM posts WHERE repost_of IS NULL'),
+      postsDay: count('SELECT COUNT(*) AS n FROM posts WHERE repost_of IS NULL AND created_at > ?', day),
+      communities: count('SELECT COUNT(*) AS n FROM communities'),
+      dms: count('SELECT COUNT(*) AS n FROM dm_messages'),            // 件数だけ (中身は見ない)
+      openInvites: count('SELECT COUNT(*) AS n FROM invites WHERE used_by IS NULL AND used_at IS NULL AND expires_at > ?', Date.now()),
+      activeUsers: count('SELECT COUNT(DISTINCT user_id) AS n FROM sessions WHERE created_at > ?', week),
+    });
+  });
+
+  // ユーザー一覧 (誰の招待で登録したかも表示)
+  app.get('/api/admin/users', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const q = String(req.query.q || '').trim().slice(0, 50);
+    const like = '%' + q.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
+    const rows = q
+      ? db.prepare(`SELECT * FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 100`).all(like, like)
+      : db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT 100').all();
+    const by = db.prepare('SELECT username FROM users WHERE id = ?');
+    res.json({ users: rows.map((u) => ({
+      ...publicUser(u),
+      isAdmin: isAdmin(u),
+      invitedBy: u.invited_by ? by.get(u.invited_by)?.username || null : null,
+      posts: count('SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND repost_of IS NULL', u.id),
+      followers: count('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', u.id),
+      invited: count('SELECT COUNT(*) AS n FROM users WHERE invited_by = ?', u.id),
+      sessions: count('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?', u.id),
+    })) });
+  });
+
+  const targetUser = (req, res) => {
+    const t = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
+    if (!t) { res.status(404).json({ error: 'ユーザーが見つかりません' }); return null; }
+    if (isAdmin(t)) { res.status(400).json({ error: '管理者に対しては実行できません' }); return null; }
+    return t;
+  };
+  // 強制ログアウト (すべての端末)
+  app.post('/api/admin/users/:username/logout', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const t = targetUser(req, res); if (!t) return;
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(t.id);
+    vb.closeUser(t.id);
+    console.log(`[admin] ${req.user.username} が @${t.username} を強制ログアウト`);
+    res.json({ ok: true });
+  });
+  // アカウント削除 (本人の緊急データ削除と同じく、データを完全に消す)
+  app.delete('/api/admin/users/:username', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const t = targetUser(req, res); if (!t) return;
+    if (!eraseUser(t.id, 'account')) return res.status(500).json({ error: '削除に失敗しました' });
+    console.log(`[admin] ${req.user.username} が @${t.username} のアカウントを削除`);
+    res.json({ ok: true });
   });
 
   // ======================= 動画の読み込み (中継) =======================

@@ -762,3 +762,12 @@ a.list-item:hover, button.list-item:hover { background: var(--surface-2); }
 @media (max-width: 767px) { .home-head h1 { display: none; } .home-head { padding-top: 0; min-height: 0; } }
 @media (max-width: 479px) { .composer-foot .hint { display: none; } }
 @media (max-width: 380px) { .tab { font-size: 9.5px; } .tab span { max-width: 100%; overflow: hidden; text-overflow: clip; } }
+
+/* 管理者画面 */
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
+@media (min-width: 560px) { .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stat-card { padding: var(--s4); display: flex; flex-direction: column; gap: 2px; }
+.stat-card b { font-size: var(--fs-2xl); font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.stat-label { font-size: var(--fs-xs); font-weight: 650; color: var(--text-3); }
+.stat-sub { font-size: var(--fs-xs); color: var(--text-3); }
+.admin-user .desc { white-space: normal; }

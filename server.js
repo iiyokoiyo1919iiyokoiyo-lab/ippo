@@ -77,6 +77,11 @@ function createSession(req, res, userId) {
 }
 
 const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at };
+// 管理者: 環境変数 ADMIN_USERS (カンマ区切りのユーザー名) で指定する。未設定なら RCN413
+const ADMINS = new Set(String(process.env.ADMIN_USERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+const isAdmin = (u) => !!u && ADMINS.has(String(u.username).toLowerCase());
+// 自分自身の情報 (管理者かどうかも含む)
+const selfUser = (u) => u && { ...publicUser(u), isAdmin: isAdmin(u) };
 
 app.post('/api/register', authLimit, (req, res) => {
   const { username, password, displayName } = req.body || {};
@@ -97,7 +102,7 @@ app.post('/api/register', authLimit, (req, res) => {
     }
     db.exec('COMMIT');
     createSession(req, res, Number(r.lastInsertRowid));
-    res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid)) });
+    res.json({ user: selfUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid)) });
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     if (String(e.message).includes('invite')) return res.status(403).json({ error: 'この招待コードはすでに使われています', needInvite: true });
@@ -112,7 +117,7 @@ app.post('/api/login', authLimit, (req, res) => {
       !crypto.timingSafeEqual(Buffer.from(hashPw(password, u.salt), 'hex'), Buffer.from(u.pass_hash, 'hex')))
     return res.status(401).json({ error: 'ユーザー名またはパスワードが違います' });
   createSession(req, res, u.id);
-  res.json({ user: publicUser(u) });
+  res.json({ user: selfUser(u) });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -122,7 +127,7 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/me', (req, res) => res.json({ user: publicUser(req.user) }));
+app.get('/api/me', (req, res) => res.json({ user: selfUser(req.user) }));
 
 // ---------- 投稿の整形 ----------
 const qPost = db.prepare('SELECT * FROM posts WHERE id = ?');
@@ -218,7 +223,11 @@ app.get('/api/posts/:id', (req, res) => {
 });
 
 app.delete('/api/posts/:id', requireAuth, (req, res) => {
-  const r = db.prepare('DELETE FROM posts WHERE id = ? AND user_id = ?').run(Number(req.params.id), req.user.id);
+  // 自分の投稿は本人が、他人の投稿は管理者だけが削除できる
+  const r = isAdmin(req.user)
+    ? db.prepare('DELETE FROM posts WHERE id = ?').run(Number(req.params.id))
+    : db.prepare('DELETE FROM posts WHERE id = ? AND user_id = ?').run(Number(req.params.id), req.user.id);
+  if (r.changes > 0) ctx.invalidateTrends();
   res.json({ ok: r.changes > 0 });
 });
 
@@ -269,7 +278,7 @@ app.patch('/api/me', requireAuth, (req, res) => {
   const name = String(req.body?.displayName ?? req.user.display_name).trim().slice(0, 50) || req.user.username;
   const bio = String(req.body?.bio ?? req.user.bio).slice(0, 160);
   db.prepare('UPDATE users SET display_name = ?, bio = ? WHERE id = ?').run(name, bio, req.user.id);
-  res.json({ user: publicUser(qUser.get(req.user.id)) });
+  res.json({ user: selfUser(qUser.get(req.user.id)) });
 });
 
 function follow(on) {
@@ -286,7 +295,7 @@ app.post('/api/users/:username/follow', requireAuth, writeLimit, follow(true));
 app.delete('/api/users/:username/follow', requireAuth, writeLimit, follow(false));
 
 // ---------- 追加機能 (コミュニティ / トレンド / 今日の質問 / 緊急データ削除 / 動画) ----------
-const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb };
+const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb, isAdmin };
 require('./features')(app, ctx);
 
 // ---------- ダイレクトメッセージ ----------

@@ -283,8 +283,8 @@ function openPostMenu(anchor, postEl) {
   if (!postEl.classList.contains('focus')) items.unshift({ icon: 'comment', label: '投稿を開く', run: () => { location.hash = '#/p/' + id; } });
   if (me && !mine) items.push({ icon: 'mail', label: `@${user} にメッセージ`, run: () => { location.hash = '#/dm/' + user; } });
   items.push({ icon: 'user', label: `@${user} のプロフィール`, run: () => { location.hash = '#/u/' + user; } });
-  if (mine) items.push({ icon: 'trash', label: '投稿を削除', danger: true, run: async () => {
-    if (!(await confirmDialog({ title: '投稿を削除しますか？', body: 'この操作は取り消せません。', ok: '削除する', danger: true }))) return;
+  if (mine || me?.isAdmin) items.push({ icon: 'trash', label: mine ? '投稿を削除' : '投稿を削除（管理者）', danger: true, run: async () => {
+    if (!(await confirmDialog({ title: '投稿を削除しますか？', body: mine ? 'この操作は取り消せません。' : `@${user} さんの投稿を管理者として削除します。\nこの操作は取り消せません。`, ok: '削除する', danger: true }))) return;
     try {
       await api('/posts/' + id, { method: 'DELETE' });
       $$(`.post[data-id="${id}"]`).forEach((el) => { el.classList.add('removing'); setTimeout(() => el.remove(), 200); });
@@ -424,7 +424,9 @@ function renderMe() {
       { icon: 'logout', label: 'ログアウト', run: logout },
     ]));
     $('#topbar-avatar').innerHTML = avatar(me);
+    $('#nav-admin').classList.toggle('hidden', !me.isAdmin);
   } else {
+    $('#nav-admin').classList.add('hidden');
     box.innerHTML = `<button class="btn btn-secondary btn-block" type="button" id="login-btn">${icon('user')}<span class="account-text" style="flex:none">ログイン</span></button>`;
     $('#login-btn').addEventListener('click', () => openAuth());
     $('#topbar-avatar').innerHTML = icon('user');
@@ -775,9 +777,8 @@ async function viewCommunity(slug) {
   try { c = (await api('/communities/' + encodeURIComponent(slug) + '?before=0', { noAuthPrompt: true })).community; }
   catch (e) { main.innerHTML = pageHead({ title: 'コミュニティ', back: '#/c' }) + emptyState({ icon: 'users', title: e.message }); return; }
   currentCommunity = c.joined ? c : null;
-  const action = !me ? '' : c.isOwner
-    ? `<button class="btn btn-danger-outline btn-sm" id="community-delete" type="button">${icon('trash')}削除</button>`
-    : `<button class="btn btn-sm ${c.joined ? 'btn-outline' : 'btn-primary'}" id="community-join" type="button">${c.joined ? '参加中' : '参加する'}</button>`;
+  const action = !me ? '' : (c.canDelete ? `<button class="btn btn-danger-outline btn-sm" id="community-delete" type="button">${icon('trash')}削除</button>` : '') +
+    (c.isOwner ? '' : `<button class="btn btn-sm ${c.joined ? 'btn-outline' : 'btn-primary'}" id="community-join" type="button">${c.joined ? '参加中' : '参加する'}</button>`);
   main.innerHTML = pageHead({ title: esc(c.name), sub: `${c.members}人のメンバー`, back: '#/c' }) + `<div class="content">
     <section class="hero community-head">
       <div class="hero-cover"></div>
@@ -802,7 +803,7 @@ async function viewCommunity(slug) {
   $('#community-join')?.addEventListener('click', join);
   $('#community-join-2')?.addEventListener('click', join);
   $('#community-delete')?.addEventListener('click', async () => {
-    if (!(await confirmDialog({ title: `「${c.name}」を削除しますか？`, body: 'コミュニティ内の投稿もすべて削除され、元に戻せません。', ok: '削除する', danger: true }))) return;
+    if (!(await confirmDialog({ title: `「${c.name}」を削除しますか？`, body: (c.isOwner ? '' : '管理者として削除します。\n') + 'コミュニティ内の投稿もすべて削除され、元に戻せません。', ok: '削除する', danger: true }))) return;
     try { await api('/communities/' + encodeURIComponent(slug), { method: 'DELETE' }); toast('コミュニティを削除しました'); location.hash = '#/c'; } catch (e) { toast(e.message, 'error'); }
   });
   if (c.joined) bindCompose($('#community-compose'), { extra: { community: c.slug }, onDone: (p) => { $('#feed .empty')?.remove(); $('#feed').insertAdjacentHTML('afterbegin', renderPost(p, { fresh: true })); toast('投稿しました', 'success'); } });
@@ -824,6 +825,8 @@ function viewSettings() {
         <button class="list-item" type="button" id="settings-logout">${icon('logout')}<div class="grow title">ログアウト</div></button>
       </div>
     </section>
+    ${me.isAdmin ? `<section class="settings-group"><h2>管理者</h2><div class="list-card">
+        <a class="list-item" href="#/admin">${icon('shield')}<div class="grow"><div class="title">管理者画面</div><div class="desc">ユーザー管理・利用状況</div></div>${icon('chevron', 'chev')}</a></div></section>` : ''}
     <section class="settings-group"><h2>表示</h2>
       <div class="card card-pad">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div><div class="title" style="font-weight:650">テーマ</div><div class="text-sm muted">「自動」は端末の設定に合わせます</div></div>
@@ -890,6 +893,58 @@ function viewSettings() {
       btn.disabled = false; btn.textContent = '今すぐ削除する';
     }
   });
+}
+
+// =====================================================================
+// 管理者画面 (権限の確認はサーバー側で行う)
+// =====================================================================
+async function viewAdmin(q = '') {
+  if (!me.isAdmin) { main.innerHTML = pageHead({ title: '管理' }) + emptyState({ icon: 'lock', title: '管理者だけが使える画面です' }); return; }
+  main.innerHTML = pageHead({ title: '管理者画面', sub: '@' + esc(me.username) + ' として操作中' }) + `<div class="content">
+    <div class="stat-grid" id="admin-stats">${'<div class="card stat-card"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="width:30%;margin-top:10px;height:22px"></div></div>'.repeat(4)}</div>
+    <section class="settings-group"><h2>ユーザー</h2>
+      <form class="search-field" id="admin-search">${icon('search')}<input class="input" name="q" placeholder="ユーザー名・表示名で検索" value="${esc(q)}" autocomplete="off" autocapitalize="off"></form>
+      <div id="admin-users"></div>
+    </section>
+    <p class="text-xs muted">管理者は Railway の環境変数 ADMIN_USERS で指定します。管理者の操作はサーバーの記録 (ログ) に残ります。DM の内容は管理者にも見えません。</p>
+  </div>`;
+  $('#admin-search').addEventListener('submit', (e) => { e.preventDefault(); loadAdminUsers(e.target.q.value.trim()); });
+  try {
+    const s = await api('/admin/stats');
+    const card = (label, value, sub = '') => `<div class="card stat-card"><span class="stat-label">${label}</span><b>${value.toLocaleString()}</b>${sub ? `<span class="stat-sub">${sub}</span>` : ''}</div>`;
+    $('#admin-stats').innerHTML = card('ユーザー', s.users, `今週 +${s.usersWeek}`) + card('投稿', s.posts, `24時間 +${s.postsDay}`) +
+      card('コミュニティ', s.communities) + card('最近ログインした人', s.activeUsers, '直近7日') + card('DM', s.dms, '件数のみ') + card('未使用の招待', s.openInvites);
+  } catch (e) { $('#admin-stats').innerHTML = emptyState({ icon: 'alert', title: e.message }); }
+  loadAdminUsers(q);
+}
+async function loadAdminUsers(q) {
+  const el = $('#admin-users');
+  el.innerHTML = `<div class="list-card">${'<div class="list-item"><div class="sk sk-circle"></div><div style="flex:1"><div class="sk sk-line" style="width:40%"></div></div></div>'.repeat(3)}</div>`;
+  let users;
+  try { ({ users } = await api('/admin/users?q=' + encodeURIComponent(q))); } catch (e) { el.innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  if (!users.length) { el.innerHTML = emptyState({ icon: 'search', title: '見つかりませんでした' }); return; }
+  el.innerHTML = `<div class="list-card">${users.map((u) => `<div class="list-item admin-user" data-u="${esc(u.username)}">
+      ${avatar(u, 'sm', true)}
+      <div class="grow">
+        <div class="title">${esc(u.displayName)} <span class="muted text-sm" style="font-weight:500">@${esc(u.username)}</span>${u.isAdmin ? ' <span class="chip chip-accent">管理者</span>' : ''}</div>
+        <div class="desc">${new Date(u.createdAt).toLocaleDateString('ja-JP')} 登録${u.invitedBy ? ` · <a href="#/u/${esc(u.invitedBy)}">@${esc(u.invitedBy)}</a> の招待` : ''} · 投稿 ${u.posts} · フォロワー ${u.followers}${u.invited ? ` · 招待した人 ${u.invited}` : ''}</div>
+      </div>
+      ${u.isAdmin ? '' : `<button class="icon-btn" type="button" data-admin-menu aria-label="操作">${icon('more')}</button>`}
+    </div>`).join('')}</div>`;
+  $$('[data-admin-menu]', el).forEach((b) => b.addEventListener('click', () => {
+    const name = b.closest('[data-u]').dataset.u;
+    openMenu(b, [
+      { icon: 'user', label: 'プロフィールを見る', run: () => { location.hash = '#/u/' + name; } },
+      { icon: 'logout', label: '強制ログアウト', run: async () => {
+        if (!(await confirmDialog({ title: `@${name} を強制ログアウトしますか？`, body: 'すべての端末でログアウトされます。パスワードを知っていれば、またログインできます。', ok: 'ログアウトさせる' }))) return;
+        try { await api(`/admin/users/${name}/logout`, { method: 'POST' }); toast(`@${name} をログアウトさせました`, 'success'); } catch (e) { toast(e.message, 'error'); }
+      } },
+      { icon: 'trash', label: 'アカウントを削除', danger: true, run: async () => {
+        if (!(await confirmDialog({ title: `@${name} のアカウントを削除しますか？`, body: '投稿・DM・フォロー・作成したコミュニティなど、このユーザーのデータがすべて完全に削除されます。\n元に戻すことはできません。', ok: '削除する', danger: true }))) return;
+        try { await api(`/admin/users/${name}`, { method: 'DELETE' }); toast(`@${name} のアカウントを削除しました`); loadAdminUsers($('#admin-search').q.value.trim()); } catch (e) { toast(e.message, 'error'); }
+      } },
+    ]);
+  }));
 }
 
 // =====================================================================
@@ -1237,6 +1292,7 @@ function route() {
   if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) { setActiveNav(''); return viewInviteLanding(m[1]); }
   if (h === '/schedule') { setActiveNav('schedule'); return viewSchedule(); }
   if (h === '/bookmarks') { setActiveNav('bookmarks'); return viewBookmarks(); }
+  if (h === '/admin') { setActiveNav('admin'); if (!requireLogin()) return; return viewAdmin(); }
   if (h === '/settings') { setActiveNav('settings'); if (!requireLogin()) return; return viewSettings(); }
   if (h === '/notifications') { setActiveNav('notifications'); if (!requireLogin()) return; return viewNotifications(); }
   if (h.startsWith('/dm')) {
