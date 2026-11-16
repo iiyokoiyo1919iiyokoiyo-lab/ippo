@@ -188,7 +188,7 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const questionDay = !parent && req.body?.question ? ctx.todayJst() : null;
   const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .run(req.user.id, content, replyTo, communityId, questionDay, Date.now());
-  if (content.includes('#')) ctx.invalidateTrends();
+  ctx.invalidateTrends();
   res.json({ post: hydrate(qPost.get(r.lastInsertRowid), req.user) });
 });
 

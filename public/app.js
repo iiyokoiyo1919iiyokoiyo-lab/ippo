@@ -365,10 +365,10 @@ async function viewQuestion() {
 // =====================================================================
 async function trendsHtml() {
   const { period, trends } = await api('/trends', { noAuthPrompt: true });
-  if (!trends.length) return '<p class="muted">まだトレンドはありません。<br>#ハッシュタグ を付けて投稿してみましょう</p>';
-  return trends.map((t, i) => `<a class="trend-row" href="#/search?q=${encodeURIComponent('#' + t.tag)}">
+  if (!trends.length) return '<p class="muted">まだトレンドはありません。<br>みんなの投稿によく出てくる言葉がここに表示されます</p>';
+  return trends.map((t, i) => `<a class="trend-row" href="#/search?q=${encodeURIComponent(t.tag)}">
       <span class="muted trend-rank">${i + 1}</span>
-      <span class="trend-body"><b>#${esc(t.tag)}</b><span class="muted">${t.posts}件の投稿 · ${t.users}人</span></span>
+      <span class="trend-body"><b>${esc(t.tag)}</b><span class="muted">${t.posts}件の投稿 · ${t.users}人</span></span>
     </a>`).join('') + `<p class="muted trend-period">直近${period}の集計</p>`;
 }
 async function loadTrends() {

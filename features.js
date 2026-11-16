@@ -48,13 +48,53 @@ function questionFor(day) {
   return QUESTIONS[((n % QUESTIONS.length) + QUESTIONS.length) % QUESTIONS.length];
 }
 
-// ---------- トレンド (ハッシュタグ) ----------
-const TAG_RE = /(^|\s)#([^\s#]{1,50})/gu;
-function extractTags(text) {
-  const tags = new Set();
-  for (const m of String(text).matchAll(TAG_RE)) tags.add(m[2].replace(/[、。！!？?,.)」』]+$/u, '').toLowerCase());
-  tags.delete('');
-  return tags;
+// ---------- トレンド (投稿の文章に出てくる言葉) ----------
+// 日本語は単語の間にスペースがないので Intl.Segmenter (ICU の辞書) で単語に分け、
+// 漢字が続く部分は1語につなげる (例: 生徒 / 会長 / 選挙 → 生徒会長選挙)
+const segmenter = new Intl.Segmenter('ja', { granularity: 'word' });
+const KANJI = /^[\p{Script=Han}々〆ヶ]+$/u;
+const HIRAGANA = /^[\p{Script=Hiragana}ー]+$/u;
+const STOP_WORDS = new Set((
+  '今日 明日 昨日 今年 去年 来年 今週 来週 先週 今月 毎日 今回 前回 次回 最近 今度 自分 本当 本気 感じ 気持 時間 一番 全部 普通 ' +
+  '大丈夫 一緒 結構 意味 場合 以上 以下 関係 何 人 私 僕 俺 皆 誰 投稿 IppO 予定 時 年 月 日 ' +
+  'the and for you are this that with have was not but just like what from your all can get its http https www com'
+).toLowerCase().split(/\s+/));
+
+// 名詞の後ろに来る助詞など (これが続く1文字の漢字は名詞の一部とみなす: 学園 / 祭 / の → 学園祭)
+const PARTICLES = new Set('の が は を に で と も へ や か な ね よ だ です から まで より って とか かな けど'.split(' '));
+function extractWords(text) {
+  const clean = String(text)
+    .replace(/https?:\/\/\S+/g, ' ')        // URL は除く
+    .replace(/@[A-Za-z0-9_]+/g, ' ')         // メンションは除く
+    .replace(/#/g, ' ');                     // ハッシュタグは中の言葉として数える
+  const words = new Map();                   // 小文字にした言葉 → 表示用 (元の書き方)
+  let run = '';                              // つなげ中の漢字
+  const flush = () => { if (run) { push(run); run = ''; } };
+  const push = (w) => {
+    w = w.replace(/^第|第$/u, '');            // 「期末考査第」→「期末考査」
+    const k = w.toLowerCase();
+    if ([...w].length < 2 || [...w].length > 30) return;
+    if (HIRAGANA.test(w)) return;            // ひらがなだけ (助詞・語尾など) は除く
+    if (/\p{Script=Han}/u.test(w) && /\p{Script=Hiragana}/u.test(w)) return; // 漢字+送り仮名 (動詞・形容詞) は除く
+    if (/^[\d.,:/-]+$/.test(w)) return;      // 数字だけは除く
+    if (STOP_WORDS.has(k)) return;
+    if (!words.has(k)) words.set(k, w);
+  };
+  const segs = [...segmenter.segment(clean)];
+  segs.forEach((s, i) => {
+    if (!s.isWordLike) return flush();
+    if (KANJI.test(s.segment)) {
+      // 1文字の漢字の後に助詞以外のひらがなが続く → 動詞・形容詞の語幹 (見た / 終わった / 難しい) なのでつなげない
+      const next = segs[i + 1];
+      if ([...s.segment].length === 1 && next && HIRAGANA.test(next.segment) && !PARTICLES.has(next.segment)) return flush();
+      run += s.segment;
+      return;
+    }
+    flush();
+    push(s.segment);
+  });
+  flush();
+  return words;
 }
 
 module.exports = function install(app, ctx) {
@@ -75,30 +115,33 @@ module.exports = function install(app, ctx) {
   });
 
   // ======================= トレンド =======================
-  let trendCache = { at: 0, data: null };
-  ctx.invalidateTrends = () => { trendCache = { at: 0, data: null }; }; // ハッシュタグ付きの投稿があったら集計し直す
+  let trendCache = { at: 0, data: null, dirty: false };
+  // 新しい投稿があったら集計し直す (ただし投稿が続く時でも10秒に1回まで)
+  ctx.invalidateTrends = () => { trendCache.dirty = true; };
   app.get('/api/trends', (req, res) => {
-    if (trendCache.data && Date.now() - trendCache.at < 60_000) return res.json(trendCache.data);
+    const age = Date.now() - trendCache.at;
+    if (trendCache.data && (age < 10_000 || (!trendCache.dirty && age < 60_000))) return res.json(trendCache.data);
     const compute = (sinceMs) => {
-      const rows = db.prepare(`SELECT user_id, content FROM posts WHERE created_at > ? AND repost_of IS NULL AND content LIKE '%#%'
+      const rows = db.prepare(`SELECT user_id, content FROM posts WHERE created_at > ? AND repost_of IS NULL
         ORDER BY id DESC LIMIT 5000`).all(Date.now() - sinceMs);
-      const counts = new Map(); // タグ → { posts, users }
+      const counts = new Map(); // 言葉 → { posts, users }
       for (const r of rows) {
-        for (const t of extractTags(r.content)) {
-          const c = counts.get(t) || { posts: 0, users: new Set() };
+        for (const [t, display] of extractWords(r.content)) {
+          const c = counts.get(t) || { posts: 0, users: new Set(), display };
           c.posts++; c.users.add(r.user_id);
           counts.set(t, c);
         }
       }
       // 同じ人の連投で上位にならないよう、使った人数を重視する
-      return [...counts.entries()]
-        .map(([tag, c]) => ({ tag, posts: c.posts, users: c.users.size, score: c.users.size * 3 + c.posts }))
+      // 1件の投稿にしか出てこない言葉はトレンドにしない
+      return [...counts.entries()].filter(([, c]) => c.posts >= 2)
+        .map(([, c]) => ({ tag: c.display, posts: c.posts, users: c.users.size, score: c.users.size * 3 + c.posts }))
         .sort((a, b) => b.score - a.score).slice(0, 10)
         .map(({ tag, posts, users }) => ({ tag, posts, users }));
     };
     let trends = compute(24 * 3600_000), period = '24時間';
     if (trends.length < 3) { trends = compute(7 * 24 * 3600_000); period = '7日間'; }
-    trendCache = { at: Date.now(), data: { period, trends } };
+    trendCache = { at: Date.now(), data: { period, trends }, dirty: false };
     res.json(trendCache.data);
   });
 
