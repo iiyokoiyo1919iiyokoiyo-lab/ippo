@@ -131,6 +131,8 @@ function hydrate(row, me) {
     return { id: row.id, type: 'repost', createdAt: row.created_at, by: publicUser(qUser.get(row.user_id)), post: orig };
   }
   const c = qCounts.get({ $id: row.id, $me: me ? me.id : 0 });
+  let community = null;
+  if (row.community_id) { const cm = qCommunity.get(row.community_id); if (cm) community = { slug: cm.slug, name: cm.name }; }
   let replyToUser = null;
   if (row.reply_to) {
     const parent = qPost.get(row.reply_to);
@@ -141,8 +143,10 @@ function hydrate(row, me) {
     author: publicUser(qUser.get(row.user_id)),
     counts: { likes: c.likes, reposts: c.reposts, replies: c.replies },
     liked: !!c.liked, reposted: !!c.reposted,
+    community, question: !!row.question_day,
   };
 }
+const qCommunity = db.prepare('SELECT slug, name FROM communities WHERE id = ?');
 const hydrateAll = (rows, me) => rows.map((r) => hydrate(r, me)).filter(Boolean);
 const beforeId = (req) => Number(req.query.before) || Number.MAX_SAFE_INTEGER;
 
@@ -150,9 +154,9 @@ const beforeId = (req) => Number(req.query.before) || Number.MAX_SAFE_INTEGER;
 app.get('/api/timeline', (req, res) => {
   const following = req.query.mode === 'following' && req.user;
   const rows = following
-    ? db.prepare(`SELECT * FROM posts WHERE id < ? AND (user_id = ? OR user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?))
+    ? db.prepare(`SELECT * FROM posts WHERE id < ? AND community_id IS NULL AND (user_id = ? OR user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?))
         ORDER BY id DESC LIMIT 30`).all(beforeId(req), req.user.id, req.user.id)
-    : db.prepare('SELECT * FROM posts WHERE id < ? AND reply_to IS NULL ORDER BY id DESC LIMIT 30').all(beforeId(req));
+    : db.prepare('SELECT * FROM posts WHERE id < ? AND reply_to IS NULL AND community_id IS NULL ORDER BY id DESC LIMIT 30').all(beforeId(req));
   res.json({ posts: hydrateAll(rows, req.user) });
 });
 
@@ -171,9 +175,20 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const replyTo = req.body?.replyTo ? Number(req.body.replyTo) : null;
   if (!content) return res.status(400).json({ error: '本文を入力してください' });
   if ([...content].length > 280) return res.status(400).json({ error: '280文字以内で投稿してください' });
-  if (replyTo && !qPost.get(replyTo)) return res.status(404).json({ error: '返信先が見つかりません' });
-  const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, created_at) VALUES (?, ?, ?, ?)')
-    .run(req.user.id, content, replyTo, Date.now());
+  const parent = replyTo ? qPost.get(replyTo) : null;
+  if (replyTo && !parent) return res.status(404).json({ error: '返信先が見つかりません' });
+  // コミュニティへの投稿 (返信は返信先のコミュニティを引き継ぐ)。参加者だけが投稿できる
+  let communityId = parent ? parent.community_id : null;
+  if (!parent && req.body?.community) {
+    const r = ctx.resolveCommunity(req.body.community, req.user);
+    if (r.error) return res.status(r.error[0]).json({ error: r.error[1] });
+    communityId = r.id;
+  }
+  if (communityId && !ctx.isCommunityMember(communityId, req.user)) return res.status(403).json({ error: 'コミュニティに参加すると投稿できます' });
+  const questionDay = !parent && req.body?.question ? ctx.todayJst() : null;
+  const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.user.id, content, replyTo, communityId, questionDay, Date.now());
+  if (content.includes('#')) ctx.invalidateTrends();
   res.json({ post: hydrate(qPost.get(r.lastInsertRowid), req.user) });
 });
 
@@ -258,6 +273,10 @@ function follow(on) {
 }
 app.post('/api/users/:username/follow', requireAuth, writeLimit, follow(true));
 app.delete('/api/users/:username/follow', requireAuth, writeLimit, follow(false));
+
+// ---------- 追加機能 (コミュニティ / トレンド / 今日の質問 / 緊急データ削除 / 動画) ----------
+const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb };
+require('./features')(app, ctx);
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)

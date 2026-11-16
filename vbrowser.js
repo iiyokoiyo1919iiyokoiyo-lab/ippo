@@ -289,4 +289,9 @@ async function shutdown() {
   if (browserPromise) (await browserPromise).close().catch(() => {});
 }
 
-module.exports = { handleConnection, shutdown, normalizeUrl };
+// 特定ユーザーの仮想ブラウザを閉じる (緊急データ削除時)
+function closeUser(userId) {
+  for (const s of sessions) if (s.userId === userId) s.close('データ削除のため終了しました');
+}
+
+module.exports = { handleConnection, shutdown, normalizeUrl, isBlockedIp, isSafeHost, closeUser, ALLOW_PRIVATE };

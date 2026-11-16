@@ -6,6 +6,8 @@ const db = new DatabaseSync(process.env.DB_PATH || path.join(__dirname, 'ippo.db
 db.exec(`
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
+-- 削除したデータの中身をファイル上でゼロで上書きする (緊急データ削除で痕跡を残さないため)
+PRAGMA secure_delete = ON;
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL COLLATE NOCASE,
@@ -58,6 +60,38 @@ CREATE TABLE IF NOT EXISTS dm_reads (
   last_read_id INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, peer_id)
 );
+`);
+
+// コミュニティ
+db.exec(`
+CREATE TABLE IF NOT EXISTS communities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE NOT NULL COLLATE NOCASE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS community_members (
+  community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (community_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cm_user ON community_members(user_id);
+`);
+
+// 既存のデータベースに列を追加する (すでにあれば何もしない)
+function addColumn(table, column, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${def}`);
+}
+addColumn('posts', 'community_id', 'INTEGER REFERENCES communities(id) ON DELETE CASCADE');
+addColumn('posts', 'question_day', 'TEXT'); // 今日の質問への回答なら、その日付 (YYYY-MM-DD, 日本時間)
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id, id);
+CREATE INDEX IF NOT EXISTS idx_posts_question ON posts(question_day, id);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
 `);
 
 module.exports = db;

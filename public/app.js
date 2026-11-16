@@ -48,6 +48,14 @@ function inlineMarkup(s) {
     .replace(/(^|[^\w])@([A-Za-z0-9_]{3,15})/g, '$1<a href="#/u/$2">@$2</a>')
     .replace(/(^|\s)#([^\s#]{1,50})/g, (m, p, tag) => `${p}<a href="#/search?q=${encodeURIComponent('#' + tag)}">#${tag}</a>`);
 }
+// 動画ファイルの URL (mp4 / webm / m4v / mov) はその場で再生する。動画はサーバー経由で読み込む
+function isVideoUrl(url) {
+  try { return /\.(mp4|webm|m4v|mov)$/i.test(new URL(url).pathname); } catch { return false; }
+}
+function videoEmbed(url) {
+  return `<div class="video-wrap"><video controls playsinline preload="metadata" src="/api/media?url=${encodeURIComponent(url)}"></video>
+    <span class="vlink video-src" data-url="${esc(url)}">元のページを仮想ブラウザで開く</span></div>`;
+}
 function firstUrl(text) { const m = text.match(URL_RE); return m ? m[0] : null; }
 
 // ---------- 投稿の描画 ----------
@@ -56,10 +64,15 @@ function renderPost(item, { focus = false } = {}) {
   const ctx = item.type === 'repost' ? `<div class="ctx">🔁 ${esc(item.by.displayName)}さんがリポストしました</div>` : '';
   const url = firstUrl(p.content);
   let card = '';
-  if (url) {
+  if (url && isVideoUrl(url) && me) {
+    card = videoEmbed(url);
+  } else if (url) {
     let host = url; try { host = new URL(url).hostname; } catch {}
-    card = `<div class="link-card" data-url="${esc(url)}"><div class="lc-icon">🛡</div><div><div class="lc-host">${esc(host)}</div><div class="lc-sub">仮想環境で安全に開く</div></div></div>`;
+    const sub = isVideoUrl(url) ? '🎬 動画 · ログインすると再生できます' : '仮想環境で安全に開く';
+    card = `<div class="link-card" data-url="${esc(url)}"><div class="lc-icon">🛡</div><div><div class="lc-host">${esc(host)}</div><div class="lc-sub">${sub}</div></div></div>`;
   }
+  const tags = (p.community ? `<div class="post-tag">👥 <a href="#/c/${esc(p.community.slug)}">${esc(p.community.name)}</a></div>` : '') +
+    (p.question ? '<div class="post-tag">💡 <a href="#/q">今日の質問への回答</a></div>' : '');
   const reply = p.replyToUser ? `<div class="muted">返信先: <a href="#/u/${esc(p.replyToUser)}">@${esc(p.replyToUser)}</a></div>` : '';
   const del = me && me.id === p.author.id ? `<button class="del" title="削除">🗑</button>` : '';
   return `${ctx}<article class="post${focus ? ' focus' : ''}" data-id="${p.id}">
@@ -67,7 +80,7 @@ function renderPost(item, { focus = false } = {}) {
     <div class="body">
       <div class="meta"><b><a href="#/u/${esc(p.author.username)}" style="color:inherit">${esc(p.author.displayName)}</a></b>
         <span>@${esc(p.author.username)}</span><span>·</span><span title="${new Date(p.createdAt).toLocaleString()}">${timeAgo(p.createdAt)}</span></div>
-      ${reply}
+      ${tags}${reply}
       <div class="text">${richText(p.content)}</div>
       ${card}
       <div class="actions">
@@ -94,7 +107,7 @@ main.addEventListener('click', async (e) => {
   const link = e.target.closest('[data-url]');
   if (link) { e.stopPropagation(); return VB.open(link.dataset.url); }
   const postEl = e.target.closest('.post');
-  if (!postEl || e.target.closest('a')) return;
+  if (!postEl || e.target.closest('a, video')) return;
   const id = postEl.dataset.id;
   const btn = e.target.closest('.actions button');
   if (!btn) return (location.hash = '#/p/' + id);
@@ -114,7 +127,7 @@ function composeHtml(placeholder = 'いまどうしてる？') {
     <textarea placeholder="${esc(placeholder)}" maxlength="400"></textarea>
     <div class="row"><span class="count muted">280</span><button class="btn primary" type="button" disabled>投稿する</button></div></div></div>`;
 }
-function bindCompose(root, { replyTo = null, onDone } = {}) {
+function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
   const ta = $('textarea', root), btn = $('.btn', root), count = $('.count', root);
   ta.addEventListener('input', () => {
     const n = 280 - [...ta.value].length;
@@ -124,18 +137,23 @@ function bindCompose(root, { replyTo = null, onDone } = {}) {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
-      const { post } = await api('/posts', { method: 'POST', body: { content: ta.value, replyTo } });
+      const { post } = await api('/posts', { method: 'POST', body: { ...extra, content: ta.value, replyTo } });
       ta.value = ''; ta.dispatchEvent(new Event('input'));
       onDone && onDone(post);
     } catch (e) { alert(e.message); btn.disabled = false; }
   });
 }
-function openCompose(replyTo = null, handle = '') {
+function openCompose(replyTo = null, handle = '', { extra = {}, title = '', placeholder = '' } = {}) {
   if (!me) return openAuth();
   const dlg = $('#compose-dialog');
   const slot = $('#compose-modal-slot');
-  slot.innerHTML = (replyTo ? `<div class="muted" style="padding:0 16px">返信先: ${esc(handle)}</div>` : '') + composeHtml(replyTo ? '返信をポスト' : 'いまどうしてる？');
-  bindCompose(slot, { replyTo, onDone: () => { dlg.close(); route(); } });
+  // コミュニティ画面で開いた場合は、そのコミュニティに投稿する
+  const cm = !replyTo && !extra.question && location.hash.match(/^#\/c\/([A-Za-z0-9_-]+)/);
+  if (cm && $('#community-compose')) { extra = { community: cm[1] }; title = title || '👥 ' + ($('.community-head h2')?.textContent || '') + ' に投稿'; }
+  slot.innerHTML = (replyTo ? `<div class="muted" style="padding:0 16px">返信先: ${esc(handle)}</div>` : '') +
+    (title ? `<div class="compose-title">${esc(title)}</div>` : '') +
+    composeHtml(placeholder || (replyTo ? '返信をポスト' : 'いまどうしてる？'));
+  bindCompose(slot, { replyTo, extra, onDone: () => { dlg.close(); route(); } });
   dlg.showModal();
   $('textarea', slot).focus();
 }
@@ -167,13 +185,14 @@ $('#auth-dialog').addEventListener('click', (e) => { if (e.target === e.currentT
 function renderMe() {
   const box = $('#me-box');
   if (me) {
-    box.innerHTML = `<div class="user-row">${avatar(me)}<div class="names"><b>${esc(me.displayName)}</b><div class="muted">@${esc(me.username)}</div></div></div><a href="#" id="logout" style="font-size:14px">ログアウト</a>`;
+    box.innerHTML = `<div class="user-row">${avatar(me)}<div class="names"><b>${esc(me.displayName)}</b><div class="muted">@${esc(me.username)}</div></div></div><a href="#/settings" style="font-size:14px">⚙️ 設定</a> · <a href="#" id="logout" style="font-size:14px">ログアウト</a>`;
     $('#logout').addEventListener('click', async (e) => { e.preventDefault(); await api('/logout', { method: 'POST' }); me = null; renderMe(); route(); });
   } else {
     box.innerHTML = `<button class="btn primary" id="login-btn" style="width:100%">ログイン / 登録</button>`;
     $('#login-btn').addEventListener('click', () => openAuth());
   }
   loadSuggest();
+  loadTrends();
   refreshDmBadge();
 }
 
@@ -206,7 +225,9 @@ async function viewHome() {
     <button data-mode="all" class="${tlMode === 'all' ? 'active' : ''}">おすすめ</button>
     <button data-mode="following" class="${tlMode === 'following' ? 'active' : ''}">フォロー中</button></div></div>
     ${me ? `<div id="home-compose">${composeHtml()}</div>` : `<div class="empty">ログインすると投稿できます<br><br><button class="btn primary" id="start-btn">はじめる</button></div>`}
+    <div class="question-card hidden" id="question-card"></div>
     <div id="feed"></div>`;
+  questionCard();
   main.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.mode === 'following' && !me) return openAuth();
     tlMode = b.dataset.mode; viewHome();
@@ -252,7 +273,7 @@ async function viewUser(username) {
     main.innerHTML = `<div class="head"><h2>${esc(user.displayName)}</h2></div>
       <div class="profile-head"><div class="banner"></div>
         <div class="top">${avatar(user, 'lg')}
-          ${isMe ? '<button class="btn outline" id="edit-profile">プロフィールを編集</button>' : me ? `<span class="profile-btns"><a class="btn outline dm-btn" href="#/dm/${esc(user.username)}" title="メッセージを送る">✉️</a><button class="btn ${user.followed ? 'outline' : ''} follow-btn" data-user="${esc(user.username)}" data-on="${user.followed ? 1 : 0}">${user.followed ? 'フォロー中' : 'フォロー'}</button></span>` : ''}
+          ${isMe ? '<span class="profile-btns"><a class="btn outline dm-btn" href="#/settings" title="設定">⚙️</a><button class="btn outline" id="edit-profile">プロフィールを編集</button></span>' : me ? `<span class="profile-btns"><a class="btn outline dm-btn" href="#/dm/${esc(user.username)}" title="メッセージを送る">✉️</a><button class="btn ${user.followed ? 'outline' : ''} follow-btn" data-user="${esc(user.username)}" data-on="${user.followed ? 1 : 0}">${user.followed ? 'フォロー中' : 'フォロー'}</button></span>` : ''}
         </div>
         <h2>${esc(user.displayName)}</h2><div class="muted">@${esc(user.username)}</div>
         ${user.bio ? `<p>${richText(user.bio)}</p>` : ''}
@@ -272,7 +293,11 @@ async function viewUser(username) {
 async function viewSearch(q) {
   main.innerHTML = `<div class="head"><h2>検索</h2><form class="search-box" id="sf"><input name="q" placeholder="キーワード・#タグ・ユーザー" value="${esc(q)}"></form></div><div id="res"></div>`;
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); location.hash = '#/search?q=' + encodeURIComponent(e.target.q.value); });
-  if (!q) return ($('#res').innerHTML = '<div class="empty">投稿やユーザーを検索できます。URLを入力すると仮想ブラウザで開けます。</div>');
+  if (!q) {
+    $('#res').innerHTML = '<p class="muted" style="padding:0 16px">投稿やユーザーを検索できます。URLを入力すると仮想ブラウザで開けます。</p><h3 class="section-title">🔥 トレンド</h3><div class="search-trends">読み込み中…</div>';
+    $('.search-trends').innerHTML = await trendsHtml().catch(() => '<p class="muted">読み込めませんでした</p>');
+    return;
+  }
   if (/^https?:\/\//.test(q)) return VB.open(q);
   const { posts, users } = await api('/search?q=' + encodeURIComponent(q), { noAuthPrompt: true });
   $('#res').innerHTML = (users.length ? `<div style="padding:0 16px;border-bottom:1px solid var(--line)">${users.map((u) => userRow({ ...u, followed: false })).join('')}</div>` : '') +
@@ -286,6 +311,13 @@ function route() {
   document.querySelectorAll('.side [data-nav]').forEach((a) => a.classList.remove('active'));
   refreshDmBadge();
   let m;
+  if (h === '/c' || h.startsWith('/c/')) {
+    $('[data-nav=c]').classList.add('active');
+    if ((m = h.match(/^\/c\/([A-Za-z0-9_-]+)/))) return viewCommunity(m[1]);
+    return viewCommunities();
+  }
+  if (h === '/q') return viewQuestion();
+  if (h === '/settings') { if (!me) { openAuth(); location.hash = '#/'; return; } return viewSettings(); }
   if (h.startsWith('/dm')) {
     $('[data-nav=dm]').classList.add('active');
     if (!me) { openAuth(); location.hash = '#/'; return; }
@@ -300,6 +332,175 @@ function route() {
   viewHome();
 }
 window.addEventListener('hashchange', route);
+
+// =====================================================================
+// 今日の質問
+// =====================================================================
+async function questionCard() {
+  const el = $('#question-card');
+  if (!el) return;
+  try {
+    const q = await api('/question', { noAuthPrompt: true });
+    el.innerHTML = `<div class="q-label">💡 今日の質問</div>
+      <div class="q-text">${esc(q.text)}</div>
+      <div class="q-actions">
+        <button class="btn primary" id="q-answer" type="button">${q.answered ? 'もう一度答える' : '答える'}</button>
+        <a class="btn outline" href="#/q">みんなの回答${q.answers ? `（${q.answers}）` : ''}</a>
+      </div>`;
+    $('#q-answer').addEventListener('click', () => openCompose(null, '', { extra: { question: true }, title: `💡 ${q.text}`, placeholder: 'あなたの答えは？' }));
+    el.classList.remove('hidden');
+  } catch { el.classList.add('hidden'); }
+}
+
+async function viewQuestion() {
+  main.innerHTML = `<div class="head"><h2><a href="#/" style="color:inherit">←</a> 今日の質問</h2></div>
+    <div class="question-card" id="question-card"></div><div id="feed"></div>`;
+  questionCard();
+  await loadFeed((before) => `/question/answers${before ? '?before=' + before : ''}`, 'まだ回答がありません。最初に答えてみましょう！');
+}
+
+// =====================================================================
+// トレンド
+// =====================================================================
+async function trendsHtml() {
+  const { period, trends } = await api('/trends', { noAuthPrompt: true });
+  if (!trends.length) return '<p class="muted">まだトレンドはありません。<br>#ハッシュタグ を付けて投稿してみましょう</p>';
+  return trends.map((t, i) => `<a class="trend-row" href="#/search?q=${encodeURIComponent('#' + t.tag)}">
+      <span class="muted trend-rank">${i + 1}</span>
+      <span class="trend-body"><b>#${esc(t.tag)}</b><span class="muted">${t.posts}件の投稿 · ${t.users}人</span></span>
+    </a>`).join('') + `<p class="muted trend-period">直近${period}の集計</p>`;
+}
+async function loadTrends() {
+  const el = $('#trends .list');
+  if (el) el.innerHTML = await trendsHtml().catch(() => '<p class="muted">読み込めませんでした</p>');
+}
+setInterval(() => { if (!document.hidden) loadTrends(); }, 120_000);
+
+// =====================================================================
+// コミュニティ
+// =====================================================================
+function communityRow(c) {
+  return `<a class="community-row" href="#/c/${esc(c.slug)}">
+    <div class="community-icon">${esc([...c.name][0] || '?')}</div>
+    <div class="community-body"><b>${esc(c.name)}</b><span class="muted">${c.members}人のメンバー${c.joined ? ' · 参加中' : ''}</span>
+      ${c.description ? `<div class="community-desc">${esc(c.description)}</div>` : ''}</div>
+  </a>`;
+}
+
+async function viewCommunities() {
+  main.innerHTML = `<div class="head"><h2>コミュニティ</h2></div>
+    ${me ? `<details class="community-create"><summary>＋ コミュニティを作る</summary>
+      <form id="community-form" class="auth">
+        <input name="name" placeholder="コミュニティ名（例: 猫好きの集い）" maxlength="50" required>
+        <input name="slug" placeholder="ID（英数字と - _ で3〜30文字。URLになります）" pattern="[A-Za-z0-9_\\-]{3,30}" required>
+        <textarea name="description" placeholder="説明（任意・300文字まで）" maxlength="300" rows="3"></textarea>
+        <p class="error" id="community-error"></p>
+        <button class="btn primary" type="submit">作成する</button>
+      </form></details>` : ''}
+    <div id="community-list"><div class="empty">読み込み中…</div></div>`;
+  $('#community-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const { community } = await api('/communities', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) });
+      location.hash = '#/c/' + community.slug;
+    } catch (err) { $('#community-error').textContent = err.message; }
+  });
+  const [all, mine] = await Promise.all([
+    api('/communities', { noAuthPrompt: true }),
+    me ? api('/communities?mine=1', { noAuthPrompt: true }) : Promise.resolve({ communities: [] }),
+  ]);
+  $('#community-list').innerHTML =
+    (mine.communities.length ? `<h3 class="section-title">参加中</h3>${mine.communities.map(communityRow).join('')}` : '') +
+    `<h3 class="section-title">みんなのコミュニティ</h3>` +
+    (all.communities.length ? all.communities.map(communityRow).join('') : '<div class="empty">まだコミュニティがありません。最初のコミュニティを作ってみましょう！</div>');
+}
+
+async function viewCommunity(slug) {
+  main.innerHTML = '<div class="empty">読み込み中…</div>';
+  let c;
+  try { c = (await api('/communities/' + encodeURIComponent(slug) + '?before=0', { noAuthPrompt: true })).community; }
+  catch (e) { main.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  const joinBtn = !me ? '' : c.isOwner
+    ? '<button class="btn outline danger" id="community-delete" type="button">削除</button>'
+    : `<button class="btn ${c.joined ? 'outline' : 'primary'}" id="community-join" type="button">${c.joined ? '参加中' : '参加する'}</button>`;
+  main.innerHTML = `<div class="head"><h2><a href="#/c" style="color:inherit">←</a> ${esc(c.name)}</h2></div>
+    <div class="profile-head community-head">
+      <div class="banner"></div>
+      <div class="top"><div class="community-icon lg">${esc([...c.name][0] || '?')}</div>${joinBtn}</div>
+      <h2>${esc(c.name)}</h2><div class="muted">/c/${esc(c.slug)} · 作成: <a href="#/u/${esc(c.owner.username)}">@${esc(c.owner.username)}</a></div>
+      ${c.description ? `<p>${richText(c.description)}</p>` : ''}
+      <div class="stats"><span><b>${c.members}</b> メンバー</span></div>
+    </div>
+    ${c.joined ? `<div id="community-compose">${composeHtml(`${c.name} に投稿`)}</div>` : me ? '<div class="empty">参加すると投稿できます</div>' : ''}
+    <div id="feed"></div>`;
+  $('#community-join')?.addEventListener('click', async () => {
+    try {
+      await api(`/communities/${encodeURIComponent(slug)}/join`, { method: c.joined ? 'DELETE' : 'POST' });
+      viewCommunity(slug);
+    } catch (e) { alert(e.message); }
+  });
+  $('#community-delete')?.addEventListener('click', async () => {
+    if (!confirm(`「${c.name}」を削除しますか？\nコミュニティ内の投稿もすべて削除され、元に戻せません。`)) return;
+    try { await api('/communities/' + encodeURIComponent(slug), { method: 'DELETE' }); location.hash = '#/c'; } catch (e) { alert(e.message); }
+  });
+  if (c.joined) bindCompose($('#community-compose'), { extra: { community: c.slug }, onDone: (p) => { $('#feed .empty')?.remove(); $('#feed').insertAdjacentHTML('afterbegin', renderPost(p)); } });
+  main.querySelector('.community-head').addEventListener('click', (e) => { const l = e.target.closest('[data-url]'); if (l) VB.open(l.dataset.url); });
+  await loadFeed((before) => `/communities/${encodeURIComponent(slug)}${before ? '?before=' + before : ''}`, 'まだ投稿がありません');
+}
+
+// =====================================================================
+// 設定 / 緊急データ削除
+// =====================================================================
+function viewSettings() {
+  main.innerHTML = `<div class="head"><h2>設定</h2></div>
+    <section class="settings-section">
+      <h3>アカウント</h3>
+      <p class="muted">@${esc(me.username)} でログイン中</p>
+      <div class="settings-buttons">
+        <a class="btn outline" href="#/u/${esc(me.username)}">プロフィールを見る</a>
+        <button class="btn outline" id="settings-logout" type="button">ログアウト</button>
+      </div>
+    </section>
+    <section class="settings-section danger-zone">
+      <h3>🚨 緊急データ削除</h3>
+      <p>あなたのデータをすぐに、完全に削除します。<b>元に戻すことはできません。</b></p>
+      <ul class="muted">
+        <li>投稿・返信・リポスト・いいね・今日の質問への回答</li>
+        <li>DM（<b>相手の画面からも消えます</b>）</li>
+        <li>フォロー／フォロワー、参加中のコミュニティ、作成したコミュニティ（中の投稿も含む）</li>
+        <li>開いている仮想ブラウザ（閲覧履歴・Cookie）</li>
+      </ul>
+      <p class="muted">削除したデータは、サーバーのデータベースファイル上でも上書きされ、痕跡が残りません。この端末に保存された設定も消去します。</p>
+      <form id="wipe-form" class="auth">
+        <label class="wipe-option"><input type="radio" name="mode" value="content" checked> <span><b>履歴をすべて削除</b><br><span class="muted">アカウント（ユーザー名・パスワード）は残ります。他の端末はログアウトされます</span></span></label>
+        <label class="wipe-option"><input type="radio" name="mode" value="account"> <span><b>アカウントごと完全に削除</b><br><span class="muted">ユーザー名も含めて、すべてが消えます</span></span></label>
+        <input name="password" type="password" placeholder="確認のためパスワードを入力" autocomplete="current-password" required>
+        <p class="error" id="wipe-error"></p>
+        <button class="btn danger-btn" type="submit">今すぐ削除する</button>
+      </form>
+    </section>`;
+  $('#settings-logout').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); me = null; renderMe(); location.hash = '#/'; });
+  $('#wipe-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(e.target));
+    const label = fd.mode === 'account' ? 'アカウントとすべてのデータ' : 'すべての履歴';
+    if (!confirm(`${label}を完全に削除します。元に戻せません。よろしいですか？`)) return;
+    const btn = $('button[type=submit]', e.target);
+    btn.disabled = true; btn.textContent = '削除しています…';
+    try {
+      await api('/me/wipe', { method: 'POST', body: fd, noAuthPrompt: true });
+      VB.close();
+      try { localStorage.clear(); sessionStorage.clear(); } catch {}
+      if (fd.mode === 'account') { me = null; }
+      alert(fd.mode === 'account' ? 'アカウントとすべてのデータを削除しました。' : 'すべての履歴を削除しました。');
+      location.replace('/#/');
+      location.reload();
+    } catch (err) {
+      $('#wipe-error').textContent = err.message;
+      btn.disabled = false; btn.textContent = '今すぐ削除する';
+    }
+  });
+}
 
 // =====================================================================
 // ダイレクトメッセージ
@@ -345,6 +546,7 @@ function dmBubble(m) {
   const d = new Date(m.createdAt);
   return `<div class="dm-msg ${m.mine ? 'mine' : 'theirs'}" data-id="${m.id}">
     <div class="dm-bubble">${richText(m.content)}</div>
+    ${(() => { const u = firstUrl(m.content); return u && isVideoUrl(u) ? videoEmbed(u) : ''; })()}
     <div class="dm-time">${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}</div>
   </div>`;
 }
