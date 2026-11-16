@@ -76,7 +76,8 @@ function createSession(req, res, userId) {
   res.setHeader('Set-Cookie', `ippo_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${86400 * SESSION_DAYS}${req.secure ? '; Secure' : ''}`);
 }
 
-const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at };
+// 公開するユーザー情報 (管理者かどうかも含める: 名前の横に管理者バッジを出すため)
+const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at, isAdmin: isAdmin(u) };
 // 管理者: 環境変数 ADMIN_USERS (カンマ区切りのユーザー名) で指定する。未設定なら RCN413
 const ADMINS = new Set(String(process.env.ADMIN_USERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
 const isAdmin = (u) => !!u && ADMINS.has(String(u.username).toLowerCase());

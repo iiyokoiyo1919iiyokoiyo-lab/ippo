@@ -52,6 +52,11 @@ function avatar(u, size = '', link = false) {
     : `<span class="${cls}" style="background:${colorFor(u.username)}" aria-hidden="true">${inner}</span>`;
 }
 
+// 管理者バッジ: 名前の横に付ける小さな印 (プロフィールでは文字付き)
+const adminBadge = (u, withLabel = false) => !u?.isAdmin ? ''
+  : withLabel ? `<span class="admin-badge-label" title="IppO の管理者">${icon('badge')}管理者</span>`
+  : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`;
+
 // ---------- トースト ----------
 function toast(msg, type = '') {
   const el = document.createElement('div');
@@ -204,7 +209,7 @@ function renderPost(item, { focus = false, fresh = false } = {}) {
     <header class="post-head">
       ${avatar(p.author, '', true)}
       <div class="post-author">
-        <div class="post-name"><a class="name" href="#/u/${esc(p.author.username)}">${esc(p.author.displayName)}</a><span class="handle">@${esc(p.author.username)}</span></div>
+        <div class="post-name"><a class="name" href="#/u/${esc(p.author.username)}">${esc(p.author.displayName)}</a>${adminBadge(p.author)}<span class="handle">@${esc(p.author.username)}</span></div>
         <div class="post-meta"><time datetime="${new Date(p.createdAt).toISOString()}" title="${fullTime(p.createdAt)}">${focus ? fullTime(p.createdAt) : timeAgo(p.createdAt)}</time>${chips}</div>
       </div>
       <button class="icon-btn post-more" type="button" data-menu aria-label="その他">${icon('more')}</button>
@@ -417,7 +422,7 @@ function renderMe() {
   const box = $('#account-box');
   if (me) {
     box.innerHTML = `<button class="account-btn" type="button" data-menu id="account-btn">${avatar(me, 'sm')}
-      <span class="account-text"><b>${esc(me.displayName)}</b><span>@${esc(me.username)}</span></span>${icon('more', 'account-more')}</button>`;
+      <span class="account-text"><b>${esc(me.displayName)}${adminBadge(me)}</b><span>@${esc(me.username)}</span></span>${icon('more', 'account-more')}</button>`;
     $('#account-btn').addEventListener('click', (e) => openMenu(e.currentTarget, [
       { icon: 'user', label: 'マイページ', run: () => { location.hash = '#/me'; } },
       { icon: 'settings', label: '設定', run: () => { location.hash = '#/settings'; } },
@@ -444,7 +449,7 @@ function followBtn(u) {
   return `<button class="btn btn-sm ${u.followed ? 'btn-outline' : 'btn-primary'} follow-btn" type="button" data-user="${esc(u.username)}" data-on="${u.followed ? 1 : 0}">${u.followed ? 'フォロー中' : 'フォロー'}</button>`;
 }
 function userRow(u) {
-  return `<div class="user-row">${avatar(u, '', true)}<div class="names"><a href="#/u/${esc(u.username)}">${esc(u.displayName)}</a><span>@${esc(u.username)}</span></div>${me && me.id !== u.id ? followBtn(u) : ''}</div>`;
+  return `<div class="user-row">${avatar(u, '', true)}<div class="names"><a href="#/u/${esc(u.username)}">${esc(u.displayName)}${adminBadge(u)}</a><span>@${esc(u.username)}</span></div>${me && me.id !== u.id ? followBtn(u) : ''}</div>`;
 }
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('.follow-btn');
@@ -565,12 +570,12 @@ async function viewUser(username, tab = 'posts') {
   const actions = isMe
     ? `<button class="btn btn-outline btn-sm" id="edit-profile" type="button">${icon('edit')}編集</button><a class="icon-btn" href="#/settings" aria-label="設定">${icon('settings')}</a>`
     : me ? `<a class="icon-btn" href="#/dm/${esc(user.username)}" aria-label="メッセージを送る" style="border:1px solid var(--border-strong)">${icon('mail')}</a>${followBtn(user)}` : '';
-  main.innerHTML = pageHead({ title: esc(user.displayName), sub: `${user.stats.posts}件の投稿`, back: '#/' }) + `<div class="content">
+  main.innerHTML = pageHead({ title: esc(user.displayName) + adminBadge(user), sub: `${user.stats.posts}件の投稿`, back: '#/' }) + `<div class="content">
     <section class="hero">
       <div class="hero-cover"></div>
       <div class="hero-body">
         <div class="hero-top">${avatar(user, 'lg')}<div class="hero-actions">${actions}</div></div>
-        <h2>${esc(user.displayName)}</h2>
+        <h2>${esc(user.displayName)}${adminBadge(user, true)}</h2>
         <div class="handle">@${esc(user.username)}</div>
         ${user.bio ? `<p class="hero-bio">${richText(user.bio)}</p>` : isMe ? '<p class="hero-bio muted">自己紹介を書いてみましょう</p>' : ''}
         <div class="hero-meta"><span>${icon('calendar')}${new Date(user.createdAt).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}から利用</span></div>
@@ -666,15 +671,15 @@ async function viewNotifications() {
   const quote = (p) => esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content);
   const activity = data.activity.map((a) => `<a class="notif${a.at > seen.at ? ' unread' : ''}" href="#/p/${a.type === 'repost' ? a.post.id : a.post.id}">
       <span class="notif-icon ${a.type}">${icon(ic[a.type])}</span>
-      <div class="notif-body"><div class="notif-text"><b>${esc(a.user.displayName)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>
+      <div class="notif-body"><div class="notif-text"><b>${esc(a.user.displayName)}${adminBadge(a.user)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>
       <time>${timeAgo(a.at)}</time></a>`).join('');
   const likes = data.likes.map((g) => `<a class="notif${g.rid > seen.like ? ' unread' : ''}" href="#/p/${g.post.id}">
       <span class="notif-icon like">${icon('heart')}</span>
       <div class="notif-body"><div class="notif-avatars">${g.users.map((u) => avatar(u, 'xs')).join('')}</div>
-        <div class="notif-text"><b>${esc(g.users[0]?.displayName || '')}</b>さん${g.total > 1 ? `ほか${g.total - 1}人` : ''}があなたの投稿にいいねしました</div><div class="notif-quote">${quote(g.post)}</div></div></a>`).join('');
+        <div class="notif-text"><b>${esc(g.users[0]?.displayName || '')}${adminBadge(g.users[0])}</b>さん${g.total > 1 ? `ほか${g.total - 1}人` : ''}があなたの投稿にいいねしました</div><div class="notif-quote">${quote(g.post)}</div></div></a>`).join('');
   const follows = data.follows.map((f) => `<a class="notif${f.rid > seen.follow ? ' unread' : ''}" href="#/u/${esc(f.user.username)}">
       <span class="notif-icon follow">${icon('user-plus')}</span>
-      <div class="notif-body"><div class="notif-text"><b>${esc(f.user.displayName)}</b>さんにフォローされました</div><div class="notif-quote">@${esc(f.user.username)}</div></div></a>`).join('');
+      <div class="notif-body"><div class="notif-text"><b>${esc(f.user.displayName)}${adminBadge(f.user)}</b>さんにフォローされました</div><div class="notif-quote">@${esc(f.user.username)}</div></div></a>`).join('');
   $('#notifs').innerHTML = (!activity && !likes && !follows)
     ? emptyState({ icon: 'bell', title: 'まだ通知はありません', text: 'コメントやいいね、フォローがあるとここでお知らせします。' })
     : (activity ? `<h2 class="section-title">アクティビティ</h2><div class="list-card">${activity}</div>` : '') +
@@ -819,7 +824,7 @@ function viewSettings() {
   main.innerHTML = pageHead({ title: '設定' }) + `<div class="content">
     <section class="settings-group"><h2>アカウント</h2>
       <div class="list-card">
-        <a class="list-item" href="#/u/${esc(me.username)}">${avatar(me, 'sm')}<div class="grow"><div class="title">${esc(me.displayName)}</div><div class="desc">@${esc(me.username)}</div></div>${icon('chevron', 'chev')}</a>
+        <a class="list-item" href="#/u/${esc(me.username)}">${avatar(me, 'sm')}<div class="grow"><div class="title">${esc(me.displayName)}${adminBadge(me)}</div><div class="desc">@${esc(me.username)}</div></div>${icon('chevron', 'chev')}</a>
         <button class="list-item" type="button" id="settings-edit">${icon('edit')}<div class="grow title">プロフィールを編集</div>${icon('chevron', 'chev')}</button>
         <a class="list-item" href="#/bookmarks">${icon('bookmark')}<div class="grow title">ブックマーク</div>${icon('chevron', 'chev')}</a>
         <button class="list-item" type="button" id="settings-logout">${icon('logout')}<div class="grow title">ログアウト</div></button>
@@ -926,7 +931,7 @@ async function loadAdminUsers(q) {
   el.innerHTML = `<div class="list-card">${users.map((u) => `<div class="list-item admin-user" data-u="${esc(u.username)}">
       ${avatar(u, 'sm', true)}
       <div class="grow">
-        <div class="title">${esc(u.displayName)} <span class="muted text-sm" style="font-weight:500">@${esc(u.username)}</span>${u.isAdmin ? ' <span class="chip chip-accent">管理者</span>' : ''}</div>
+        <div class="title">${esc(u.displayName)} <span class="muted text-sm" style="font-weight:500">@${esc(u.username)}</span>${adminBadge(u, true)}</div>
         <div class="desc">${new Date(u.createdAt).toLocaleDateString('ja-JP')} 登録${u.invitedBy ? ` · <a href="#/u/${esc(u.invitedBy)}">@${esc(u.invitedBy)}</a> の招待` : ''} · 投稿 ${u.posts} · フォロワー ${u.followers}${u.invited ? ` · 招待した人 ${u.invited}` : ''}</div>
       </div>
       ${u.isAdmin ? '' : `<button class="icon-btn" type="button" data-admin-menu aria-label="操作">${icon('more')}</button>`}
@@ -1175,7 +1180,7 @@ async function viewDmList() {
       <a class="dm-row${c.unread ? ' unread' : ''}" href="#/dm/${esc(c.user.username)}">
         ${avatar(c.user)}
         <div class="dm-row-body">
-          <div class="dm-row-top"><b>${esc(c.user.displayName)}</b><span class="text-sm muted">@${esc(c.user.username)}</span><time>${timeAgo(c.last.createdAt)}</time></div>
+          <div class="dm-row-top"><b>${esc(c.user.displayName)}${adminBadge(c.user)}</b><span class="text-sm muted">@${esc(c.user.username)}</span><time>${timeAgo(c.last.createdAt)}</time></div>
           <div class="dm-preview">${c.last.mine ? 'あなた: ' : ''}${esc(c.last.content)}</div>
         </div>
         ${c.unread ? `<b class="count-badge" style="margin-left:0">${c.unread}</b>` : ''}
@@ -1213,7 +1218,7 @@ async function viewDmThread(username) {
   };
   try {
     const { user, messages, hasMore } = await api('/dm/' + encodeURIComponent(username));
-    $('.page-head h1', main).innerHTML = `${esc(user.displayName)}<span class="sub"><a href="#/u/${esc(user.username)}" style="color:inherit">@${esc(user.username)}</a></span>`;
+    $('.page-head h1', main).innerHTML = `${esc(user.displayName)}${adminBadge(user)}<span class="sub"><a href="#/u/${esc(user.username)}" style="color:inherit">@${esc(user.username)}</a></span>`;
     thread.innerHTML = messages.length ? '' : emptyState({ icon: 'mail', title: `${user.displayName}さんにメッセージを送ってみましょう` });
     append(messages);
     firstId = messages[0]?.id || 0;

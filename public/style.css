@@ -771,3 +771,11 @@ a.list-item:hover, button.list-item:hover { background: var(--surface-2); }
 .stat-label { font-size: var(--fs-xs); font-weight: 650; color: var(--text-3); }
 .stat-sub { font-size: var(--fs-xs); color: var(--text-3); }
 .admin-user .desc { white-space: normal; }
+
+/* 管理者バッジ */
+.admin-badge { display: inline-flex; vertical-align: -2px; margin-left: 3px; color: var(--accent); flex: none; }
+.admin-badge .ic { width: 16px; height: 16px; }
+.page-head h1 .admin-badge .ic { width: 18px; height: 18px; }
+.admin-badge-label { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 7px; margin-left: 8px; border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: 750; vertical-align: 5px; letter-spacing: .02em; }
+.admin-badge-label .ic { width: 15px; height: 15px; color: var(--accent); }
+.post-name .admin-badge { margin-left: -2px; }
