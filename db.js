@@ -108,4 +108,22 @@ CREATE INDEX IF NOT EXISTS idx_invites_creator ON invites(creator_id);
 `);
 addColumn('users', 'invited_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL'); // 誰の招待で登録したか
 
+// ---------- マイグレーション ----------
+// 新しいテーブルはここを通して追加する。適用済みのバージョンは schema_migrations に記録され、二度と実行されない
+db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`);
+db.migrate = function migrate(version, sql) {
+  if (db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version)) return false;
+  db.exec('BEGIN');
+  try {
+    db.exec(sql);
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(version, Date.now());
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  console.log(`[migration] ${version} を適用しました`);
+  return true;
+};
+
 module.exports = db;

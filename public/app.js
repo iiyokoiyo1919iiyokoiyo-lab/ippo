@@ -699,7 +699,10 @@ async function viewSearch(q) {
   $('#sf').addEventListener('submit', (e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) location.hash = '#/search?q=' + encodeURIComponent(v); });
   const res = $('#res');
   if (!q) {
-    res.innerHTML = `<div class="shortcuts">
+    res.innerHTML = `<a class="card pw-banner" href="#/pixel">
+        <span class="pw-banner-art" aria-hidden="true">${Array.from({ length: 36 }, (_, i) => `<i style="background:${['#4b55f0', '#1f2766', '#4CC9F0', '#FFD43B', '#F06EAA', '#94D82D', '#ffffff', '#7B4AE2', '#F4802A'][(i * 7 + (i >> 2)) % 9]}"></i>`).join('')}</span>
+        <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、60秒に1マスずつ描こう</span></span>${icon('chevron', 'chev')}</a>
+      <div class="shortcuts">
         <a class="card shortcut" href="#/schedule"><span class="shortcut-icon">${icon('calendar')}</span><b>予定表</b><span>学校の行事</span></a>
         <a class="card shortcut" href="#/q"><span class="shortcut-icon">${icon('sparkle')}</span><b>今日の質問</b><span>みんなの回答</span></a>
         <a class="card shortcut" href="#/c"><span class="shortcut-icon">${icon('users')}</span><b>コミュニティ</b><span>仲間を探す</span></a>
@@ -1012,6 +1015,522 @@ async function loadAdminUsers(q) {
       } },
     ]);
   }));
+}
+
+// =====================================================================
+// PIXEL WORLD (全校で 1 枚のキャンバスを共有して描く)
+// ・配置は 60 秒に 1 ピクセル。判定はサーバー側で行い、ここでは残り時間を表示するだけ
+// ・他の人の配置は WebSocket (/pw) で届く。順番の番号 (seq) が飛んだら全体を取り直す
+// =====================================================================
+const PW_SIZE = 100;
+const pwHex = (pal, i) => pal[i]?.hex || '#ffffff';
+const pwRgb = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+const pwIsLight = (hex) => { const [r, g, b] = pwRgb(hex); return 0.299 * r + 0.587 * g + 0.114 * b > 160; };
+const pwSwatch = (pal, i) => `<span class="pw-chip" style="background:${pwHex(pal, i)}"></span>${i} ${esc(pal[i]?.name || '')}`;
+// base64 のピクセル (1 マス 1 バイト) をキャンバスに描く
+function pwDraw(canvas, pixels, pal) {
+  const g = canvas.getContext('2d'), img = g.createImageData(PW_SIZE, PW_SIZE);
+  const rgb = pal.map((p) => pwRgb(p.hex));
+  for (let i = 0; i < pixels.length; i++) { const c = rgb[pixels[i]] || [255, 255, 255]; img.data.set([c[0], c[1], c[2], 255], i * 4); }
+  g.putImageData(img, 0, 0);
+}
+const pwDecode = (b64) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+const pwFmtDate = (t) => new Date(t).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' });
+
+async function viewPixel() {
+  const S = {
+    pal: [], pixels: null, canvasId: 0, seq: 0, offset: 0, cooldownMs: 60_000, nextAt: 0, paused: false, reason: '',
+    color: store.get('ippo_pw_color', 10), sel: null, s: 4, tx: 0, ty: 0, recent: [], stats: {}, online: 0,
+    ws: null, wsTry: 0, closed: false, placing: false, title: '', theme: '',
+  };
+  main.innerHTML = pageHead({ title: 'PIXEL WORLD', sub: 'みんなで描く 100×100 のキャンバス', actions: `<a class="btn btn-outline btn-sm" href="#/pixel/archive">${icon('file')}アーカイブ</a>` }) + `<div class="content pw">
+    <section class="card pw-status" id="pw-status" aria-live="polite">
+      <div class="pw-status-main"><div class="pw-title" id="pw-title">読み込み中…</div><div class="pw-theme" id="pw-theme"></div></div>
+      <div class="pw-timer" id="pw-timer"></div>
+    </section>
+    <section class="card pw-board">
+      <div class="pw-viewport" id="pw-viewport" tabindex="0" aria-label="キャンバス。矢印キーでマスを選び、Enter で配置">
+        <div class="pw-stage" id="pw-stage">
+          <canvas id="pw-canvas" width="${PW_SIZE}" height="${PW_SIZE}"></canvas>
+          <div class="pw-grid"></div>
+          <div class="pw-hover hidden" id="pw-hover"></div>
+          <div class="pw-sel hidden" id="pw-sel"></div>
+        </div>
+        <div class="pw-paused hidden" id="pw-paused"></div>
+        <div class="pw-zoom">
+          <button class="icon-btn" type="button" data-zoom="in" aria-label="拡大">${icon('plus')}</button>
+          <button class="icon-btn" type="button" data-zoom="out" aria-label="縮小"><svg class="ic" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <button class="icon-btn" type="button" data-zoom="fit" aria-label="全体を表示"><svg class="ic" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></button>
+        </div>
+        <div class="pw-conn" id="pw-conn"><i></i><span>接続中…</span></div>
+      </div>
+      <div class="pw-palette" id="pw-palette" role="radiogroup" aria-label="カラーパレット"></div>
+      <div class="pw-place" id="pw-place"></div>
+      <details class="pw-help"><summary>${icon('sparkle', 'ic-sm')}操作方法</summary>
+        <ul>
+          <li><b>マスを選ぶ</b>: タップ（クリック）すると、置く色でマスが光ります。「ここに置く」で配置します。</li>
+          <li><b>拡大・縮小</b>: 2本指でピンチ、マウスホイール、または右上の ＋ − ボタン。</li>
+          <li><b>移動</b>: ドラッグでキャンバスを動かせます。</li>
+          <li><b>ルール</b>: 1人につき <b>60秒に1マス</b>。待ち時間は持ち越せません。</li>
+          <li>キーボード: 矢印キーでマスを移動、Enter で配置。</li>
+        </ul>
+      </details>
+    </section>
+    <section class="card card-pad" id="pw-stats"></section>
+    <section class="card card-pad" id="pw-poll"></section>
+    <section class="card card-pad" id="pw-recent"></section>
+    ${me?.isAdmin ? '<section class="card card-pad pw-admin" id="pw-admin"></section>' : ''}
+  </div>`;
+
+  const vp = $('#pw-viewport'), stage = $('#pw-stage'), cv = $('#pw-canvas'), selEl = $('#pw-sel'), hoverEl = $('#pw-hover');
+  const now = () => Date.now() + S.offset;
+
+  // ---------- 表示位置 (拡大・移動) ----------
+  const fitScale = () => Math.min(vp.clientWidth, vp.clientHeight) / PW_SIZE;
+  function apply() {
+    const vw = vp.clientWidth, vh = vp.clientHeight, size = PW_SIZE * S.s, m = 0.35;
+    S.tx = Math.min(Math.max(S.tx, Math.min(0, vw - size) - vw * m), Math.max(0, vw - size) + vw * m);
+    S.ty = Math.min(Math.max(S.ty, Math.min(0, vh - size) - vh * m), Math.max(0, vh - size) + vh * m);
+    stage.style.transform = `translate(${S.tx}px, ${S.ty}px) scale(${S.s})`;
+    stage.style.setProperty('--s', S.s);
+    vp.classList.toggle('show-grid', S.s >= 9);
+  }
+  function zoomAt(f, cx, cy) {
+    const min = fitScale() * 0.9, max = 48;
+    const ns = Math.min(max, Math.max(min, S.s * f));
+    S.tx = cx - (cx - S.tx) * (ns / S.s); S.ty = cy - (cy - S.ty) * (ns / S.s); S.s = ns; apply();
+  }
+  function fit() { S.s = fitScale(); S.tx = (vp.clientWidth - PW_SIZE * S.s) / 2; S.ty = (vp.clientHeight - PW_SIZE * S.s) / 2; apply(); }
+  const cellAt = (clientX, clientY) => {
+    const r = vp.getBoundingClientRect();
+    const x = Math.floor((clientX - r.left - S.tx) / S.s), y = Math.floor((clientY - r.top - S.ty) / S.s);
+    return x >= 0 && x < PW_SIZE && y >= 0 && y < PW_SIZE ? { x, y } : null;
+  };
+
+  // ---------- 操作 (タップ・ドラッグ・ピンチ・ホイール) ----------
+  const ptrs = new Map();
+  let drag = null, pinch = null, pinched = false;
+  vp.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.pw-zoom')) return;
+    vp.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 1) { drag = { x: e.clientX, y: e.clientY, tx: S.tx, ty: S.ty, moved: false }; pinched = false; }
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()], r = vp.getBoundingClientRect();
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: S.s, mx: (a.x + b.x) / 2 - r.left, my: (a.y + b.y) / 2 - r.top, tx: S.tx, ty: S.ty };
+      pinched = true; drag = null;
+    }
+  });
+  vp.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse' && !ptrs.size) {
+      const c = cellAt(e.clientX, e.clientY);
+      hoverEl.classList.toggle('hidden', !c);
+      if (c) { hoverEl.style.left = c.x + 'px'; hoverEl.style.top = c.y + 'px'; }
+    }
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && ptrs.size >= 2) {
+      const [a, b] = [...ptrs.values()], r = vp.getBoundingClientRect();
+      const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2 - r.left, my = (a.y + b.y) / 2 - r.top;
+      const ns = Math.min(48, Math.max(fitScale() * 0.9, pinch.s * d / pinch.d));
+      // ピンチの中心が指の下に留まるように
+      S.tx = mx - (pinch.mx - pinch.tx) * (ns / pinch.s); S.ty = my - (pinch.my - pinch.ty) * (ns / pinch.s); S.s = ns; apply();
+    } else if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 7) drag.moved = true;
+      if (drag.moved) { S.tx = drag.tx + dx; S.ty = drag.ty + dy; apply(); }
+    }
+  });
+  const endPtr = (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (ptrs.size < 2) pinch = null;
+    if (!ptrs.size) {
+      if (drag && !drag.moved && !pinched) { const c = cellAt(e.clientX, e.clientY); if (c) select(c); }
+      drag = null;
+    }
+  };
+  vp.addEventListener('pointerup', endPtr);
+  vp.addEventListener('pointercancel', endPtr);
+  vp.addEventListener('pointerleave', () => hoverEl.classList.add('hidden'));
+  vp.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = vp.getBoundingClientRect();
+    zoomAt(Math.exp(-e.deltaY * 0.0022), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  $$('[data-zoom]', vp).forEach((b) => b.addEventListener('click', () => {
+    const z = b.dataset.zoom;
+    if (z === 'fit') return fit();
+    const cx = vp.clientWidth / 2, cy = vp.clientHeight / 2;
+    // 選択中のマスがあれば、そこを中心に拡大
+    if (S.sel && z === 'in') { S.tx = cx - (S.sel.x + 0.5) * S.s; S.ty = cy - (S.sel.y + 0.5) * S.s; }
+    zoomAt(z === 'in' ? 1.6 : 1 / 1.6, cx, cy);
+  }));
+  vp.addEventListener('keydown', (e) => {
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (d) { e.preventDefault(); const c = S.sel || { x: 50, y: 50 }; select({ x: Math.min(99, Math.max(0, c.x + d[0])), y: Math.min(99, Math.max(0, c.y + d[1])) }); }
+    else if (e.key === 'Enter' && S.sel) { e.preventDefault(); place(); }
+  });
+  const onResize = () => fit();
+  window.addEventListener('resize', onResize);
+
+  // ---------- パレット ----------
+  function renderPalette() {
+    $('#pw-palette').innerHTML = S.pal.map((p) => `<button class="pw-color${p.id === S.color ? ' on' : ''}${pwIsLight(p.hex) ? ' light' : ''}" type="button" role="radio"
+      aria-checked="${p.id === S.color}" aria-label="${p.id} ${esc(p.name)}" title="${p.id} ${esc(p.name)}" data-color="${p.id}" style="--c:${p.hex}">${p.id === S.color ? icon('check') : ''}</button>`).join('') +
+      `<div class="pw-color-name">選択中: ${pwSwatch(S.pal, S.color)}</div>`;
+    $$('[data-color]', $('#pw-palette')).forEach((b) => b.addEventListener('click', () => { S.color = Number(b.dataset.color); store.set('ippo_pw_color', S.color); renderPalette(); renderSelection(); }));
+  }
+
+  // ---------- 選択と配置 ----------
+  function select(c) {
+    S.sel = c;
+    renderSelection();
+    if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(5);
+  }
+  function renderSelection() {
+    if (S.sel) {
+      selEl.classList.remove('hidden');
+      selEl.style.left = S.sel.x + 'px'; selEl.style.top = S.sel.y + 'px';
+      selEl.style.background = pwHex(S.pal, S.color);
+    } else selEl.classList.add('hidden');
+    renderPlaceBar();
+  }
+  function renderPlaceBar() {
+    const el = $('#pw-place');
+    if (!el) return;
+    const wait = Math.max(0, S.nextAt - now());
+    let btn;
+    if (!me) btn = `<button class="btn btn-primary" type="button" id="pw-login">ログインして参加</button>`;
+    else if (S.paused) btn = `<button class="btn btn-secondary" type="button" disabled>${icon('lock')}停止中</button>`;
+    else if (wait > 0) btn = `<button class="btn btn-secondary pw-wait" type="button" disabled>あと ${Math.ceil(wait / 1000)}秒</button>`;
+    else btn = `<button class="btn btn-primary" type="button" id="pw-go" ${S.sel && !S.placing ? '' : 'disabled'}>${S.placing ? '配置中…' : 'ここに置く'}</button>`;
+    const info = S.sel
+      ? `<div class="pw-place-info"><b>(${S.sel.x}, ${S.sel.y})</b><span>${pwSwatch(S.pal, S.pixels?.[S.sel.y * PW_SIZE + S.sel.x] ?? 0)}</span><span class="pw-arrow">→</span><span>${pwSwatch(S.pal, S.color)}</span></div>`
+      : `<div class="pw-place-info"><span>${pwSwatch(S.pal, S.color)}</span><span class="muted">置きたいマスをタップ</span></div>`;
+    el.innerHTML = info + btn;
+    $('#pw-login')?.addEventListener('click', () => openAuth());
+    $('#pw-go')?.addEventListener('click', place);
+  }
+  async function place() {
+    if (!me) return openAuth();
+    if (!S.sel || S.placing || S.paused || S.nextAt > now()) return;
+    S.placing = true; renderPlaceBar();
+    const { x, y } = S.sel, color = S.color;
+    try {
+      const r = await api('/pw/pixels', { method: 'POST', body: { x, y, color }, noAuthPrompt: true });
+      S.offset = r.serverNow - Date.now();
+      S.nextAt = r.nextAt;
+      applyPixel({ seq: r.seq, x, y, c: color, at: r.serverNow, canvas: S.canvasId }, true);
+      pop(x, y);
+      toast(`(${x}, ${y}) に ${S.pal[color].name} を置きました`, 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+      resync(); // サーバーの状態 (残り時間・停止状態) に合わせる
+    }
+    S.placing = false; renderPlaceBar(); renderTimer();
+  }
+  // 配置成功のアニメーション
+  function pop(x, y) {
+    const el = document.createElement('div');
+    el.className = 'pw-pop'; el.style.left = x + 'px'; el.style.top = y + 'px';
+    stage.append(el); setTimeout(() => el.remove(), 700);
+  }
+
+  // ---------- 状態の反映 ----------
+  function drawPixel(x, y, c) {
+    const g = cv.getContext('2d'); g.fillStyle = pwHex(S.pal, c); g.fillRect(x, y, 1, 1);
+  }
+  function applyPixel(ev, mine = false) {
+    if (ev.canvas && ev.canvas !== S.canvasId) return resync();
+    if (ev.seq <= S.seq) return;                    // すでに反映済み (自分の配置の通知など)
+    if (ev.seq > S.seq + 1 && !mine) { S.seq = ev.seq; return resync(); } // 取りこぼし → 全体を取り直す
+    S.seq = Math.max(S.seq, ev.seq);
+    S.pixels[ev.y * PW_SIZE + ev.x] = ev.c;
+    drawPixel(ev.x, ev.y, ev.c);
+    S.recent.unshift({ x: ev.x, y: ev.y, c: ev.c, at: ev.at });
+    S.recent = S.recent.slice(0, 12);
+    S.stats.todayPlacements = (S.stats.todayPlacements || 0) + 1;
+    S.stats.hourPlacements = (S.stats.hourPlacements || 0) + 1;
+    S.stats.placements = (S.stats.placements || 0) + 1;
+    renderStats(); renderRecent();
+    if (S.sel && S.sel.x === ev.x && S.sel.y === ev.y) renderPlaceBar();
+  }
+  let resyncing = null;
+  async function resync() {
+    if (resyncing) return resyncing;
+    resyncing = (async () => {
+      try {
+        const st = await api('/pw/state', { noAuthPrompt: true });
+        S.offset = st.serverNow - Date.now();
+        S.pal = st.palette; S.cooldownMs = st.cooldownMs;
+        S.canvasId = st.canvas.id; S.seq = st.canvas.seq; S.title = st.canvas.title; S.theme = st.canvas.theme;
+        S.pixels = pwDecode(st.canvas.pixels);
+        pwDraw(cv, S.pixels, S.pal);
+        S.nextAt = st.me?.nextAt || 0;
+        S.paused = st.paused; S.reason = st.reason;
+        S.stats = st.stats; S.online = Math.max(S.online, st.stats.online);
+        S.recent = st.recent;
+        $('#pw-title').textContent = S.title;
+        $('#pw-theme').innerHTML = S.theme ? `${icon('sparkle', 'ic-sm')}テーマ: ${esc(S.theme)}` : `${icon('calendar', 'ic-sm')}${pwFmtDate(st.canvas.startedAt)} から開催中`;
+        renderPalette(); renderSelection(); renderTimer(); renderStats(); renderRecent(); renderPause();
+      } catch (e) { toast('PIXEL WORLD を読み込めませんでした', 'error'); }
+    })();
+    try { await resyncing; } finally { resyncing = null; }
+  }
+  function renderPause() {
+    const el = $('#pw-paused');
+    el.classList.toggle('hidden', !S.paused);
+    el.innerHTML = S.paused ? `${icon('lock')}<span>${esc(S.reason)}</span>` : '';
+  }
+
+  // 残り時間のカウントダウン (サーバーの時刻に合わせて表示)
+  let lastReady = null;
+  function renderTimer() {
+    const el = $('#pw-timer');
+    if (!el) return;
+    const wait = Math.max(0, S.nextAt - now()), ready = !!me && !S.paused && wait === 0;
+    const C = 2 * Math.PI * 17, frac = me && !S.paused ? 1 - wait / S.cooldownMs : 0;
+    el.className = `pw-timer${ready ? ' ready' : ''}${S.paused ? ' paused' : ''}`;
+    el.innerHTML = `<svg class="pw-ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" class="track"/><circle cx="20" cy="20" r="17" class="bar" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"/></svg>
+      <div class="pw-timer-text">${!me ? '<b>閲覧中</b><span>ログインで参加</span>'
+        : S.paused ? '<b>停止中</b><span>しばらくお待ちください</span>'
+        : ready ? '<b>配置できます</b><span>マスを選んでください</span>'
+        : `<b>${Math.floor(Math.ceil(wait / 1000) / 60)}:${String(Math.ceil(wait / 1000) % 60).padStart(2, '0')}</b><span>次の配置まで</span>`}</div>`;
+    if (lastReady === false && ready) { renderPlaceBar(); el.classList.add('pulse'); }
+    else if (lastReady !== ready) renderPlaceBar();
+    else if (!ready && $('.pw-wait')) $('.pw-wait').textContent = `あと ${Math.ceil(wait / 1000)}秒`;
+    lastReady = ready;
+  }
+  function renderStats() {
+    const s = S.stats;
+    $('#pw-stats').innerHTML = `<div class="panel-head"><h3>${icon('users', 'ic-sm')}みんなの活動</h3><span class="pw-live"><i></i>LIVE</span></div>
+      <div class="pw-stat-grid">
+        <div><b>${S.online}</b><span>いま見ている人</span></div>
+        <div><b>${s.todayParticipants ?? 0}</b><span>今日の参加者</span></div>
+        <div><b>${s.hourPlacements ?? 0}</b><span>直近1時間の配置</span></div>
+        <div><b>${s.todayPlacements ?? 0}</b><span>今日の配置</span></div>
+      </div>
+      <p class="text-xs muted" style="margin-top:10px">この作品の参加者 ${s.participants ?? 0}人 · 合計 ${(s.placements ?? 0).toLocaleString()}マス</p>`;
+  }
+  function renderRecent() {
+    $('#pw-recent').innerHTML = `<div class="panel-head"><h3>${icon('refresh', 'ic-sm')}最近の更新</h3></div>` + (S.recent.length
+      ? `<ul class="pw-recent">${S.recent.map((r) => `<li><span class="pw-chip" style="background:${pwHex(S.pal, r.c)}"></span>(${r.x}, ${r.y}) が ${esc(S.pal[r.c]?.name || '')} に<time>${timeAgo(r.at)}</time></li>`).join('')}</ul>`
+      : '<p class="text-sm muted">まだ誰も置いていません。最初の1マスを置いてみましょう！</p>');
+  }
+
+  // ---------- テーマ投票 ----------
+  async function loadPoll() {
+    const el = $('#pw-poll');
+    if (!el) return;
+    let poll;
+    try { ({ poll } = await api('/pw/poll', { noAuthPrompt: true })); } catch { return; }
+    if (!poll) { el.innerHTML = `<div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}次のテーマ投票</h3></div><p class="text-sm muted">現在、テーマ投票はありません。</p>`; return; }
+    const open = poll.status === 'open';
+    el.innerHTML = `<div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}次のテーマ投票</h3><span class="chip ${open ? 'chip-accent' : ''}">${open ? '受付中' : '締め切り'}</span></div>
+      <p class="pw-q">${esc(poll.question)}</p>
+      <div class="pw-options" role="list">${poll.options.map((o) => {
+        const pct = poll.total ? Math.round(o.votes / poll.total * 100) : 0, mine = poll.myVote === o.id;
+        return `<button class="pw-option${mine ? ' mine' : ''}" type="button" data-opt="${o.id}" ${open ? '' : 'disabled'} aria-pressed="${mine}">
+          <span class="pw-bar" style="width:${pct}%"></span>
+          <span class="pw-opt-label">${mine ? icon('check', 'ic-sm') : ''}${esc(o.label)}</span><span class="pw-opt-num">${pct}% · ${o.votes}票</span></button>`;
+      }).join('')}</div>
+      <p class="text-xs muted" style="margin-top:8px">合計 ${poll.total}票${open ? ' · 投票は何度でも変えられます' : ''}</p>
+      ${me?.isAdmin && open ? `<button class="btn btn-ghost btn-sm" type="button" id="pw-poll-close" style="margin-top:8px">この投票を締め切る</button>` : ''}`;
+    $$('[data-opt]', el).forEach((b) => b.addEventListener('click', async () => {
+      if (!me) return openAuth();
+      try { await api(`/pw/poll/${poll.id}/vote`, { method: 'POST', body: { optionId: Number(b.dataset.opt) } }); loadPoll(); }
+      catch (e) { toast(e.message, 'error'); }
+    }));
+    $('#pw-poll-close')?.addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: '投票を締め切りますか？', body: 'これ以降は投票できなくなります。', ok: '締め切る' }))) return;
+      await api(`/pw/admin/polls/${poll.id}/close`, { method: 'POST' }); loadPoll();
+    });
+  }
+
+  // ---------- 運営メニュー (管理者だけ) ----------
+  function renderAdmin() {
+    const el = $('#pw-admin');
+    if (!el) return;
+    const hourAgo = new Date(Date.now() - 3600_000 + 9 * 3600_000).toISOString().slice(0, 16);
+    el.innerHTML = `<details><summary class="panel-head"><h3>${icon('shield', 'ic-sm')}運営メニュー</h3><span class="chip chip-accent">管理者</span></summary>
+      <div class="pw-admin-body">
+        <div class="pw-admin-block"><h4>一時停止</h4>
+          <div class="row"><input class="input" id="pwa-reason" placeholder="停止の理由（例: 点検中）" maxlength="100">
+          <button class="btn ${S.paused ? 'btn-primary' : 'btn-danger-outline'}" type="button" id="pwa-pause">${S.paused ? '再開する' : '停止する'}</button></div></div>
+        <div class="pw-admin-block"><h4>休止時間帯（毎日）</h4>
+          <div class="row"><input class="input" type="time" id="pwa-qs"><span>〜</span><input class="input" type="time" id="pwa-qe">
+          <button class="btn btn-outline" type="button" id="pwa-quiet">保存</button></div>
+          <p class="field-hint">例: 22:00〜06:00。両方を空にして保存すると解除します</p></div>
+        <div class="pw-admin-block"><h4>マスの履歴を調べる</h4>
+          <button class="btn btn-outline" type="button" id="pwa-pixel">選択中のマスを調べる</button><div id="pwa-pixel-out"></div></div>
+        <div class="pw-admin-block"><h4>配置を元に戻す</h4>
+          <div class="form-stack" style="gap:8px"><input class="input" id="pwa-user" placeholder="ユーザー名" autocapitalize="off">
+          <label class="field"><span class="field-hint">この日時以降に置いたマスを戻します（その後に他の人が置いたマスはそのまま）</span><input class="input" type="datetime-local" id="pwa-since" value="${hourAgo}"></label>
+          <div class="row"><button class="btn btn-outline" type="button" id="pwa-user-check">配置を確認</button><button class="btn btn-danger-outline" type="button" id="pwa-revert">元に戻す</button></div>
+          <div id="pwa-user-out"></div></div></div>
+        <div class="pw-admin-block"><h4>作品を完成させる</h4>
+          <div class="form-stack" style="gap:8px"><input class="input" id="pwa-title" placeholder="作品名（例: 学園祭の夜空）" maxlength="60">
+          <input class="input" id="pwa-next" placeholder="次のキャンバスの名前（例: 第2回 PIXEL WORLD）" maxlength="60">
+          <input class="input" id="pwa-theme" placeholder="次のテーマ（任意。例: 宇宙）" maxlength="60">
+          <button class="btn btn-primary" type="button" id="pwa-archive">アーカイブして新しいキャンバスを始める</button></div></div>
+        <div class="pw-admin-block"><h4>テーマ投票を作る</h4>
+          <div class="form-stack" style="gap:8px"><input class="input" id="pwa-q" placeholder="質問（例: 次のテーマは？）" maxlength="80">
+          <textarea class="textarea" id="pwa-opts" rows="4" placeholder="選択肢を1行に1つ（2〜8個）&#10;学校のマスコット&#10;宇宙&#10;動物"></textarea>
+          <button class="btn btn-outline" type="button" id="pwa-poll">投票を作成（今の投票は締め切り）</button></div></div>
+      </div></details>`;
+    const fmtT = (t) => new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    $('#pwa-pause').addEventListener('click', async () => {
+      try { const p = await api('/pw/admin/pause', { method: 'POST', body: { paused: !S.paused, reason: $('#pwa-reason').value } });
+        S.paused = p.paused; S.reason = p.reason; renderPause(); renderTimer(); renderAdmin(); toast(p.paused ? '一時停止しました' : '再開しました', 'success'); } catch (e) { toast(e.message, 'error'); }
+    });
+    $('#pwa-quiet').addEventListener('click', async () => {
+      try { const r = await api('/pw/admin/quiet', { method: 'POST', body: { start: $('#pwa-qs').value, end: $('#pwa-qe').value } });
+        toast(r.quiet ? `休止時間帯を ${r.quiet.start}〜${r.quiet.end} にしました` : '休止時間帯を解除しました', 'success'); resync(); } catch (e) { toast(e.message, 'error'); }
+    });
+    $('#pwa-pixel').addEventListener('click', async () => {
+      if (!S.sel) return toast('先にキャンバスのマスを選んでください', 'error');
+      const { history } = await api(`/pw/admin/pixel?x=${S.sel.x}&y=${S.sel.y}`);
+      $('#pwa-pixel-out').innerHTML = `<p class="text-sm" style="margin-top:8px"><b>(${S.sel.x}, ${S.sel.y})</b> の履歴</p>` + (history.length
+        ? `<ul class="pw-recent">${history.map((h) => `<li><span class="pw-chip" style="background:${pwHex(S.pal, h.color)}"></span>${esc(S.pal[h.color].name)}${h.kind === 'restore' ? '（復元）' : ''} · @${esc(h.user)}<time>${fmtT(h.at)}</time></li>`).join('')}</ul>`
+        : '<p class="text-sm muted">まだ誰も置いていません</p>');
+    });
+    const sinceMs = () => new Date($('#pwa-since').value + ':00+09:00').getTime() || 0;
+    $('#pwa-user-check').addEventListener('click', async () => {
+      try { const r = await api('/pw/admin/user?username=' + encodeURIComponent($('#pwa-user').value.trim().replace(/^@/, '')));
+        const since = sinceMs(), n = r.placements.filter((p) => p.at >= since).length;
+        $('#pwa-user-out').innerHTML = `<p class="text-sm" style="margin-top:8px">@${esc(r.user.username)}: この作品で ${r.placements.length}マス（指定日時以降 ${n}マス）</p>` +
+          `<ul class="pw-recent">${r.placements.slice(0, 15).map((p) => `<li><span class="pw-chip" style="background:${pwHex(S.pal, p.color)}"></span>(${p.x}, ${p.y}) を ${esc(S.pal[p.color].name)} に<time>${fmtT(p.at)}</time></li>`).join('')}</ul>`;
+      } catch (e) { toast(e.message, 'error'); }
+    });
+    $('#pwa-revert').addEventListener('click', async () => {
+      const username = $('#pwa-user').value.trim().replace(/^@/, '');
+      if (!username) return toast('ユーザー名を入力してください', 'error');
+      if (!(await confirmDialog({ title: `@${username} の配置を元に戻しますか？`, body: `${$('#pwa-since').value.replace('T', ' ')} 以降に置いたマスを、置く前の色に戻します。`, ok: '元に戻す', danger: true }))) return;
+      try { const r = await api('/pw/admin/revert', { method: 'POST', body: { username, since: sinceMs() } }); toast(`${r.restored}マスを元に戻しました`, 'success'); } catch (e) { toast(e.message, 'error'); }
+    });
+    $('#pwa-archive').addEventListener('click', async () => {
+      const title = $('#pwa-title').value.trim(), nextTitle = $('#pwa-next').value.trim(), nextTheme = $('#pwa-theme').value.trim();
+      if (!title || !nextTitle) return toast('作品名と次のキャンバスの名前を入力してください', 'error');
+      if (!(await confirmDialog({ title: '作品を完成させますか？', body: `今のキャンバスを「${title}」としてアーカイブし、真っ白な「${nextTitle}」を始めます。\nタイムラインに完成のお知らせが投稿されます。`, ok: '完成させる' }))) return;
+      try { const r = await api('/pw/admin/archive', { method: 'POST', body: { title, nextTitle, nextTheme } }); toast('作品をアーカイブしました', 'success'); location.hash = '#/pixel/archive/' + r.archiveId; } catch (e) { toast(e.message, 'error'); }
+    });
+    $('#pwa-poll').addEventListener('click', async () => {
+      const options = $('#pwa-opts').value.split('\n').map((s) => s.trim()).filter(Boolean);
+      try { await api('/pw/admin/polls', { method: 'POST', body: { question: $('#pwa-q').value, options } }); toast('テーマ投票を作成しました', 'success'); loadPoll(); } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
+  // ---------- リアルタイム接続 (切れたら自動で再接続し、全体を取り直す) ----------
+  function setConn(state) {
+    const el = $('#pw-conn');
+    if (!el) return;
+    el.className = `pw-conn ${state}`;
+    $('span', el).textContent = state === 'on' ? 'リアルタイム' : state === 'off' ? '再接続中…' : '接続中…';
+  }
+  function connect() {
+    if (S.closed) return;
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/pw`);
+    S.ws = ws;
+    ws.onopen = () => { const again = S.wsTry > 0; S.wsTry = 0; setConn('on'); if (again) resync(); };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.t === 'px') applyPixel(m);
+      else if (m.t === 'hello' || m.t === 'online') { S.online = m.n; renderStats(); }
+      else if (m.t === 'pause') { S.paused = m.paused; S.reason = m.reason; renderPause(); renderTimer(); }
+      else if (m.t === 'reload') { toast('新しいキャンバスが始まりました'); resync(); }
+      else if (m.t === 'poll') loadPoll();
+    };
+    ws.onclose = () => {
+      if (S.closed) return;
+      setConn('off');
+      S.wsTry++;
+      setTimeout(connect, Math.min(15000, 800 * 2 ** Math.min(S.wsTry, 5)));
+    };
+  }
+
+  // ---------- 起動・後片付け ----------
+  await resync();
+  requestAnimationFrame(fit);
+  connect();
+  loadPoll();
+  renderAdmin();
+  const tick = setInterval(renderTimer, 250);
+  const statTimer = setInterval(async () => {
+    if (document.hidden) return;
+    try { const r = await api('/pw/stats', { noAuthPrompt: true }); S.stats = { ...r.stats }; S.online = Math.max(r.stats.online, 0); S.paused = r.paused; S.reason = r.reason; renderStats(); renderPause(); } catch {}
+  }, 30_000);
+  // 別のタブから戻ってきた時は最新状態に合わせる
+  const onVisible = () => { if (!document.hidden) resync(); };
+  document.addEventListener('visibilitychange', onVisible);
+  viewCleanup = () => {
+    S.closed = true;
+    try { S.ws?.close(); } catch {}
+    clearInterval(tick); clearInterval(statTimer);
+    window.removeEventListener('resize', onResize);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
+}
+
+// 作品アーカイブ一覧
+async function viewPixelArchive() {
+  main.innerHTML = pageHead({ title: '作品アーカイブ', sub: 'PIXEL WORLD', back: '#/pixel' }) + `<div class="content" id="pwa-list">${skeletonPosts(1)}</div>`;
+  let r;
+  try { r = await api('/pw/archives', { noAuthPrompt: true }); } catch (e) { $('#pwa-list').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  if (!r.archives.length) { $('#pwa-list').innerHTML = emptyState({ icon: 'file', title: 'まだ完成した作品はありません', text: '今のキャンバスが完成すると、ここに保存されます。', action: '<a class="btn btn-primary" href="#/pixel">キャンバスへ</a>' }); return; }
+  $('#pwa-list').innerHTML = `<div class="grid-2">${r.archives.map((a) => `<a class="card pw-art-card" href="#/pixel/archive/${a.id}">
+      <canvas class="pw-thumb" width="${PW_SIZE}" height="${PW_SIZE}" data-px="${a.pixels}"></canvas>
+      <div class="pw-art-meta"><b>${esc(a.title)}</b>${!a.published ? ' <span class="chip">非公開</span>' : ''}
+        <span>${pwFmtDate(a.startedAt)}〜${pwFmtDate(a.endedAt)}</span><span>${a.participants}人 · ${a.placements.toLocaleString()}マス</span></div></a>`).join('')}</div>`;
+  $$('canvas[data-px]', main).forEach((c) => pwDraw(c, pwDecode(c.dataset.px), r.palette));
+}
+
+// 作品の詳細 (閲覧専用) + コメント (完成のお知らせ投稿への返信を利用)
+async function viewPixelArtwork(id) {
+  main.innerHTML = pageHead({ title: '作品', back: '#/pixel/archive' }) + `<div class="content" id="pwa-art">${skeletonPosts(1)}</div>`;
+  let r;
+  try { r = await api('/pw/archives/' + id, { noAuthPrompt: true }); } catch (e) { $('#pwa-art').innerHTML = emptyState({ icon: 'file', title: e.message }); return; }
+  const a = r.archive;
+  $('.page-head h1', main).innerHTML = `${esc(a.title)}<span class="sub">PIXEL WORLD 作品</span>`;
+  $('#pwa-art').innerHTML = `<section class="card pw-art">
+      <div class="pw-art-frame"><canvas id="pw-art-canvas" width="${PW_SIZE}" height="${PW_SIZE}"></canvas></div>
+      <div class="pw-art-info">
+        <h2>${esc(a.title)}</h2>
+        ${a.theme ? `<p class="text-sm muted">テーマ: ${esc(a.theme)}</p>` : ''}
+        <div class="hero-meta"><span>${icon('calendar')}${pwFmtDate(a.startedAt)}〜${pwFmtDate(a.endedAt)}</span><span>${icon('users')}${a.participants}人が参加</span><span>${icon('sparkle')}${a.placements.toLocaleString()}マス</span></div>
+        <div class="row" style="margin-top:var(--s4);flex-wrap:wrap">
+          <button class="btn btn-outline" type="button" id="pw-art-save">${icon('file')}画像を保存</button>
+          ${r.canManage ? `<button class="btn ${a.published ? 'btn-ghost' : 'btn-primary'}" type="button" id="pw-art-pub">${a.published ? '非公開にする' : '公開する'}</button><span class="chip">${a.published ? '公開中' : '非公開'}</span>` : ''}
+        </div>
+      </div>
+    </section>
+    <h2 class="section-title">コメント</h2>
+    <div id="pw-art-comments"></div>`;
+  pwDraw($('#pw-art-canvas'), pwDecode(a.pixels), r.palette);
+  $('#pw-art-save').addEventListener('click', () => {
+    // 1 マス 10px の PNG にして保存
+    const big = document.createElement('canvas'); big.width = big.height = PW_SIZE * 10;
+    const g = big.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage($('#pw-art-canvas'), 0, 0, big.width, big.height);
+    big.toBlob((blob) => {
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `pixel-world-${a.id}.png`;
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+      toast('作品の画像を保存しました', 'success');
+    }, 'image/png');
+  });
+  $('#pw-art-pub')?.addEventListener('click', async () => {
+    try { await api('/pw/admin/archives/' + a.id, { method: 'PATCH', body: { published: !a.published } }); toast(a.published ? '非公開にしました' : '公開しました', 'success'); viewPixelArtwork(id); } catch (e) { toast(e.message, 'error'); }
+  });
+  // コメント: 完成のお知らせ投稿の返信をそのまま使う (既存のコメント機能)
+  const box = $('#pw-art-comments');
+  if (!a.postId) { box.innerHTML = '<p class="text-sm muted">この作品にはコメントできません</p>'; return; }
+  try {
+    const { replies } = await api('/posts/' + a.postId, { noAuthPrompt: true });
+    box.innerHTML = (me ? `<div class="card compose-card" id="pw-art-compose">${composeHtml({ placeholder: '作品の感想を書く', submit: 'コメント' })}</div>`
+      : `<div class="card card-pad row"><span class="text-sm muted" style="flex:1">ログインするとコメントできます</span><button class="btn btn-primary btn-sm" type="button" id="pw-art-login">ログイン</button></div>`) +
+      `<div class="stack" id="replies" style="margin-top:var(--s3)">${replies.length ? replies.map((p) => renderPost(p)).join('') : '<p class="text-sm muted" id="pw-no-comments">まだコメントはありません</p>'}</div>`;
+    $('#pw-art-login')?.addEventListener('click', () => openAuth());
+    if (me) bindCompose($('#pw-art-compose'), { replyTo: a.postId, onDone: (p) => { $('#pw-no-comments')?.remove(); $('#replies').insertAdjacentHTML('beforeend', renderPost(p, { fresh: true })); toast('コメントしました', 'success'); } });
+  } catch { box.innerHTML = '<p class="text-sm muted">コメントを読み込めませんでした</p>'; }
 }
 
 // =====================================================================
@@ -1409,6 +1928,9 @@ function route() {
     return viewCommunities();
   }
   if (h === '/q') { setActiveNav('search'); return viewQuestion(); }
+  if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
+  if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
+  if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
   if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) { setActiveNav(''); return viewInviteLanding(m[1]); }
   if (h === '/schedule') { setActiveNav('schedule'); return viewSchedule(); }
   if (h === '/bookmarks') { setActiveNav('bookmarks'); return viewBookmarks(); }

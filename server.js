@@ -299,6 +299,7 @@ app.delete('/api/users/:username/follow', requireAuth, writeLimit, follow(false)
 // ---------- 追加機能 (コミュニティ / トレンド / 今日の質問 / 緊急データ削除 / 動画) ----------
 const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb, isAdmin };
 require('./features')(app, ctx);
+require('./pixel')(app, ctx); // PIXEL WORLD
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
@@ -375,10 +376,12 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname !== '/vb') return socket.destroy();
+  if (u.pathname !== '/vb' && u.pathname !== '/pw') return socket.destroy();
   // CSRF 的な他サイトからの接続を拒否
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
+  // PIXEL WORLD のリアルタイム配信 (閲覧は誰でも可。書き込みは受け付けない)
+  if (u.pathname === '/pw') return ctx.pixelUpgrade(req, socket, head);
   const user = userFromReq(req);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
   wss.handleUpgrade(req, socket, head, (ws) => vb.handleConnection(ws, u.searchParams.get('url'), user.id, {
