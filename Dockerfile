@@ -11,14 +11,13 @@ RUN npm ci --omit=dev \
  && npx playwright install --with-deps --only-shell chromium \
  && rm -rf /var/lib/apt/lists/* /root/.npm
 
-COPY server.js db.js vbrowser.js ./
+COPY server.js db.js vbrowser.js docker-entrypoint.sh ./
 COPY public ./public
 
 RUN useradd --create-home --uid 10001 ippo \
  && mkdir -p /data && chown ippo:ippo /data
-USER ippo
-VOLUME ["/data"]
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "--no-warnings=ExperimentalWarning", "server.js"]

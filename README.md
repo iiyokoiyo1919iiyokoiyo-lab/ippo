@@ -18,7 +18,15 @@ Node.js 22.5 以上が必要です（組み込みの SQLite を使用）。
 仮想ブラウザは Chromium を動かすため、**メモリ 2GB 程度のサーバー** と **永続ディスク**（SQLite 用）が必要です。
 静的ホスティング（GitHub Pages / Vercel / Netlify）では動きません。
 
-### 方法A: Fly.io（おすすめ・東京リージョン）
+### 方法A: Railway（スマホのブラウザだけで公開できる）
+
+1. https://railway.com を開き「Login」→ GitHub でログイン
+2. 「New Project」→「Deploy from GitHub repo」→ `ippo` を選ぶ（自動でビルドが始まる）
+3. 「+ Create」→「Volume」→ `ippo` サービスに取り付け、マウント先を `/data` にする
+4. `ippo` サービス →「Settings」→「Networking」→「Generate Domain」（ポートを聞かれたら `3000`）
+5. 表示された `https://〜.up.railway.app` を開く
+
+### 方法B: Fly.io（パソコンから・東京リージョン）
 
 ```bash
 fly auth login
@@ -29,7 +37,7 @@ fly deploy
 
 `https://<アプリ名>.fly.dev` で公開されます。HTTPS は自動です。
 
-### 方法B: VPS（さくら・ConoHa・Lightsail など）+ Docker
+### 方法C: VPS（さくら・ConoHa・Lightsail など）+ Docker
 
 ```bash
 docker compose up -d --build
