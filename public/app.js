@@ -301,6 +301,11 @@ const VB = (() => {
   const ime = $('#vb-ime'), addr = $('#vb-addr'), overlay = $('#vb-overlay'), toastEl = $('#vb-toast'), timerEl = $('#vb-timer');
   let ws = null, endAt = 0, timer = null, toastT = null, pendingMove = null, drawing = false;
   let vp = { width: 1280, height: 720 }; // リモート側の表示サイズ (CSS ピクセル)
+  const isPhone = () => matchMedia('(max-width: 640px)').matches;
+  const modeBtn = $('#vb-mode');
+  // 表示モードは端末ごとに記憶する。未設定ならスマホはスマホ版、PC は PC 版
+  const loadMode = () => { try { const m = localStorage.getItem('ippo_vb_mode'); if (m === 'mobile' || m === 'desktop') return m; } catch {} return isPhone() ? 'mobile' : 'desktop'; };
+  let mode = loadMode();
   const stage = $('#vb-stage');
 
   const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
@@ -313,12 +318,22 @@ const VB = (() => {
     document.body.style.overflow = 'hidden';
     overlay.textContent = '🛡 仮想環境を起動中…'; overlay.classList.remove('hidden');
     addr.value = url;
-    // スマホでは画面いっぱいに、スマホ版のサイトとして表示する
-    const mobile = matchMedia('(max-width: 640px)').matches;
+    // 表示モード (スマホ版 / PC版) と、この端末の画面サイズから表示サイズを決める
+    const phone = isPhone();
     const bar = $('.vb-bar').getBoundingClientRect().height || 48;
-    vp = mobile ? { width: Math.round(window.innerWidth), height: Math.round(window.innerHeight - bar) } : { width: 1280, height: 720 };
+    const availW = Math.round(window.innerWidth), availH = Math.round(window.innerHeight - bar);
+    if (mode === 'mobile') {
+      vp = phone ? { width: availW, height: availH } : { width: 390, height: Math.min(844, Math.round(window.innerHeight - 120)) };
+    } else {
+      // スマホで PC 版を見る時は、スマホの「PC版サイトを表示」と同じく幅 980px で縦長に表示する
+      vp = phone ? { width: 980, height: Math.min(2000, Math.round(980 * availH / availW)) } : { width: 1280, height: 720 };
+    }
+    root.classList.toggle('vb-narrow', mode === 'mobile' && !phone);
+    stage.style.width = mode === 'mobile' && !phone ? `${vp.width}px` : '';
     stage.style.aspectRatio = `${vp.width} / ${vp.height}`;
-    const q = mobile ? `&m=1&w=${vp.width}&h=${vp.height}` : '';
+    modeBtn.textContent = mode === 'mobile' ? '📱' : '🖥';
+    modeBtn.title = mode === 'mobile' ? 'スマホ版で表示中 (タップでPC版に切り替え)' : 'PC版で表示中 (タップでスマホ版に切り替え)';
+    const q = `&m=${mode === 'mobile' ? 1 : 0}&w=${vp.width}&h=${vp.height}`;
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/vb?url=${encodeURIComponent(url)}${q}`);
     ws.binaryType = 'blob';
     ws.onmessage = async (ev) => {
@@ -434,6 +449,13 @@ const VB = (() => {
     if (!b) { if (e.target === root) close(); return; }
     if (b.dataset.vb === 'close') close();
     else if (b.dataset.vb === 'kbd') { if (document.activeElement === ime) ime.blur(); else openKeyboard(); }
+    else if (b.dataset.vb === 'mode') {
+      mode = mode === 'mobile' ? 'desktop' : 'mobile';
+      try { localStorage.setItem('ippo_vb_mode', mode); } catch {}
+      const current = addr.value;
+      open(current); // 表示サイズが変わるので、今のページを新しいモードで開き直す
+      toast(mode === 'mobile' ? '📱 スマホ版で表示します' : '🖥 PC版で表示します');
+    }
     else send({ t: b.dataset.vb });
   });
   $('#vb-addr-form').addEventListener('submit', (e) => { e.preventDefault(); send({ t: 'goto', url: addr.value }); addr.blur(); canvas.focus(); });

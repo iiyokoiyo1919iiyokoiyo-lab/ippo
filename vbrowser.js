@@ -11,10 +11,13 @@ const DESKTOP = { width: 1280, height: 720 };
 // スマホから開いた場合はスマホ版のサイトを表示する (Android Chrome として振る舞う)
 const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
 
+// 利用者が選んだ表示モード (スマホ版 / PC版) と画面サイズから、仮想ブラウザの表示サイズを決める
 function pickViewport(opts = {}) {
-  if (!opts.mobile) return { viewport: DESKTOP, mobile: false, scale: 1 };
   const clamp = (v, lo, hi, d) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || d));
-  return { viewport: { width: clamp(opts.width, 320, 600, 390), height: clamp(opts.height, 400, 1000, 700) }, mobile: true, scale: 2 };
+  if (opts.mobile) {
+    return { viewport: { width: clamp(opts.width, 320, 600, 390), height: clamp(opts.height, 400, 1000, 700) }, mobile: true, scale: 2 };
+  }
+  return { viewport: { width: clamp(opts.width, 800, DESKTOP.width, DESKTOP.width), height: clamp(opts.height, 500, 2000, DESKTOP.height) }, mobile: false, scale: 1 };
 }
 const MAX_SESSIONS = Number(process.env.VB_MAX_SESSIONS || 4);
 const SESSION_TTL_MS = Number(process.env.VB_TTL_MS || 10 * 60 * 1000);
