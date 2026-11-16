@@ -222,6 +222,62 @@ module.exports = function install(app, ctx) {
   ctx.isCommunityMember = (communityId, user) => !!qIsMember.get(communityId, user.id);
   ctx.todayJst = todayJst;
 
+  // ======================= 招待制 =======================
+  // INVITE_ONLY=0 にすると誰でも登録できる (既定は招待制)
+  const INVITE_ONLY = process.env.INVITE_ONLY !== '0';
+  const INVITE_DAYS = 7, MAX_OPEN_INVITES = 5;
+  const qInvite = db.prepare('SELECT * FROM invites WHERE code = ?');
+  const normCode = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // 紛らわしい文字 (0/O, 1/I/L) を除いた 10 文字
+  const newCode = () => { const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; return [...crypto.randomBytes(10)].map((b) => A[b % A.length]).join(''); };
+
+  ctx.checkInvite = (raw) => {
+    if (!INVITE_ONLY) return {};
+    if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) return {}; // 最初の1人
+    const code = normCode(raw);
+    if (!code) return { error: 'IppO は招待制です。招待コードを入力してください' };
+    const inv = qInvite.get(code);
+    if (!inv) return { error: '招待コードが正しくありません' };
+    if (inv.used_by) return { error: 'この招待コードはすでに使われています' };
+    if (inv.expires_at < Date.now()) return { error: 'この招待コードは有効期限が切れています' };
+    return { code, creatorId: inv.creator_id };
+  };
+
+  app.get('/api/config', (req, res) => {
+    res.json({ inviteOnly: INVITE_ONLY && db.prepare('SELECT COUNT(*) AS n FROM users').get().n > 0 });
+  });
+
+  // 招待リンクを開いた時の確認 (誰からの招待か)
+  const inviteCheckLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 60 });
+  app.get('/api/invites/:code/check', inviteCheckLimit, (req, res) => {
+    const r = ctx.checkInvite(req.params.code);
+    if (r.error) return res.json({ valid: false, error: r.error });
+    const from = r.creatorId ? publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.creatorId)) : null;
+    res.json({ valid: true, from });
+  });
+
+  const inviteOut = (i) => ({
+    code: i.code, createdAt: i.created_at, expiresAt: i.expires_at, usedAt: i.used_at,
+    usedBy: i.used_by ? publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(i.used_by)) : null,
+    status: i.used_by ? 'used' : i.used_at ? 'used' : i.expires_at < Date.now() ? 'expired' : 'open',
+  });
+  app.get('/api/invites', requireAuth, (req, res) => {
+    const rows = db.prepare('SELECT * FROM invites WHERE creator_id = ? ORDER BY created_at DESC LIMIT 50').all(req.user.id);
+    res.json({ inviteOnly: INVITE_ONLY, max: MAX_OPEN_INVITES, invites: rows.map(inviteOut) });
+  });
+  const inviteLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, key: (req) => 'inv' + req.user.id });
+  app.post('/api/invites', requireAuth, inviteLimit, (req, res) => {
+    const open = db.prepare('SELECT COUNT(*) AS n FROM invites WHERE creator_id = ? AND used_by IS NULL AND used_at IS NULL AND expires_at > ?').get(req.user.id, Date.now()).n;
+    if (open >= MAX_OPEN_INVITES) return res.status(400).json({ error: `使われていない招待は${MAX_OPEN_INVITES}つまでです。使われるのを待つか、不要なものを削除してください` });
+    const code = newCode();
+    db.prepare('INSERT INTO invites (code, creator_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(code, req.user.id, Date.now(), Date.now() + INVITE_DAYS * 86400_000);
+    res.json({ invite: inviteOut(qInvite.get(code)) });
+  });
+  app.delete('/api/invites/:code', requireAuth, (req, res) => {
+    const r = db.prepare('DELETE FROM invites WHERE code = ? AND creator_id = ? AND used_by IS NULL AND used_at IS NULL').run(normCode(req.params.code), req.user.id);
+    res.json({ ok: r.changes > 0 });
+  });
+
   // ======================= 緊急データ削除 =======================
   // mode = 'content': 投稿・いいね・リポスト・DM・フォロー・コミュニティなどの履歴をすべて消す (アカウントは残す)
   // mode = 'account': アカウントごとすべて消す
@@ -248,6 +304,7 @@ module.exports = function install(app, ctx) {
       db.prepare('DELETE FROM dm_messages WHERE sender_id = ? OR recipient_id = ?').run(u.id, u.id);
       db.prepare('DELETE FROM dm_reads WHERE user_id = ? OR peer_id = ?').run(u.id, u.id);
       db.prepare('DELETE FROM community_members WHERE user_id = ?').run(u.id);
+      db.prepare('DELETE FROM invites WHERE creator_id = ?').run(u.id); // 作った招待コードも削除
       if (mode === 'account') {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(u.id);

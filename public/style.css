@@ -276,3 +276,15 @@ body:has(.danger-zone) .post-btn { display: none; }
 }
 .sch-more { display: block; margin-top: 8px; font-size: 14px; }
 body:has(.sch-cal) .post-btn { display: none; }
+
+/* 招待 */
+.invite-note { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 14px; }
+.invite-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.invite-main { flex: 1; min-width: 0; }
+.invite-row code { font-size: 15px; font-weight: 700; letter-spacing: .05em; }
+.invite-status { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--card); color: var(--muted); }
+.invite-row.open .invite-status { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); font-weight: 700; }
+.invite-sub { font-size: 13px; }
+.invite-row.expired code, .invite-row.used code { color: var(--muted); }
+#invite-section .btn.primary { margin-top: 4px; }
+.invite-landing b { color: var(--fg); font-size: 18px; }

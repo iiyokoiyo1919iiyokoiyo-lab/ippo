@@ -83,13 +83,24 @@ app.post('/api/register', authLimit, (req, res) => {
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username || '')) return res.status(400).json({ error: 'ユーザー名は英数字と_で3〜15文字です' });
   if (typeof password !== 'string' || password.length < 8) return res.status(400).json({ error: 'パスワードは8文字以上にしてください' });
   const name = String(displayName || username).trim().slice(0, 50) || username;
+  // 招待制: 有効な招待コードが必要 (まだ誰もいない時の最初の1人だけは不要)
+  const invite = ctx.checkInvite(req.body?.invite);
+  if (invite.error) return res.status(403).json({ error: invite.error, needInvite: true });
   const salt = crypto.randomBytes(16).toString('hex');
   try {
-    const r = db.prepare('INSERT INTO users (username, display_name, pass_hash, salt, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(username, name, hashPw(password, salt), salt, Date.now());
+    db.exec('BEGIN');
+    const r = db.prepare('INSERT INTO users (username, display_name, pass_hash, salt, created_at, invited_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(username, name, hashPw(password, salt), salt, Date.now(), invite.creatorId || null);
+    if (invite.code) {
+      const u = db.prepare('UPDATE invites SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL').run(r.lastInsertRowid, Date.now(), invite.code);
+      if (u.changes !== 1) throw new Error('invite already used');
+    }
+    db.exec('COMMIT');
     createSession(req, res, Number(r.lastInsertRowid));
     res.json({ user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid)) });
-  } catch {
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch {}
+    if (String(e.message).includes('invite')) return res.status(403).json({ error: 'この招待コードはすでに使われています', needInvite: true });
     res.status(409).json({ error: 'そのユーザー名は使われています' });
   }
 });

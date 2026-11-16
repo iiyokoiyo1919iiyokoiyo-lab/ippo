@@ -94,4 +94,18 @@ CREATE INDEX IF NOT EXISTS idx_posts_question ON posts(question_day, id);
 CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
 `);
 
+// 招待制
+db.exec(`
+CREATE TABLE IF NOT EXISTS invites (
+  code TEXT PRIMARY KEY,
+  creator_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  used_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_invites_creator ON invites(creator_id);
+`);
+addColumn('users', 'invited_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL'); // 誰の招待で登録したか
+
 module.exports = db;

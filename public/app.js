@@ -169,15 +169,25 @@ function setAuthMode(m) {
   $('#auth-submit').textContent = m === 'login' ? 'ログイン' : '登録する';
   $('#auth-toggle').textContent = m === 'login' ? 'アカウントを作成' : 'ログインはこちら';
   $('#auth-error').textContent = '';
+  $('.invite-field').classList.toggle('hidden', !siteConfig.inviteOnly);
+  $('.invite-field').required = m === 'register' && siteConfig.inviteOnly;
+  const note = $('#invite-note');
+  if (m === 'register' && siteConfig.inviteOnly && !note.dataset.from) {
+    note.textContent = '🎟 IppO は招待制です。招待してくれた人から届いたリンクを開くか、招待コードを入力してください。';
+    note.classList.remove('hidden');
+  } else if (!note.dataset.from) note.classList.add('hidden');
 }
 function openAuth(mode = 'login') { setAuthMode(mode); $('#auth-dialog').showModal(); }
+let siteConfig = { inviteOnly: false };
 $('#auth-toggle').addEventListener('click', (e) => { e.preventDefault(); setAuthMode(authMode === 'login' ? 'register' : 'login'); });
 $('#auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = Object.fromEntries(new FormData(e.target));
   try {
     const { user } = await api(authMode === 'login' ? '/login' : '/register', { method: 'POST', body: fd, noAuthPrompt: true });
-    me = user; $('#auth-dialog').close(); e.target.reset(); renderMe(); route();
+    me = user; $('#auth-dialog').close(); e.target.reset(); delete $('#invite-note').dataset.from;
+    if (location.hash.startsWith('#/invite/')) location.hash = '#/';
+    renderMe(); route();
   } catch (err) { $('#auth-error').textContent = err.message; }
 });
 $('#auth-dialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
@@ -317,6 +327,7 @@ function route() {
     return viewCommunities();
   }
   if (h === '/q') return viewQuestion();
+  if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) return viewInviteLanding(m[1]);
   if (h === '/schedule') { $('[data-nav=schedule]').classList.add('active'); return viewSchedule(); }
   if (h === '/settings') { if (!me) { openAuth(); location.hash = '#/'; return; } return viewSettings(); }
   if (h.startsWith('/dm')) {
@@ -462,6 +473,13 @@ function viewSettings() {
         <button class="btn outline" id="settings-logout" type="button">ログアウト</button>
       </div>
     </section>
+    <section class="settings-section" id="invite-section">
+      <h3>🎟 友だちを招待</h3>
+      <p class="muted">IppO は招待制です。招待リンクを作って、参加してほしい人に送ってください。リンクは1人1回だけ使え、7日で期限切れになります。</p>
+      <button class="btn primary" id="invite-create" type="button">招待リンクを作る</button>
+      <p class="error" id="invite-error"></p>
+      <div id="invite-list"></div>
+    </section>
     <section class="settings-section danger-zone">
       <h3>🚨 緊急データ削除</h3>
       <p>あなたのデータをすぐに、完全に削除します。<b>元に戻すことはできません。</b></p>
@@ -480,6 +498,12 @@ function viewSettings() {
         <button class="btn danger-btn" type="submit">今すぐ削除する</button>
       </form>
     </section>`;
+  loadInvites();
+  $('#invite-create').addEventListener('click', async () => {
+    $('#invite-error').textContent = '';
+    try { const { invite } = await api('/invites', { method: 'POST' }); await loadInvites(); shareInvite(invite.code); }
+    catch (err) { $('#invite-error').textContent = err.message; }
+  });
   $('#settings-logout').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); me = null; renderMe(); location.hash = '#/'; });
   $('#wipe-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -657,6 +681,61 @@ async function viewSchedule() {
     const row = document.getElementById('sch-' + b.dataset.day);
     if (row) { row.classList.add('selected'); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   }));
+}
+
+// =====================================================================
+// 招待
+// =====================================================================
+const inviteUrl = (code) => `${location.origin}/#/invite/${code}`;
+async function shareInvite(code) {
+  const url = inviteUrl(code);
+  // スマホなら共有メニュー (LINE などに送れる)、使えなければコピー
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try { await navigator.share({ title: 'IppO への招待', text: 'IppO に招待します。このリンクから登録してね', url }); return; } catch {}
+  }
+  try { await navigator.clipboard.writeText(url); alert('招待リンクをコピーしました。\n' + url); }
+  catch { prompt('招待リンクをコピーしてください', url); }
+}
+async function loadInvites() {
+  const el = $('#invite-list');
+  if (!el) return;
+  const { invites } = await api('/invites');
+  const label = { open: '未使用', used: '使用済み', expired: '期限切れ' };
+  el.innerHTML = invites.length ? invites.map((i) => `<div class="invite-row ${i.status}">
+      <div class="invite-main">
+        <code>${esc(i.code)}</code> <span class="invite-status">${label[i.status]}</span>
+        <div class="muted invite-sub">${i.status === 'used' ? (i.usedBy ? `<a href="#/u/${esc(i.usedBy.username)}">@${esc(i.usedBy.username)}</a> さんが登録` : '登録済み')
+          : i.status === 'open' ? `期限: ${new Date(i.expiresAt).toLocaleDateString('ja-JP')}` : ''}</div>
+      </div>
+      ${i.status === 'open' ? `<button class="btn outline" data-share="${esc(i.code)}" type="button">送る</button><button class="icon-btn" data-del="${esc(i.code)}" title="削除" type="button">🗑</button>` : ''}
+    </div>`).join('') : '<p class="muted">まだ招待リンクはありません</p>';
+  el.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => shareInvite(b.dataset.share)));
+  el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('この招待リンクを削除しますか？（このリンクでは登録できなくなります）')) return;
+    await api('/invites/' + b.dataset.del, { method: 'DELETE' }); loadInvites();
+  }));
+}
+// 招待リンクを開いた時: コードを確認して登録画面を出す
+async function viewInviteLanding(code) {
+  main.innerHTML = '<div class="empty">招待を確認しています…</div>';
+  if (me) { main.innerHTML = '<div class="empty">すでにログインしています。<br><br><a class="btn primary" href="#/">ホームへ</a></div>'; return; }
+  const r = await api('/invites/' + encodeURIComponent(code) + '/check', { noAuthPrompt: true }).catch(() => ({ valid: false, error: '確認できませんでした' }));
+  if (!r.valid) {
+    main.innerHTML = `<div class="empty">🎟 ${esc(r.error)}<br><br>招待してくれた人に、新しいリンクを作ってもらってください。</div>`;
+    return;
+  }
+  main.innerHTML = `<div class="empty invite-landing">🎟<br><b>${r.from ? esc(r.from.displayName) + ' さん' : '誰か'}から IppO に招待されています</b><br><br>
+    <button class="btn primary" id="invite-start" type="button">アカウントを作る</button></div>`;
+  const open = () => {
+    const note = $('#invite-note');
+    note.dataset.from = '1';
+    note.textContent = `🎟 ${r.from ? '@' + r.from.username + ' さん' : ''}からの招待で登録します`;
+    note.classList.remove('hidden');
+    openAuth('register');
+    $('#auth-form').invite.value = code;
+  };
+  $('#invite-start').addEventListener('click', open);
+  open();
 }
 
 // =====================================================================
@@ -953,6 +1032,7 @@ window.openAuth = openAuth;
 
 // ---------- 起動 ----------
 (async () => {
+  siteConfig = await api('/config', { noAuthPrompt: true }).catch(() => siteConfig);
   me = (await api('/me', { noAuthPrompt: true }).catch(() => ({}))).user || null;
   renderMe();
   loadScheduleWidget();
