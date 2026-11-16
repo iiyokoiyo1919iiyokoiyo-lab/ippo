@@ -29,7 +29,8 @@ app.use((req, res, next) => {
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 app.use(express.json({ limit: '32kb' }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: PROD ? '1h' : 0 }));
+// 更新がすぐ反映されるよう、毎回サーバーに変更有無を確認させる (変更がなければ 304 で軽く済む)
+app.use(express.static(path.join(__dirname, 'public'), { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
 
 // 簡易レート制限 (メモリ内。複数台構成にする場合は Redis 等へ)
 function rateLimit({ windowMs, max, key = (req) => req.ip }) {
