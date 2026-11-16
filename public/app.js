@@ -317,6 +317,7 @@ function route() {
     return viewCommunities();
   }
   if (h === '/q') return viewQuestion();
+  if (h === '/schedule') { $('[data-nav=schedule]').classList.add('active'); return viewSchedule(); }
   if (h === '/settings') { if (!me) { openAuth(); location.hash = '#/'; return; } return viewSettings(); }
   if (h.startsWith('/dm')) {
     $('[data-nav=dm]').classList.add('active');
@@ -500,6 +501,162 @@ function viewSettings() {
       btn.disabled = false; btn.textContent = '今すぐ削除する';
     }
   });
+}
+
+// =====================================================================
+// 予定表 (学校の行事予定表を PDF から書き起こしたデータを表示する)
+// データ: /schedules/index.json と /schedules/<id>.json
+// =====================================================================
+const SCHEDULE_CATS = {
+  exam: { label: '試験', icon: '📝' },
+  event: { label: '行事', icon: '🎉' },
+  off: { label: '休日・休業', icon: '🏖' },
+  staff: { label: '教職員', icon: '👔' },
+};
+function scheduleCategory(text) {
+  if (/(閉校|休業|代休|寮閉鎖|の日|祝日)/.test(text)) return 'off';
+  if (/(考査|到達度試験|模試|プレテスト|英検|入試(?!説明会|体験会|準備)|転入学考査)/.test(text)) return 'exam';
+  if (/(職員会議|教職員|審査会|入試準備|県外校視察)/.test(text)) return 'staff';
+  return 'event';
+}
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+const todayYmd = () => ymd(new Date());
+
+let scheduleCache = null;
+async function loadSchedule() {
+  if (scheduleCache) return scheduleCache;
+  const idx = await fetch('/schedules/index.json').then((r) => r.json());
+  // 今日を含む予定表、なければいちばん新しいもの
+  const t = todayYmd();
+  const meta = idx.schedules.find((s) => s.start <= t && t <= s.end) || idx.schedules[idx.schedules.length - 1];
+  const data = await fetch(`/schedules/${meta.id}.json`).then((r) => r.json());
+  // 日付ごとの予定一覧を作る (期間の予定は期間中の毎日に入れる)
+  const byDay = new Map();
+  const add = (day, text, extra = {}) => {
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push({ text, cat: scheduleCategory(text), ...extra });
+  };
+  for (const r of data.ranges) {
+    const end = r.end < data.end ? r.end : data.end;
+    for (let d = new Date(r.start + 'T00:00:00'); ymd(d) <= end; d.setDate(d.getDate() + 1)) {
+      add(ymd(d), r.title, { range: `${r.start.slice(5).replace('-', '/')}〜${r.end.slice(5).replace('-', '/')}` });
+    }
+  }
+  for (const [day, list] of Object.entries(data.days)) for (const text of list) add(day, text);
+  scheduleCache = { data, byDay, holidays: new Set(data.holidays) };
+  return scheduleCache;
+}
+
+function upcomingEvents(s, from, limit) {
+  const out = [];
+  for (const day of [...s.byDay.keys()].sort()) {
+    if (day < from) continue;
+    // 期間の予定は、期間の途中なら1回だけ出す
+    for (const e of s.byDay.get(day)) {
+      if (e.range && out.some((o) => o.e.text === e.text)) continue;
+      out.push({ day, e });
+    }
+    if (out.length >= limit) break;
+  }
+  return out.slice(0, limit);
+}
+
+function fmtDay(day) {
+  const d = new Date(day + 'T00:00:00');
+  return `${d.getMonth() + 1}/${d.getDate()}(${WEEK[d.getDay()]})`;
+}
+function eventChip(e) {
+  const c = SCHEDULE_CATS[e.cat];
+  return `<span class="sch-ev cat-${e.cat}" title="${c.label}">${c.icon} ${esc(e.text)}${e.range ? ` <span class="sch-range">${esc(e.range)}</span>` : ''}</span>`;
+}
+
+// 右側の欄 (PC) の「次の予定」
+async function loadScheduleWidget() {
+  const el = $('#schedule-widget .list');
+  if (!el) return;
+  try {
+    const s = await loadSchedule();
+    const up = upcomingEvents(s, todayYmd(), 4);
+    el.innerHTML = up.length
+      ? up.map(({ day, e }) => `<a class="sch-mini" href="#/schedule"><span class="sch-mini-day${day === todayYmd() ? ' today' : ''}">${day === todayYmd() ? '今日' : fmtDay(day)}</span>${eventChip(e)}</a>`).join('')
+      : '<p class="muted">この学期の予定は終わりました</p>';
+  } catch { el.innerHTML = '<p class="muted">読み込めませんでした</p>'; }
+}
+
+let scheduleMonth = null, scheduleFilter = new Set(Object.keys(SCHEDULE_CATS)), scheduleSelected = null;
+async function viewSchedule() {
+  main.innerHTML = '<div class="empty">読み込み中…</div>';
+  let s;
+  try { s = await loadSchedule(); } catch { main.innerHTML = '<div class="empty">予定表を読み込めませんでした</div>'; return; }
+  const { data } = s;
+  const t = todayYmd();
+  const months = [];
+  for (let d = new Date(data.start + 'T00:00:00'); ymd(d) <= data.end; d.setMonth(d.getMonth() + 1, 1)) months.push(ymd(d).slice(0, 7));
+  if (!scheduleMonth || !months.includes(scheduleMonth)) scheduleMonth = months.includes(t.slice(0, 7)) ? t.slice(0, 7) : months[0];
+
+  const todays = s.byDay.get(t) || [];
+  const up = upcomingEvents(s, ymd(new Date(Date.now() + 86400_000)), 6);
+  const visible = (list) => list.filter((e) => scheduleFilter.has(e.cat));
+
+  // カレンダー
+  const [yy, mm] = scheduleMonth.split('-').map(Number);
+  const first = new Date(yy, mm - 1, 1), daysIn = new Date(yy, mm, 0).getDate();
+  let cells = '';
+  for (let i = 0; i < first.getDay(); i++) cells += '<div class="sch-cell empty"></div>';
+  for (let d = 1; d <= daysIn; d++) {
+    const day = `${scheduleMonth}-${String(d).padStart(2, '0')}`;
+    const dow = new Date(yy, mm - 1, d).getDay();
+    const evs = visible(s.byDay.get(day) || []);
+    const cls = ['sch-cell', dow === 0 ? 'sun' : '', dow === 6 ? 'sat' : '', s.holidays.has(day) ? 'hol' : '', day === t ? 'today' : '', day === scheduleSelected ? 'selected' : '', evs.length ? 'has' : ''].filter(Boolean).join(' ');
+    cells += `<button class="${cls}" data-day="${day}" type="button"><span class="sch-num">${d}</span>
+      <span class="sch-dots">${evs.slice(0, 4).map((e) => `<i class="cat-${e.cat}"></i>`).join('')}</span>
+      <span class="sch-cell-text">${evs.slice(0, 2).map((e) => esc(e.text)).join('<br>')}${evs.length > 2 ? `<br>+${evs.length - 2}` : ''}</span></button>`;
+  }
+
+  // 月の一覧
+  const monthDays = [...s.byDay.keys()].filter((d) => d.startsWith(scheduleMonth)).sort();
+  const listHtml = monthDays.map((day) => {
+    const evs = visible(s.byDay.get(day));
+    if (!evs.length) return '';
+    const dow = new Date(day + 'T00:00:00').getDay();
+    return `<div class="sch-row${day === t ? ' today' : ''}${day === scheduleSelected ? ' selected' : ''}" id="sch-${day}">
+      <div class="sch-row-day ${dow === 0 || s.holidays.has(day) ? 'sun' : dow === 6 ? 'sat' : ''}">${fmtDay(day)}${day === t ? '<b class="badge">今日</b>' : ''}</div>
+      <div class="sch-row-evs">${evs.map(eventChip).join('')}</div></div>`;
+  }).join('');
+  const notes = visible((data.notes[scheduleMonth] || []).map((n) => ({ text: n, cat: scheduleCategory(n) })));
+
+  main.innerHTML = `<div class="head"><h2>📅 予定表</h2></div>
+    <div class="sch-head">
+      <div><b>${esc(data.title)}</b><div class="muted">${esc(data.org)}</div></div>
+      <a class="btn outline" href="${esc(data.pdf)}" target="_blank" rel="noopener">📄 元のPDF</a>
+    </div>
+    <section class="sch-today">
+      <h3>今日 <span class="muted">${fmtDay(t)}</span></h3>
+      ${todays.length ? `<div class="sch-row-evs">${todays.map(eventChip).join('')}</div>` : '<p class="muted">今日の予定はありません</p>'}
+      ${up.length ? `<h3>これからの予定</h3>${up.map(({ day, e }) => `<div class="sch-up"><span class="sch-up-day">${fmtDay(day)}</span>${eventChip(e)}</div>`).join('')}` : ''}
+    </section>
+    <div class="sch-filters">${Object.entries(SCHEDULE_CATS).map(([k, c]) => `<button type="button" class="sch-filter cat-${k}${scheduleFilter.has(k) ? ' on' : ''}" data-cat="${k}">${c.icon} ${c.label}</button>`).join('')}</div>
+    <div class="tabs sch-tabs">${months.map((m) => `<button type="button" data-month="${m}" class="${m === scheduleMonth ? 'active' : ''}">${Number(m.slice(5))}月</button>`).join('')}</div>
+    <div class="sch-cal">${WEEK.map((w, i) => `<div class="sch-wd${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${w}</div>`).join('')}${cells}</div>
+    <div class="sch-list">${listHtml || '<div class="empty">この月の予定はありません</div>'}
+      ${notes.length ? `<div class="sch-row"><div class="sch-row-day">この月</div><div class="sch-row-evs">${notes.map(eventChip).join('')}</div></div>` : ''}
+    </div>`;
+
+  main.querySelectorAll('[data-month]').forEach((b) => b.addEventListener('click', () => { scheduleMonth = b.dataset.month; scheduleSelected = null; viewSchedule(); }));
+  main.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.cat;
+    if (scheduleFilter.has(k) && scheduleFilter.size > 1) scheduleFilter.delete(k); else scheduleFilter.add(k);
+    viewSchedule();
+  }));
+  // 日付をタップ → その日の予定までスクロールして強調
+  main.querySelectorAll('.sch-cell[data-day]').forEach((b) => b.addEventListener('click', () => {
+    scheduleSelected = b.dataset.day;
+    main.querySelectorAll('.selected').forEach((el) => el.classList.remove('selected'));
+    b.classList.add('selected');
+    const row = document.getElementById('sch-' + b.dataset.day);
+    if (row) { row.classList.add('selected'); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  }));
 }
 
 // =====================================================================
@@ -798,5 +955,6 @@ window.openAuth = openAuth;
 (async () => {
   me = (await api('/me', { noAuthPrompt: true }).catch(() => ({}))).user || null;
   renderMe();
+  loadScheduleWidget();
   route();
 })();

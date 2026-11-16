@@ -9,7 +9,7 @@
 <meta property="og:description" content="リンクを仮想ブラウザで安全に開けるSNS">
 <meta name="theme-color" content="#0e9f6e">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/style.css?v=6">
+<link rel="stylesheet" href="/style.css?v=7">
 </head>
 <body>
 <div class="layout">
@@ -18,6 +18,7 @@
     <a href="#/" data-nav="home">🏠 <span>ホーム</span></a>
     <a href="#/search" data-nav="search">🔍 <span>検索</span></a>
     <a href="#/c" data-nav="c">👥 <span>コミュニティ</span></a>
+    <a href="#/schedule" data-nav="schedule">📅 <span>予定表</span></a>
     <a href="#/dm" data-nav="dm" class="nav-dm">✉️ <span>メッセージ</span><b class="badge hidden" id="dm-badge"></b></a>
     <a href="#/me" data-nav="me" id="nav-me">👤 <span>プロフィール</span></a>
     <button class="btn primary post-btn" id="open-compose">投稿する</button>
@@ -29,6 +30,7 @@
       <h3>🛡 仮想ブラウザ</h3>
       <p>投稿内のリンクはサーバー上の使い捨てブラウザで開かれます。あなたの端末にはサイトの画面だけが届き、スクリプトやCookieは端末に入りません。閉じると履歴も全て破棄されます。</p>
     </div>
+    <div class="card" id="schedule-widget"><h3>📅 次の予定</h3><div class="list"></div><a href="#/schedule" class="sch-more">予定表をすべて見る →</a></div>
     <div class="card" id="trends"><h3>🔥 トレンド</h3><div class="list"></div></div>
     <div class="card" id="suggest"><h3>おすすめユーザー</h3><div class="list"></div></div>
   </aside>
@@ -81,6 +83,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=6"></script>
+<script src="/app.js?v=7"></script>
 </body>
 </html>
