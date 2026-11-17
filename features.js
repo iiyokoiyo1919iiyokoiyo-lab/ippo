@@ -86,12 +86,18 @@ const STOP_WORDS = new Set((
 
 // 名詞の後ろに来る助詞など (これが続く1文字の漢字は名詞の一部とみなす: 学園 / 祭 / の → 学園祭)
 const PARTICLES = new Set('の が は を に で と も へ や か な ね よ だ です から まで より って とか かな けど'.split(' '));
+// ハッシュタグ (#学園祭 / ＃文化祭 など)。# を付けたまま 1 つの言葉としてトレンドに出す
+const HASHTAG = /[#＃]([\p{L}\p{N}_ー々〆ヶ]{1,30})/gu;
 function extractWords(text) {
-  const clean = String(text)
-    .replace(/https?:\/\/\S+/g, ' ')        // URL は除く
-    .replace(/@[A-Za-z0-9_]+/g, ' ')         // メンションは除く
-    .replace(/#/g, ' ');                     // ハッシュタグは中の言葉として数える
   const words = new Map();                   // 小文字にした言葉 → 表示用 (元の書き方)
+  const noUrl = String(text)
+    .replace(/https?:\/\/\S+/g, ' ')        // URL は除く
+    .replace(/@[A-Za-z0-9_]+/g, ' ');        // メンションは除く
+  // ハッシュタグは「#」付きのまま数え、中の言葉は単語としては二重に数えない
+  const clean = noUrl.replace(HASHTAG, (_, tag) => {
+    if (!/^\d+$/.test(tag)) { const w = '#' + tag; const k = w.toLowerCase(); if (!words.has(k)) words.set(k, w); }
+    return ' ';
+  }).replace(/[#＃]/g, ' ');
   let run = '';                              // つなげ中の漢字
   const flush = () => { if (run) { push(run); run = ''; } };
   const push = (w) => {

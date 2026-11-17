@@ -194,8 +194,11 @@ app.get('/api/timeline', (req, res) => {
 app.get('/api/search', (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 100);
   if (!q) return res.json({ posts: [], users: [] });
-  const like = '%' + q.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
-  const posts = db.prepare(`SELECT * FROM posts WHERE repost_of IS NULL AND content LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 30`).all(like);
+  const esc = (t) => '%' + t.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
+  const like = esc(q);
+  // ハッシュタグは半角 # と全角 ＃ のどちらで書かれた投稿も見つける
+  const alt = /^[#＃]/.test(q) ? esc((q[0] === '#' ? '＃' : '#') + q.slice(1)) : like;
+  const posts = db.prepare(`SELECT * FROM posts WHERE repost_of IS NULL AND (content LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\') ORDER BY id DESC LIMIT 30`).all(like, alt);
   const users = db.prepare(`SELECT * FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' LIMIT 10`).all(like, like);
   res.json({ posts: hydrateAll(posts, req.user), users: users.map(publicUser) });
 });
