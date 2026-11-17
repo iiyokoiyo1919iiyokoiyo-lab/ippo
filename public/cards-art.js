@@ -233,6 +233,26 @@
         <rect x="34" y="22" width="9" height="24" rx="3" fill="#f8f9fa" stroke="#ced4da" transform="rotate(-24 38 34)"/><rect x="77" y="22" width="9" height="24" rx="3" fill="#fff0f6" stroke="#fcc2d7" transform="rotate(24 82 34)"/>
         <path d="M14,24l4,4m0-4l-4,4M100,18a4,4 0 1 0 0.1,0M16,100q4-6 8,0" stroke="#fff" stroke-width="2" fill="none" opacity=".8" stroke-linecap="round"/>
         ${face(60, 62, { eyes: 'fierce', mouth: 'grin' })}`,
+      scissors: () => {
+        const petal = (x, y, r) => `<path d="M${x},${y}c-3,-5 -9,-3 -7,2c1,4 7,5 7,-2z" fill="#ffc9de" transform="rotate(${r} ${x} ${y})"/>`;
+        return `
+        <path class="cb-slash" d="M2,78Q50,-12 116,30Q56,6 2,78Z" fill="${lg('sl', [[0, '#99e9f2', 0], [0.5, '#66d9e8', 0.85], [1, '#e3fafc', 0.2]], 1, 0)}"/>
+        ${petal(16, 30, 20)}${petal(104, 92, -30)}${petal(96, 14, 60)}${petal(22, 100, -10)}
+        <path d="M45,64Q38,92 58,116L60,66Z" fill="${lg('bl', [[0, '#ffffff'], [0.6, '#ced4da'], [1, '#868e96']], 1, 0)}" stroke="#495057" stroke-width="1.6"/>
+        <path d="M75,64Q82,92 62,116L60,66Z" fill="${lg('br', [[0, '#adb5bd'], [0.4, '#e9ecef'], [1, '#ffffff']], 1, 0)}" stroke="#495057" stroke-width="1.6"/>
+        <path d="M60,68L59,113M60,68L61,113" stroke="#66d9e8" stroke-width="1.6" opacity=".9"/>
+        <path d="M48,70Q44,90 56,108" stroke="#fff" stroke-width="2" fill="none" opacity=".8" stroke-linecap="round"/>
+        <circle cx="43" cy="19" r="11" fill="none" stroke="${lg('r1', [[0, '#ff8787'], [1, '#c92a2a']])}" stroke-width="7"/>
+        <circle cx="77" cy="19" r="11" fill="none" stroke="${lg('r2', [[0, '#ff8787'], [1, '#c92a2a']])}" stroke-width="7"/>
+        <path d="M49,28L53,33M71,28L67,33" stroke="#c92a2a" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="60" cy="52" r="23" fill="${rg('dk', [[0, '#ffffff'], [0.55, '#dee2e6'], [1, '#868e96']])}" stroke="#868e96" stroke-width="2"/>
+        <path d="M36,40Q60,28 84,40L84,47Q60,35 36,47Z" fill="#e03131"/>
+        <path d="M83,41L108,32L101,42L110,49L84,47Z" fill="#e03131"/><path d="M90,40L104,36" stroke="#ff8787" stroke-width="1.5"/>
+        <circle cx="60" cy="38.5" r="3.4" fill="#fff"/>
+        <circle cx="60" cy="74" r="4" fill="${lg('pv', [[0, '#fff3bf'], [1, '#f59f00']])}" stroke="#e67700"/>
+        ${gloss(50, 60, 5, 3)}
+        ${face(60, 55, { eyes: 'brave', mouth: 'grin', s: 0.9 })}`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>

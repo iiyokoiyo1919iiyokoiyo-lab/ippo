@@ -20,6 +20,7 @@ const SKILLS = {
   drain: { name: 'すいとる', desc: '1.2 倍のダメージ。与えたダメージの半分回復' },
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
+  double: { name: 'ふたつぎり', desc: '0.9 倍のこうげきを 2 回 (疾風剣士ハサミ丸だけのわざ)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -52,9 +53,18 @@ const CARD_LIST = [
   ['gold', '黄金えんぴつ王', '👑', 'SSR', 'cut', 52, 16, 9, 14, 'power'],
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
+  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 51, 15, 8, 17, 'double'], // 2026-11-18 10:25 (日本時間) 登場
 ];
 const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, hp, atk, def, spd, skill]) => [id, { id, name, emoji, rarity, type, hp, atk, def, spd, skill }]));
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
+// ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
+// テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEASE_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) RELEASES[id] = v; }
+const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
+const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
+const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
+const poolOf = (r, now = Date.now()) => BY_RARITY[r].filter((id) => isReleased(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
 const MAX_LEVEL = 5;
 
@@ -73,14 +83,14 @@ function rollRarity(rnd) {
   return 'N';
 }
 // n 回引く。pity は「最後に SSR が出てからの回数」。10 連の最後の 1 枚は SR 以上
-function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32) {
+function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now = Date.now()) {
   const out = [];
   for (let i = 0; i < n; i++) {
     let r = rollRarity(rnd);
     if (pity + 1 >= PITY) r = 'SSR';                                         // 天井
     else if (n === 10 && i === 9 && !out.some((x) => x.rarity === 'SR' || x.rarity === 'SSR') && (r === 'N' || r === 'R')) r = 'SR';
     pity = r === 'SSR' ? 0 : pity + 1;
-    const list = BY_RARITY[r];
+    const list = poolOf(r, now); // まだ登場していないキャラは出ない
     out.push({ id: list[Math.floor(rnd() * list.length)], rarity: r });
   }
   return { cards: out, pity };
@@ -138,6 +148,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'heal') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * 0.45)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'barrier') hit(p, 0.8);
+      else if (me.skill === 'double') { hit(p, 0.9); const o = 1 - p; if (sides[o].cards[sides[o].active].hp > 0) hit(p, 0.9); }
     }
   }
   // 4. わざの待ち時間を減らし、倒れたカードは次のカードに交代
@@ -218,7 +229,7 @@ CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
 // SSR の文房具の平均を基準に、それぞれ ±12% でランダム (SSR と同じ +12% もつく)
 function rollHorse(rnd) {
-  const ssr = BY_RARITY.SSR.map((id) => CARDS[id]);
+  const ssr = ['gold', 'chalk', 'case'].map((id) => CARDS[id]);
   const avg = (k) => ssr.reduce((a, c) => a + c[k], 0) / ssr.length;
   const r = (k) => avg(k) * (0.88 + rnd() * 0.24);
   const types = Object.keys(TYPES), skills = Object.keys(SKILLS);
@@ -271,7 +282,8 @@ function install(app, ctx) {
 
   // カードの一覧・排出率 (誰でも見られる)
   app.get('/api/cards/catalog', (req, res) => res.json({
-    cards: CARD_LIST.map(([id]) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
+    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
+    newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     rates: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, v.rate])), types: TYPES, beats: BEATS,
     pullCost: PULL_COST, tenCost: TEN_COST, pity: PITY, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
@@ -377,7 +389,7 @@ function install(app, ctx) {
   // CPU のデッキ: 相手と同じくらいの強さ (同じレア度の、ちがうカード)
   function cpuDeck(uid) {
     const mine = deckStats(uid);
-    return mine.map((c) => { const pool = BY_RARITY[c.rarity].filter((id) => !mine.some((m) => m.id === id)); return statsOf(pool[Math.floor(rnd() * pool.length)] || c.id, c.level); });
+    return mine.map((c) => { const pool = poolOf(c.rarity).filter((id) => !mine.some((m) => m.id === id)); return statsOf(pool[Math.floor(rnd() * pool.length)] || (CARDS[c.id] ? c.id : 'gold'), c.level); });
   }
   function nextTurn(b) {
     if (b.ended) return;
@@ -499,4 +511,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY });
+Object.assign(module.exports, { CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased });

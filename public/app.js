@@ -3057,6 +3057,16 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
   document.addEventListener('pointerleave', () => { reset(cur); cur = null; }, true);
   document.addEventListener('pointerup', (e) => { if (e.pointerType !== 'mouse') { reset(cur); cur = null; } }, { passive: true });
 })();
+// 新キャラ登場のバナー (登場から 7 日間。登場前のキャラはサーバーが送ってこないので、ここには出ない)
+function cbNewBanner(cat, link = true) {
+  const list = (cat.newCards || []).map((id) => cat.cards.find((c) => c.id === id)).filter(Boolean);
+  if (!list.length) return '';
+  return list.map((c) => `<${link ? 'a href="#/games/cards/gacha"' : 'div'} class="card cb-newchar">
+      <span class="cb-newchar-art">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span>
+      <span class="cb-newchar-text"><span class="cb-newchar-tag">🆕 新キャラ登場！</span><b>${esc(c.name)}</b>
+        <span>${esc(c.rarity)} · ${esc(cat.types[c.type]?.icon || '')}${esc(cat.types[c.type]?.name || '')} · わざ「${esc(c.skillName)}」${esc(c.skillDesc)}</span></span>
+    </${link ? 'a' : 'div'}>`).join('');
+}
 const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
 
 async function viewCards() {
@@ -3066,6 +3076,7 @@ async function viewCards() {
   const C = Object.fromEntries([...cat.cards, ...(mine?.horses || [])].map((c) => [c.id, c]));
   const root = $('#cb'); if (!root) return;
   root.innerHTML = `
+    ${cbNewBanner(cat)}
     ${me ? `<section class="card card-pad cb-wallet">
       ${cbCoins(mine.coins)}
       <button class="btn ${mine.dailyReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-daily" ${mine.dailyReady ? '' : 'disabled'}>${mine.dailyReady ? `🎁 今日のボーナス +${cat.dailyCoins}` : '今日のボーナスは受け取り済み'}</button>
@@ -3174,7 +3185,7 @@ async function viewGacha() {
     const root = $('#cbg'); if (!root) return;
     timers.forEach(clearTimeout); timers = [];
     const best = results ? results.reduce((a, c) => (RANK[c.rarity] > RANK[a] ? c.rarity : a), 'N') : null;
-    root.innerHTML = `<section class="card card-pad cb-gacha">
+    root.innerHTML = `${results ? '' : cbNewBanner(cat, false)}<section class="card card-pad cb-gacha">
         <div class="cb-gacha-top">${cbCoins(mine.coins)}<span class="text-sm muted">SSR 確定まであと <b>${cat.pity - mine.pity}</b> 回</span></div>
         <div class="cb-stage${results ? ' rolling best-' + best : ''}" id="cb-stage">
           ${results ? `<div class="cb-capsule"><i></i><b></b></div><div class="cb-burst"></div><div class="cb-shout">${best === 'SSR' ? 'SSR！！' : best === 'SR' ? 'SR！' : ''}</div>
