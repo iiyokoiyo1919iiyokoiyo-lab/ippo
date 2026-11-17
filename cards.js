@@ -20,6 +20,7 @@ const SKILLS = {
   drain: { name: 'すいとる', desc: '1.2 倍のダメージ。与えたダメージの半分回復' },
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
+  starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ通常こうげきの 30% のダメージ (無属性・ガード無視。かけ直すと 5 ターンにもどる) (星キャンディーだけのわざ)' },
   sweep: { name: 'しっぷうぎり', desc: '控えもふくめた相手の全員に 0.8 倍の無属性こうげき + 毒 (毎ターン最大 HP の 8%・3 ターン) (疾風剣士ハサミ丸だけのわざ)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
@@ -55,17 +56,21 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 39, 12, 6, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
 ];
+// ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
+const EXTRA_RARITY = { MR: { mult: 1.2 } };
+const rarityMult = (r) => (RARITY[r] || EXTRA_RARITY[r]).mult;
 const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, hp, atk, def, spd, skill]) => [id, { id, name, emoji, rarity, type, hp, atk, def, spd, skill }]));
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEASE_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) RELEASES[id] = v; }
 const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
-const poolOf = (r, now = Date.now()) => BY_RARITY[r].filter((id) => isReleased(id, now));
+const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => isReleased(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
 const MAX_LEVEL = 5;
 
@@ -74,7 +79,7 @@ const UR_PROMOTE = { from: 'SSR', copies: 3 };
 const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from && copies >= UR_PROMOTE.copies;
 // レベル (同じカードを引くと上がる) とレア度で強さが決まる。ur: UR に昇格したカード
 function statsOf(cardId, level = 1, ur = false) {
-  const c = CARDS[cardId], m = (ur ? UR_MULT : RARITY[c.rarity].mult) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
+  const c = CARDS[cardId], m = (ur ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
   return { id: c.id, name: c.name, emoji: c.emoji, rarity: ur ? 'UR' : c.rarity, ...(ur ? { baseRarity: c.rarity, promoted: true } : {}), type: c.type, skill: c.skill, level,
     maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd };
 }
@@ -141,7 +146,8 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
-function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0 }; }
+const METEOR_TURNS = 5, METEOR_RATE = 0.3; // 流星: 5 ターン、ターンの終わりに相手の場のカードへ通常こうげきの 30% (無属性・ガード無視)
+function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0, meteor: null }; }
 const alive = (side) => side.cards.filter((c) => c.hp > 0).length;
 function typeMult(a, d) { return BEATS[a] === d ? 1.5 : BEATS[d] === a ? 0.7 : 1; }
 // 1 ターンを進める。acts[i] = { a: 'attack' | 'guard' | 'skill' | 'switch', i?: 番号 }
@@ -198,9 +204,27 @@ function resolveTurn(state, acts, rnd) {
         const o = 1 - p, got = [];
         sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, 0.8, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
+      } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
+        const o = 1 - p;
+        sides[o].meteor = { left: METEOR_TURNS, atk: me.atk, by: me.name };
+        ev.push({ k: 'starfall', p, target: o, card: me.name, turns: METEOR_TURNS });
       }
     }
   }
+  // 4. 流星 (ターンの終わりに、相手の場のカードへ。使ったカードが倒れても続く)
+  [0, 1].forEach((p) => {
+    const m = sides[p].meteor; if (!m || m.left <= 0) return;
+    let i = sides[p].active; if (sides[p].cards[i].hp <= 0) i = sides[p].cards.findIndex((c) => c.hp > 0);
+    m.left--;
+    if (i >= 0) {
+      const c = sides[p].cards[i];
+      const dmg = Math.min(c.hp, Math.max(1, Math.round(METEOR_RATE * Math.max(1, m.atk * 2 - c.def * 0.6) * (0.9 + rnd() * 0.2))));
+      c.hp -= dmg;
+      ev.push({ k: 'meteor', p, card: c.name, dmg, left: m.left });
+      if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
+    }
+    if (m.left <= 0) sides[p].meteor = null;
+  });
   // 4. 毒 (ターンの終わりに、毒のあるカードは最大 HP の 8% のダメージ。控えのカードも)
   [0, 1].forEach((p) => {
     sides[p].cards.forEach((c, i) => {
@@ -231,7 +255,8 @@ function resolveTurn(state, acts, rnd) {
 // CPU の行動: わざが使えれば使う (回復は HP が減っているときだけ)。相性が悪ければ時々交代
 function cpuAct(state, p, rnd) {
   const s = state.sides[p], me = s.cards[s.active], foe = state.sides[1 - p].cards[state.sides[1 - p].active];
-  if (me.cd === 0 && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && rnd() < 0.8) return { a: 'skill' };
+  const meteorLeft = state.sides[1 - p].meteor?.left || 0;
+  if (me.cd === 0 && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'starlight' || meteorLeft <= 1) && rnd() < 0.8) return { a: 'skill' };
   if (typeMult(foe.type, me.type) > 1 && rnd() < 0.5) {
     const i = s.cards.findIndex((c, k) => k !== s.active && c.hp > c.maxHp * 0.4 && typeMult(c.type, foe.type) >= 1);
     if (i >= 0) return { a: 'switch', i };
@@ -292,7 +317,7 @@ function rollHorse(rnd) {
   const ssr = ['gold', 'chalk', 'case'].map((id) => CARDS[id]);
   const avg = (k) => ssr.reduce((a, c) => a + c[k], 0) / ssr.length;
   const r = (k) => avg(k) * (0.88 + rnd() * 0.24);
-  const types = Object.keys(TYPES), skills = Object.keys(SKILLS);
+  const types = Object.keys(TYPES), skills = Object.keys(SKILLS).filter((k) => k !== 'starlight');
   return { type: types[Math.floor(rnd() * types.length)], skill: skills[Math.floor(rnd() * skills.length)],
     hp: Math.round(r('hp')), atk: Math.round(r('atk')), def: Math.round(r('def')), spd: Math.max(3, Math.round(avg('spd') * (0.7 + rnd() * 0.6))) };
 }
@@ -307,6 +332,25 @@ ALTER TABLE card_players ADD COLUMN scrolls INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE card_owned ADD COLUMN lv_bonus INTEGER NOT NULL DEFAULT 0;   -- レベルアップ書で上げた分
 ALTER TABLE card_horses ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 `;
+// ---------- 期間限定クエスト ----------
+// 決まった敵のデッキ (CPU) に勝つとクリア。はじめてクリアしたときだけ報酬のカードがもらえる。期間はサーバーの時刻で決める
+// テストのときは環境変数 CB_QUEST_START / CB_QUEST_END (ミリ秒の時刻) で上書きできる
+const QUESTS = [
+  { id: 'starlight-2026', name: '星降る夜のクエスト', boss: '流れ星の三騎士', emoji: '🌠', reward: 'star',
+    text: '夜空から現れた 3 体のキャラクター。勝てば MR「星キャンディー」が仲間になる！',
+    enemy: [['star', 2], ['leaf', 3], ['gold', 1]],
+    start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
+];
+if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
+const questsNow = (now = Date.now()) => QUESTS.filter((q) => now >= q.start && now < q.end);
+const QUEST_MIGRATION = `
+CREATE TABLE card_quests (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  quest_id TEXT NOT NULL,
+  cleared_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, quest_id)
+);
+`;
 const START_COINS = 1000, DAILY_COINS = 300;
 const REWARD = { cpu: { win: 30, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
 const REWARDS_PER_DAY = 15;
@@ -320,6 +364,12 @@ function install(app, ctx) {
   db.migrate('2026-11-22-card-horses', HORSE_MIGRATION);
   db.migrate('2026-11-23-card-horses-ur', HORSE_UR_MIGRATION);
   db.migrate('2026-11-23-card-scrolls', SCROLL_MIGRATION);
+  db.migrate('2026-11-24-card-quests', QUEST_MIGRATION);
+  const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
+  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end,
+    enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
+    reward: { ...statsOf(q.reward, 1), skillName: SKILLS[CARDS[q.reward].skill].name, skillDesc: SKILLS[CARDS[q.reward].skill].desc },
+    cleared: uid ? clearedOf(uid).has(q.id) : false });
   const qHorse = db.prepare('SELECT * FROM card_horses WHERE id = ?');
   const horsesOwned = (uid) => db.prepare('SELECT * FROM card_horses WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // 馬のカードの能力 (文房具の statsOf と同じ形)
@@ -352,19 +402,22 @@ function install(app, ctx) {
     const p = player(uid), o = owned(uid);
     return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
+      quests: questsNow().map((q) => ({ id: q.id, name: q.name, end: q.end, reward: q.reward, cleared: clearedOf(uid).has(q.id) })),
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
   // カードの一覧・排出率 (誰でも見られる)
   app.get('/api/cards/catalog', (req, res) => res.json({
-    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
+    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), ...(RARITY[CARDS[id].rarity] ? {} : { questOnly: true }), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}) })),
-    newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
+    newCards: releasedIds().filter((id) => RELEASES[id] && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
+  // 開催中のクエスト (敵のデッキ・報酬)
+  app.get('/api/cards/quests', (req, res) => res.json({ quests: questsNow().map((q) => questView(q, req.user?.id)) }));
 
   // ログインボーナス (1 日 1 回)
   const writeLimit = rateLimit({ windowMs: 60_000, max: 60, key: (req) => 'cb' + req.user.id });
@@ -489,19 +542,23 @@ function install(app, ctx) {
   const send = (uid, msg) => { const ws = conns.get(uid); if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); };
   const rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 
-  const publicState = (b) => ({ turn: b.state.turn, sides: b.state.sides.map((s) => ({ active: s.active, cards: s.cards.map((c) => ({ ...c })) })) });
-  function startBattle(mode, uids) {
-    const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
-      players: uids.map((u) => (u ? userView(u) : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } })),
-      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : cpuDeck(uids[0]))) } };
-    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, you: i, players: b.players, state: publicState(b) }); } });
+  const publicState = (b) => ({ turn: b.state.turn, sides: b.state.sides.map((s) => ({ active: s.active, meteor: s.meteor ? s.meteor.left : 0, cards: s.cards.map((c) => ({ ...c })) })) });
+  function startBattle(mode, uids, quest = null) {
+    const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
+      players: uids.map((u) => (u ? userView(u) : quest ? { id: 0, username: 'quest', displayName: quest.boss, avatar: { kind: 'emoji', emoji: quest.emoji, color: '#3b2f8f' } } : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } })),
+      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : cpuDeck(uids[0]))) } };
+    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }
   // CPU のデッキ: 相手と同じくらいの強さ (同じレア度の、ちがうカード)
   function cpuDeck(uid) {
     const mine = deckStats(uid);
-    return mine.map((c) => { const pool = poolOf(c.promoted ? c.baseRarity : c.rarity === 'UR' ? 'SSR' : c.rarity).filter((id) => !mine.some((m) => m.id === id)); return statsOf(pool[Math.floor(rnd() * pool.length)] || (CARDS[c.id] ? c.id : 'gold'), c.level, !!c.promoted); });
+    return mine.map((c) => { // UR・MR には、SSR を UR の強さにして当てる
+      const top = c.rarity === 'UR' || !RARITY[c.rarity];
+      const pool = poolOf(c.promoted ? c.baseRarity : top ? 'SSR' : c.rarity).filter((id) => !mine.some((m) => m.id === id));
+      return statsOf(pool[Math.floor(rnd() * pool.length)] || 'gold', c.level, !!c.promoted || (top && !c.horse));
+    });
   }
   function nextTurn(b) {
     if (b.ended) return;
@@ -545,15 +602,22 @@ function install(app, ctx) {
       if (!u) return;
       const p = player(u), res = winner === -1 ? 'draw' : winner === i ? 'win' : 'lose';
       const count = p.reward_day === today ? p.reward_count : 0;
-      const capped = b.mode !== 'cpu'; // CPU 戦 (AI 戦) の報酬は回数制限なし
-      const coins = !capped || count < REWARDS_PER_DAY ? REWARD[b.mode][res === 'win' ? 'win' : 'lose'] : 0;
+      const capped = b.mode !== 'cpu' && b.mode !== 'quest'; // CPU 戦 (AI 戦)・クエストの報酬は回数制限なし
+      const coins = !capped || count < REWARDS_PER_DAY ? (REWARD[b.mode] || REWARD.cpu)[res === 'win' ? 'win' : 'lose'] : 0;
+      // クエスト: はじめて勝ったときだけ、報酬のカード
+      let questReward = null;
+      if (b.quest && res === 'win' && db.prepare('INSERT OR IGNORE INTO card_quests (user_id, quest_id, cleared_at) VALUES (?, ?, ?)').run(u, b.quest.id, Date.now()).changes) {
+        db.prepare('INSERT INTO card_owned (user_id, card_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET count = count + 1').run(u, b.quest.reward);
+        questReward = { ...statsOf(b.quest.reward, 1), skillName: SKILLS[CARDS[b.quest.reward].skill].name, skillDesc: SKILLS[CARDS[b.quest.reward].skill].desc };
+        console.log(`[cards] user ${u} クエスト「${b.quest.name}」クリア`);
+      }
       const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : SCROLL_REWARD[res];
       if (scrolls) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(scrolls, u);
       db.prepare(`UPDATE card_players SET coins = coins + ?, rating = rating + ?, reward_day = ?, reward_count = ?,
         wins = wins + ?, losses = losses + ?, draws = draws + ? WHERE user_id = ?`).run(coins, delta[i], today, count + (capped && coins ? 1 : 0),
         b.mode === 'random' && res === 'win' ? 1 : 0, b.mode === 'random' && res === 'lose' ? 1 : 0, b.mode === 'random' && res === 'draw' ? 1 : 0, u);
       battleOf.delete(u);
-      send(u, { t: 'end', result: res, reason, coins, scrolls, scrollMinTurns: SCROLL_MIN_TURNS, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
+      send(u, { t: 'end', result: res, reason, coins, scrolls, quest: b.quest ? { id: b.quest.id, name: b.quest.name } : null, questReward, scrollMinTurns: SCROLL_MIN_TURNS, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
     });
   }
   function leave(uid) {
@@ -583,6 +647,11 @@ function install(app, ctx) {
         if (battleOf.get(uid)) return;
         leave(uid);
         if (m.mode === 'cpu') return startBattle('cpu', [uid, null]);
+        if (m.mode === 'quest') {
+          const q = questsNow().find((x) => x.id === String(m.quest || ''));
+          if (!q) return send(uid, { t: 'error', msg: 'そのクエストは今は開催していません' });
+          return startBattle('quest', [uid, null], q);
+        }
         if (m.mode === 'random') {
           if (queue && queue !== uid && conns.get(queue)?.readyState === 1 && !battleOf.get(queue)) { const o = queue; queue = null; return startBattle('random', [o, uid]); }
           queue = uid; return send(uid, { t: 'waiting', mode: 'random' });
@@ -620,10 +689,10 @@ function install(app, ctx) {
   ctx.eraseCards = (uid) => {
     leave(uid);
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
-    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
+    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses', 'card_quests']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
     db.prepare('UPDATE card_battles SET p1 = NULL WHERE p1 = ?').run(uid);
     db.prepare('UPDATE card_battles SET p2 = NULL WHERE p2 = ?').run(uid);
   };
 }
 module.exports = install;
-Object.assign(module.exports, { UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

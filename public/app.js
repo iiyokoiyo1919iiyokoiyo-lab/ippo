@@ -2569,6 +2569,7 @@ function route() {
   if (h.startsWith('/games/poker/table')) { setActiveNav('games'); return viewPokerTable(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/games/cards/gacha') { setActiveNav('games'); return viewGacha(); }
   if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
+  if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
@@ -3027,7 +3028,7 @@ function viewMath() {
 // =====================================================================
 let cbCatalogCache = null;
 async function cbCatalog() { if (!cbCatalogCache) cbCatalogCache = await api('/cards/catalog', { noAuthPrompt: true }); return cbCatalogCache; }
-const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR: '#e03131' };
+const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR: '#e03131', MR: '#7048e8' };
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
@@ -3085,6 +3086,16 @@ function cbRateUpBanner(cat, link = true) {
     </${link ? 'a' : 'div'}>`;
   }).join('');
 }
+// 期間限定クエストのバナー
+function cbQuestBanner(q, cat) {
+  const r = cat.cards.find((c) => c.id === q.reward);
+  const end = new Date(q.end).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
+  return `<a class="card cb-questbn${q.cleared ? ' cleared' : ''}" href="#/games/cards/quest">
+    <span class="cb-questbn-sky" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="cb-questbn-art">${r ? CBArt.svg(r.id, r.rarity, { label: r.name }) : ''}</span>
+    <span class="cb-questbn-text"><span class="cb-questbn-tag">🌠 期間限定クエスト</span><b>${esc(q.name)}</b>
+      <span>${q.cleared ? '✅ クリアずみ · もう一度あそべます' : `クリアで <em class="cb-mr-word">MR</em>「${esc(r?.name || '')}」がもらえる！`}</span><small>${esc(end)} まで</small></span>${icon('chevron', 'chev')}</a>`;
+}
 const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
 
 async function viewCards() {
@@ -3095,7 +3106,7 @@ async function viewCards() {
   const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...(mine?.horses || [])].map((c) => [c.id, c]));
   const root = $('#cb'); if (!root) return;
   root.innerHTML = `
-    ${cbRateUpBanner(cat)}${cbNewBanner(cat)}
+    ${(mine?.quests || []).map((q) => cbQuestBanner(q, cat)).join('')}${cbRateUpBanner(cat)}${cbNewBanner(cat)}
     ${me ? `<section class="card card-pad cb-wallet">
       ${cbCoins(mine.coins)}
       <button class="btn ${mine.dailyReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-daily" ${mine.dailyReady ? '' : 'disabled'}>${mine.dailyReady ? `🎁 今日のボーナス +${cat.dailyCoins}` : '今日のボーナスは受け取り済み'}</button>
@@ -3296,7 +3307,7 @@ async function viewCollection() {
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
           ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
-          : cbCard(c, { locked: true })).join('')}</div></section>`;
+          : cbCard(c, { locked: true, attrs: c.questOnly ? 'title="期間限定クエストのクリア報酬"' : '' })).join('')}</div></section>`;
     $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
     $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
       const id = el.dataset.card;
@@ -3345,18 +3356,52 @@ async function viewCollection() {
   render();
 }
 
+// ---------- 期間限定クエスト ----------
+async function viewQuest() {
+  main.innerHTML = pageHead({ title: '期間限定クエスト', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbq">${loadingBlock()}</div>`;
+  let cat, quests;
+  try { cat = await cbCatalog(); ({ quests } = await api('/cards/quests', { noAuthPrompt: true })); } catch (e) { $('#cbq').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const root = $('#cbq'); if (!root) return;
+  if (!quests.length) { root.innerHTML = emptyState({ icon: 'sparkle', title: 'いま開催中のクエストはありません', text: '次のクエストをお楽しみに！', action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); return; }
+  const fmt = (t) => new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
+  root.innerHTML = quests.map((q) => `
+    <section class="card cb-quest">
+      <div class="cb-quest-sky" aria-hidden="true">${Array.from({ length: 6 }, (_, i) => `<i style="--x:${10 + i * 15}%;--d:${i * 0.7}s"></i>`).join('')}</div>
+      <span class="cb-quest-tag">🌠 期間限定クエスト · ${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</span>
+      <h2>${esc(q.name)}</h2>
+      <p>${esc(q.text)}</p>
+      <div class="cb-quest-reward">
+        <div class="cb-quest-rcard">${cbCard(q.reward, { level: 1, cls: 'tilt' })}</div>
+        <div class="cb-quest-rtext"><span class="cb-quest-label">クリア報酬</span><b><em class="cb-mr-word">MR</em> ${esc(q.reward.name)}</b>
+          <span>わざ「${esc(q.reward.skillName)}」</span><small>${esc(q.reward.skillDesc)}</small>
+          <small>MR は能力 +${cat.rarityBonus.MR}%。報酬のカードは、はじめてクリアしたときに 1 枚もらえます</small></div>
+      </div>
+      ${q.cleared ? '<p class="cb-quest-done">✅ クリアずみ！ 何度でも挑戦できます (コインとレベルアップ書はもらえます)</p>' : ''}
+    </section>
+    <section class="card card-pad"><div class="panel-head"><h3>${esc(q.emoji)} 敵: ${esc(q.boss)}</h3><span class="text-xs muted">3 体を全部たおすとクリア</span></div>
+      <div class="cb-deck">${q.enemy.map((c) => cbCard(c, { level: c.lv, small: false })).join('')}</div>
+      <p class="text-xs muted" style="margin:8px 0 0">星キャンディーの「スターライトマーチ」は、5 ターンのあいだ毎ターン流星でダメージを与えてきます。相性 (✂️きる は 📄つつむ に強い) を考えてデッキを組もう！</p></section>
+    <section class="card card-pad">${me
+      ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}</a>
+         <a class="btn btn-ghost btn-block" href="#/games/cards/collection" style="margin-top:8px">デッキを変える</a>`
+      : '<button class="btn btn-primary btn-block" type="button" id="cbq-login">ログインして挑戦する</button>'}</section>`).join('');
+  $('#cbq-login')?.addEventListener('click', () => openAuth());
+}
+
 // ---------- 対戦 ----------
 async function viewBattle(params) {
   if (!requireLogin()) return;
-  const mode = params.get('mode'), code = params.get('code') || '';
-  const titles = { cpu: 'CPU と練習', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
+  const mode = params.get('mode'), code = params.get('code') || '', questId = params.get('q') || '';
+  const titles = { quest: '🌠 期間限定クエスト', cpu: 'CPU と練習', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
   main.innerHTML = pageHead({ title: titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
   const cat = await cbCatalog().catch(() => null);
   const T = cat?.types || {};
   const box = () => $('#cbb');
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
+  const evText = (e) => e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
+    : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
+    : e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
     : e.k === 'poison' ? `${e.p === you ? '' : '相手の'}${e.bench ? '控えの' : ''}${e.card}は毒で ${e.dmg} ダメージ${e.left ? ` (あと${e.left}ターン)` : ' (毒が消えた)'}`
     : e.k === 'hit' ? (e.bench ? `${1 - e.p === you ? '' : '相手の'}控えの${e.target}に ${e.dmg} ダメージ` : `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`)
     : e.k === 'skill' ? `${name(e.p, e.card)}の「${e.skill}」！` : e.k === 'heal' ? `${name(e.p, e.card)}は ${e.amount} 回復した`
@@ -3364,9 +3409,10 @@ async function viewBattle(params) {
     : e.k === 'ko' ? (e.bench ? `${e.p === you ? '' : '相手の'}控えの${e.card}はたおれた！` : `${name(e.p, e.card)}はたおれた！`) : e.k === 'timeup' ? '30ターンたったので、残りの HP で決まります' : '';
   let prevPct = {}; // HP バーを前のターンの長さから動かすため
   const hpBar = (c, key) => { const now = Math.max(0, (c.hp / c.maxHp) * 100), from = prevPct[key] ?? now; return `<span class="cb-hp"><i data-to="${now}" style="width:${from}%" class="${c.hp / c.maxHp < 0.3 ? 'low' : ''}"></i></span><span class="cb-hpn">${c.hp}/${c.maxHp}</span>`; };
-  const fighter = (c, mineSide, key) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
+  const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
+      ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3374,9 +3420,9 @@ async function viewBattle(params) {
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     const canSwitch = mineS.cards.some((c, i) => i !== mineS.active && c.hp > 0);
     box().innerHTML = `<div class="cb-top">${avatar(players[1 - you], 'sm')}<b>${esc(players[1 - you].displayName)}</b>${bench(foeS, false)}</div>
-      ${fighter(foeS.cards[foeS.active], false, `${1 - you}-${foeS.active}-${foeS.cards[foeS.active].id}`)}
+      ${fighter(foeS.cards[foeS.active], false, `${1 - you}-${foeS.active}-${foeS.cards[foeS.active].id}`, foeS.meteor)}
       <div class="cb-log" aria-live="polite">${log.slice(-4).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="muted">バトル開始！</p>'}</div>
-      ${fighter(my, true, `${you}-${mineS.active}-${my.id}`)}
+      ${fighter(my, true, `${you}-${mineS.active}-${my.id}`, mineS.meteor)}
       <div class="cb-top mine">${avatar(players[you], 'sm')}<b>あなた</b>${bench(mineS, true)}<span class="cb-timer${left <= 5 ? ' hurry' : ''}" id="cb-timer">${ended ? '' : chosen ? '相手を待っています…' : `のこり ${left}秒`}</span></div>
       ${ended ? '' : picking ? `<div class="cb-acts"><p class="text-sm" style="grid-column:1/-1">交代するカードをえらんでください</p><button class="btn btn-ghost" type="button" data-act="cancel-switch">もどる</button></div>`
         : `<div class="cb-acts">
@@ -3426,6 +3472,16 @@ async function viewBattle(params) {
       else if (e.k === 'skill') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill'); }, t); t += 320; }
       else if (e.k === 'guard') { setTimeout(() => replay(el(e.p), 'guarding'), t); }
       else if (e.k === 'ko') { setTimeout(() => pop(e.p, 'KO!', 'ko'), t); t += 300; }
+      else if (e.k === 'starfall') {
+        setTimeout(() => {
+          const b = box(); if (!b) return;
+          const sky = document.createElement('div'); sky.className = 'cb-starfall' + (e.target === you ? ' on-me' : '');
+          sky.innerHTML = '<b>🌠 スターライトマーチ！</b>' + Array.from({ length: 14 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 7) * 0.09}s"></i>`).join('');
+          b.append(sky); setTimeout(() => sky.remove(), 1900);
+        }, t);
+        t += 700;
+      }
+      else if (e.k === 'meteor') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, `🌠-${e.dmg}`, 'dmg met'); }, t); t += 260; }
       else if (e.k === 'poisoned') { setTimeout(() => pop(e.p, '☠️ 毒！', 'skill psn'), t); t += 250; }
       else if (e.k === 'poison') {
         setTimeout(() => {
@@ -3451,11 +3507,15 @@ async function viewBattle(params) {
     box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
       <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
       <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
-      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="#/games/cards">もどる</a></div></div>`);
+      ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
+        <p><em class="cb-mr-word">MR</em>「${esc(m.questReward.name)}」が仲間になった！<br><small>わざ「${esc(m.questReward.skillName)}」${esc(m.questReward.skillDesc)}</small></p></div>`
+        : m.quest && m.result === 'win' ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
+      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : '#/games/cards'}">もどる</a></div></div>`);
+    if (m.questReward) { cbCatalogCache = null; const q = box().querySelector('.cb-qreward'); if (q) { cbConfetti(q, 140, ['#ff6bd6', '#ffd43b', '#63e6be', '#4dabf7', '#b197fc', '#fff']); setTimeout(() => cbConfetti(q, 90, ['#ffe066', '#fff', '#d0a8ff']), 700); } }
   }
   function connect() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/cb`);
-    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code }); };
+    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code, quest: questId }); };
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (!box()) return;
