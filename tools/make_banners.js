@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const cards = require('../cards');
-const { bannerName } = require('../official');
+const { bannerName, GACHA_NOTICES, gachaInfo } = require('../official');
 
 const OUT = path.join(__dirname, '..', 'public', 'banners');
 const ART = fs.readFileSync(path.join(__dirname, '..', 'public', 'cards-art.js'), 'utf8');
@@ -74,11 +74,34 @@ function questHtml(q) {
   </div>`;
 }
 
+// ガチャの告知 (セール・ピックアップ・確率アップ)
+function gachaHtml(n) {
+  const g = gachaInfo(n), pk = g.pickups[0];
+  return `<div class="bn" style="background:radial-gradient(circle at 26% 50%,#fff3bf,#ffd43b 30%,#ff922b 60%,#e03131 90%);--r1:rgba(255,255,255,.55);--r2:transparent">
+    <div class="rays" style="left:26%"></div>${confetti(44, ['#fff', '#ffd43b', '#74c0fc', '#b197fc', '#8ce99a', '#ff8787'])}${sparks(16)}
+    <div class="glow" style="left:40px;top:80px;width:540px;height:540px;background:radial-gradient(#fff,rgba(255,255,255,0))"></div>
+    <div class="art" style="left:30px;top:70px;width:540px;height:540px">%%ART%%</div>
+    <div class="ribbon" style="left:-40px;top:34px;background:linear-gradient(90deg,#c92a2a,#7048e8)">🎰 ガチャのお知らせ</div>
+    <div style="position:absolute;left:560px;top:96px;width:620px;display:grid;gap:14px">
+      ${g.sale ? `<div style="padding:16px 22px;border-radius:24px;background:rgba(120,0,30,.72);color:#fff">
+        <div style="font-size:30px;color:#ffe066">🔥 ${esc(g.sale.name)}</div>
+        <div style="font-size:30px;margin-top:4px">1回 <s style="opacity:.75">100</s> → <span style="font-size:76px;color:#ffe066;line-height:1">${g.sale.pull}</span>🪙
+          <span style="font-size:26px;margin-left:10px">10回 <s style="opacity:.75">900</s> → <b style="font-size:40px;color:#ffe066">${g.sale.ten}</b></span></div>
+        <div style="font-size:22px;margin-top:2px;font-weight:700">${esc(fmt(g.sale.end))} まで</div></div>` : ''}
+      ${g.pickups.map((p) => `<div style="padding:12px 22px;border-radius:24px;background:rgba(255,255,255,.92);color:#c2255c;box-shadow:0 6px 0 rgba(120,0,30,.25)">
+        <div style="font-size:30px">🎯 ${esc(p.card.rarity)}「${esc(p.card.name)}」ピックアップ <span style="font-size:48px;color:#e03131">${p.rate}%</span></div>
+        <div style="font-size:22px;color:#862e9c;font-weight:700">${p.start > n.at ? esc(fmt(p.start)) + ' 〜 ' : ''}${p.end ? esc(fmt(p.end)) + ' まで' : ''}</div></div>`).join('')}
+      ${g.rateUps.map((r) => `<div style="padding:10px 22px;border-radius:20px;background:rgba(40,20,90,.7);color:#fff;font-size:24px">🎉 ${esc(r.name)}${r.end ? ` <span style="font-size:20px;color:#ffe066">${esc(fmt(r.end))} まで</span>` : ''}</div>`).join('')}
+    </div>
+  </div>`;
+}
+
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const jobs = [];
   for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity]) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
+  for (const n of GACHA_NOTICES) { const pk = gachaInfo(n).pickups[0]; jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1200, height: 675 }, deviceScaleFactor: 1 });
   for (const j of jobs) {

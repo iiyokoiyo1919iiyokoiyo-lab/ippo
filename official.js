@@ -32,6 +32,27 @@ const TAG = '#ぶんぼうぐバトラーズ';
 const H = 3600_000, D = 24 * H;
 
 // 手で書くアップデート情報 (key は変えない。at から until までの間に 1 回だけ投稿)
+// ガチャの告知 (その時のセール・ピックアップ・確率アップをまとめて知らせる)。id は変えない。at になったらドパバナーつきで投稿し、until までアプリにバナーを出す
+const GACHA_NOTICES = [
+  { id: '2026-11-18', at: Date.parse('2026-11-18T08:40:00+09:00'), until: Date.parse('2026-11-20T16:45:00+09:00') },
+];
+// その告知の時点でのガチャの情報 (セール・これからのピックアップ・確率アップ)
+function gachaInfo(n) {
+  const { SALES, PICKUPS, RATE_UPS, CARDS } = cards;
+  const sale = SALES.find((x) => n.at < x.end && x.start < n.until) || null;
+  const pickups = PICKUPS.filter((x) => (!x.end || x.end > n.at) && x.start < n.until).map((x) => ({ ...x, card: CARDS[x.id] }));
+  const rateUps = RATE_UPS.filter((x) => n.at >= x.start && (!x.end || x.end > n.at)).map((x) => ({ ...x, cards: x.ids.map((id) => CARDS[id]) }));
+  return { sale, pickups, rateUps };
+}
+function gachaText(n) {
+  const g = gachaInfo(n), lines = ['🎰【ガチャのお知らせ】'];
+  if (g.sale) lines.push(`🔥 ${g.sale.name}: 1 回 ${g.sale.pull} コイン・10 回 ${g.sale.ten} コイン (${fmt(g.sale.end)} まで)`);
+  for (const p of g.pickups) lines.push(`🎯 ${p.card.rarity}「${p.card.name}」ピックアップ 1 体 ${p.rate}% (${p.start > n.at ? fmt(p.start) + ' 〜 ' : ''}${p.end ? fmt(p.end) + ' まで' : ''})`);
+  for (const r of g.rateUps) lines.push(`🎉 ${r.name} (${r.cards.map((c) => c.name).join('・')})${r.end ? ` ${fmt(r.end)} まで` : ''}`);
+  lines.push(TAG);
+  return lines.join('\n');
+}
+
 const UPDATES = [
   { key: 'update-2026-11-18', at: Date.parse('2026-11-18T07:30:00+09:00'), until: Date.parse('2026-11-20T07:30:00+09:00'),
     text: `📢【本日のアップデート】
@@ -83,6 +104,7 @@ ${fmt(q.end)} まで ${TAG}` });
     out.push({ key: `sale-end-soon:${s.start}`, at: s.end - 6 * H, until: s.end,
       text: `⏰ ガチャの「${s.name}」は ${fmt(s.end)} までです！ ${TAG}` });
   }
+  for (const n of GACHA_NOTICES) out.push({ key: `gacha:${n.id}`, at: n.at, until: n.at + 12 * H, banner: bannerName('gacha', n.id), text: gachaText(n) });
   return out.filter((e) => Number.isFinite(e.at)).sort((a, b) => a.at - b.at);
 }
 
@@ -106,6 +128,13 @@ function banners(now = Date.now()) {
       tag: live ? '🆕 新キャラ登場！' : `🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
       title: `${c.rarity}「${c.name}」`, text: `わざ「${SKILLS[c.skill].name}」${pk ? ` · ピックアップ 1 体 ${pk.rate}%` : ''}`,
       sub: live ? (pk?.end ? `ピックアップは ${fmt(pk.end)} まで` : 'ガチャに登場中') : `${fmt(at)} ガチャに登場`, start: at, end });
+  }
+  for (const n of GACHA_NOTICES) {
+    if (now < n.at || now >= n.until) continue;
+    const g = gachaInfo(n), name = bannerName('gacha', n.id);
+    out.push({ id: 'gacha:' + n.id, kind: 'char', live: true, href: '#/games/cards/gacha', image: bannerFile(name) ? `/banners/${name}.jpg` : null,
+      art: { id: g.pickups[0]?.id || 'case', rarity: g.pickups[0]?.card.rarity || 'SSR' }, tag: '🎰 ガチャのお知らせ', title: g.sale ? g.sale.name : 'ガチャ',
+      text: [g.sale ? `1 回 ${g.sale.pull} コイン` : '', ...g.pickups.map((p) => `${p.card.name} ${p.rate}%`)].filter(Boolean).join(' · '), sub: `${fmt(n.until)} まで`, start: n.at - 1, end: n.until });
   }
   return out.sort((a, b) => a.start - b.start);
 }
@@ -176,4 +205,4 @@ module.exports = function install(app, ctx) {
     res.json({ banners: banners(), official: u ? u.username : null });
   });
 };
-Object.assign(module.exports, { schedule, banners, UPDATES, bannerName });
+Object.assign(module.exports, { schedule, banners, UPDATES, GACHA_NOTICES, gachaInfo, bannerName });
