@@ -21,7 +21,7 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる) (星キャンディーだけのわざ)' },
-  sweep: { name: 'しっぷうぎり', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン) (疾風剣士ハサミ丸だけのわざ)' },
+  sweep: { name: 'しっぷうぎり', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -211,7 +211,7 @@ function resolveTurn(state, acts, rnd) {
     if (act[p].a === 'attack') hit(p, 1);
     else {
       me.cd = SKILL_CD; usedSkill.add(me);
-      ev.push({ k: 'skill', p, card: me.name, skill: SKILLS[me.skill].name });
+      ev.push({ k: 'skill', p, card: me.name, skill: SKILLS[me.skill].name, id: me.skill });
       if (me.skill === 'power') hit(p, 1.8);
       else if (me.skill === 'pierce') hit(p, 1.3, { pierce: true });
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }

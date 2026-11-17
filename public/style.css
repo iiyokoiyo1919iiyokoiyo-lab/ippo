@@ -1866,3 +1866,19 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cbu-bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
 .cbu-bar i { display: block; height: 100%; border-radius: inherit; background: var(--rc); transition: width .5s ease; }
 .cbu-pct { display: grid; justify-items: end; line-height: 1.15; } .cbu-pct b { font-size: 16px; } .cbu-pct small { font-size: 11px; color: var(--text-2); }
+
+/* しっぷうぎりの緑の斬撃 */
+.cb-gslash { position: absolute; left: 0; right: 0; height: 55%; z-index: 20; pointer-events: none; overflow: hidden; border-radius: inherit; display: grid; place-items: center; animation: cb-gs-flash 1.3s ease both; }
+.cb-gslash.to-foe { top: 0; } .cb-gslash.to-me { bottom: 0; }
+.cb-gslash i { position: absolute; left: -10%; width: 120%; height: 14px; border-radius: 50%; background: linear-gradient(90deg, transparent, #c3fae8 15%, #fff 45%, #38d9a9 70%, transparent); box-shadow: 0 0 18px 4px #20c997, 0 0 40px 10px rgba(32, 201, 151, .55); transform-origin: left center; animation: cb-gs-cut .45s cubic-bezier(.2, .9, .2, 1) both; }
+.cb-gslash i:nth-child(1) { top: 28%; transform: rotate(-16deg) scaleX(0); }
+.cb-gslash i:nth-child(2) { top: 50%; transform: rotate(12deg) scaleX(0); animation-delay: .12s; height: 18px; }
+.cb-gslash i:nth-child(3) { top: 70%; transform: rotate(-6deg) scaleX(0); animation-delay: .24s; }
+.cb-gslash i:nth-child(1) { --r: -16deg; } .cb-gslash i:nth-child(2) { --r: 12deg; } .cb-gslash i:nth-child(3) { --r: -6deg; }
+.cb-gslash b { position: relative; font-size: 30px; font-weight: 900; color: #fff; -webkit-text-stroke: 6px #087f5b; paint-order: stroke fill; text-shadow: 0 0 18px #38d9a9; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .2s both; }
+@keyframes cb-gs-cut { 0% { transform: rotate(var(--r)) scaleX(0); opacity: 1; } 60% { transform: rotate(var(--r)) scaleX(1); opacity: 1; } 100% { transform: rotate(var(--r)) scaleX(1); opacity: 0; } }
+@keyframes cb-gs-flash { 0% { background: rgba(56, 217, 169, 0); } 15% { background: rgba(56, 217, 169, .35); } 100% { background: rgba(56, 217, 169, 0); } }
+.cb-float.skill.sweep { color: #0ca678; text-shadow: 0 0 10px #c3fae8; }
+@media (prefers-reduced-motion: reduce) { .cb-gslash { display: none; } }
+
+.cb-gslash, .cb-starfall { border-radius: 16px; z-index: 60; }

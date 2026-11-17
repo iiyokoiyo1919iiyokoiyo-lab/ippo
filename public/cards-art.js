@@ -233,43 +233,42 @@
         <rect x="34" y="22" width="9" height="24" rx="3" fill="#f8f9fa" stroke="#ced4da" transform="rotate(-24 38 34)"/><rect x="77" y="22" width="9" height="24" rx="3" fill="#fff0f6" stroke="#fcc2d7" transform="rotate(24 82 34)"/>
         <path d="M14,24l4,4m0-4l-4,4M100,18a4,4 0 1 0 0.1,0M16,100q4-6 8,0" stroke="#fff" stroke-width="2" fill="none" opacity=".8" stroke-linecap="round"/>
         ${face(60, 62, { eyes: 'fierce', mouth: 'grin' })}`,
+      // 疾風剣士ハサミ丸: エメラルドの疾風をまとった刀のハサミ。燃える赤金のリング、なびく鉢巻、星の目でニカッと笑う
       scissors: () => {
-        const petal = (x, y, r) => `<path d="M${x},${y}c-3,-5 -9,-3 -7,2c1,4 7,5 7,-2z" fill="#ffc9de" transform="rotate(${r} ${x} ${y})"/>`;
+        const leaf = (x, y, r, c) => `<path d="M${x},${y}c-5,-8 3,-15 10,-11c-1,7 -5,11 -10,11z" fill="${c}" stroke="#fff" stroke-width="1" transform="rotate(${r} ${x} ${y})"/>`;
+        const bolt = (x, y, sc) => `<path d="M${x},${y}l${4 * sc},${-9 * sc}l${-1 * sc},${6 * sc}l${5 * sc},${-1 * sc}l${-5 * sc},${10 * sc}l${1 * sc},${-6 * sc}z" fill="#ffe066" stroke="#f08c00" stroke-width="1"/>`;
         return `
-        <path class="cb-slash" d="M2,78Q50,-12 116,30Q56,6 2,78Z" fill="${lg('sl', [[0, '#99e9f2', 0], [0.5, '#66d9e8', 0.85], [1, '#e3fafc', 0.2]], 1, 0)}"/>
-        ${petal(16, 30, 20)}${petal(104, 92, -30)}${petal(96, 14, 60)}${petal(22, 100, -10)}
-        <path d="M45,64Q38,92 58,116L60,66Z" fill="${lg('bl', [[0, '#ffffff'], [0.6, '#ced4da'], [1, '#868e96']], 1, 0)}" stroke="#495057" stroke-width="1.6"/>
-        <path d="M75,64Q82,92 62,116L60,66Z" fill="${lg('br', [[0, '#adb5bd'], [0.4, '#e9ecef'], [1, '#ffffff']], 1, 0)}" stroke="#495057" stroke-width="1.6"/>
-        <path d="M60,68L59,113M60,68L61,113" stroke="#66d9e8" stroke-width="1.6" opacity=".9"/>
-        <path d="M48,70Q44,90 56,108" stroke="#fff" stroke-width="2" fill="none" opacity=".8" stroke-linecap="round"/>
-        <circle cx="43" cy="19" r="11" fill="none" stroke="${lg('r1', [[0, '#ff8787'], [1, '#c92a2a']])}" stroke-width="7"/>
-        <circle cx="77" cy="19" r="11" fill="none" stroke="${lg('r2', [[0, '#ff8787'], [1, '#c92a2a']])}" stroke-width="7"/>
-        <path d="M49,28L53,33M71,28L67,33" stroke="#c92a2a" stroke-width="6" stroke-linecap="round"/>
-        <circle cx="60" cy="52" r="23" fill="${rg('dk', [[0, '#ffffff'], [0.55, '#dee2e6'], [1, '#868e96']])}" stroke="#868e96" stroke-width="2"/>
-        <path d="M36,40Q60,28 84,40L84,47Q60,35 36,47Z" fill="#e03131"/>
-        <path d="M83,41L108,32L101,42L110,49L84,47Z" fill="#e03131"/><path d="M90,40L104,36" stroke="#ff8787" stroke-width="1.5"/>
-        <circle cx="60" cy="38.5" r="3.4" fill="#fff"/>
-        <circle cx="60" cy="74" r="4" fill="${lg('pv', [[0, '#fff3bf'], [1, '#f59f00']])}" stroke="#e67700"/>
-        ${gloss(50, 60, 5, 3)}
-        ${face(60, 55, { eyes: 'brave', mouth: 'grin', s: 0.9 })}`;
-      },
-      // 星キャンディー (MR): 星の形のキャンディー。両はしにセロハンのつつみ、虹のうずまき、星の目、流れ星のステッキ
-      star: () => {
-        const pts = Array.from({ length: 10 }, (_, i) => { const a = (-90 + i * 36) * Math.PI / 180, r = i % 2 ? 21 : 41; return `${(60 + Math.cos(a) * r).toFixed(1)},${(64 + Math.sin(a) * r).toFixed(1)}`; }).join(' ');
-        const swirl = Array.from({ length: 5 }, (_, i) => `<path d="M60,64Q${60 + Math.cos((i * 72 - 60) * Math.PI / 180) * 30},${64 + Math.sin((i * 72 - 60) * Math.PI / 180) * 30} ${60 + Math.cos((i * 72 - 18) * Math.PI / 180) * 40},${64 + Math.sin((i * 72 - 18) * Math.PI / 180) * 40}" stroke="${['#ff8fd8', '#ffe066', '#8ce99a', '#74c0fc', '#d0a8ff'][i]}" stroke-width="5" fill="none" stroke-linecap="round" opacity=".85"/>`).join('');
-        return `
-        <path d="M30,66L4,52Q0,66 6,82Z" fill="${lg('wl', [[0, '#ffd6f5', 0.95], [1, '#c5b3ff', 0.75]], 1, 0)}" stroke="#ffffff" stroke-width="2"/>
-        <path d="M8,58L24,66M8,74L24,68" stroke="#fff" stroke-width="1.6" opacity=".9"/>
-        <path d="M90,66L116,52Q120,66 114,82Z" fill="${lg('wr', [[0, '#c5f6fa', 0.75], [1, '#ffd6f5', 0.95]], 1, 0)}" stroke="#ffffff" stroke-width="2"/>
-        <path d="M112,58L96,66M112,74L96,68" stroke="#fff" stroke-width="1.6" opacity=".9"/>
-        <polygon points="${pts}" fill="${rg('sc', [[0, '#fffbe6'], [0.45, '#ffd8f3'], [0.8, '#ffa8e2'], [1, '#e599f7']], 0.45, 0.4, 0.75)}" stroke="#ffffff" stroke-width="7" stroke-linejoin="round"/>
-        <polygon points="${pts}" fill="none" stroke="${lg('se', [[0, '#ff6bd6'], [0.33, '#ffd43b'], [0.66, '#63e6be'], [1, '#845ef7']], 1, 1)}" stroke-width="2.6" stroke-linejoin="round"/>
-        <g clip-path="${clip('sx', `<polygon points="${pts}"/>`)}">${swirl}<circle cx="60" cy="64" r="11" fill="#fff" opacity=".55"/></g>
-        ${gloss(44, 40, 7, 4)}<circle cx="78" cy="50" r="2.2" fill="#fff"/><circle cx="40" cy="82" r="1.6" fill="#fff"/>
-        <path d="M84,96L104,72" stroke="${lg('wd', [[0, '#ffe066'], [1, '#f59f00']])}" stroke-width="4" stroke-linecap="round"/>
-        ${twinkle(106, 69, 9, '#ffe066')}${twinkle(106, 69, 4, '#fff')}
-        <path d="M100,40Q108,32 116,22" stroke="#fff" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round" fill="none"/>
-        ${face(60, 62, { eyes: 'star', mouth: 'open', s: 0.95, iris: '#4c2a85' })}`;
+        <g class="cb-slash">
+          <path d="M-2,92Q24,6 118,14Q56,18 18,78Z" fill="${lg('w1', [[0, '#96f2d7', 0.5], [0.45, '#12b886', 1], [1, '#63e6be', 0.7]], 1, 0)}"/>
+          <path d="M122,34Q108,108 10,112Q72,98 108,44Z" fill="${lg('w2', [[0, '#63e6be', 0.6], [0.55, '#0ca678', 1], [1, '#96f2d7', 0.5]], 1, 0)}"/>
+          <path d="M6,56L40,44M80,8L104,2M96,96L120,88M2,104L22,100" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".9"/>
+        </g>
+        ${leaf(10, 28, 20, '#69db7c')}${leaf(104, 100, -30, '#38d9a9')}${leaf(100, 12, 60, '#8ce99a')}${leaf(16, 96, -10, '#63e6be')}${leaf(112, 62, 80, '#b2f2bb')}
+        ${bolt(20, 52, 1.3)}${bolt(102, 76, 1.1)}
+        <path d="M44,62Q36,92 58,117L60,64Z" fill="${lg('bl', [[0, '#ffffff'], [0.5, '#dee2e6'], [1, '#868e96']], 1, 0)}" stroke="#087f5b" stroke-width="2"/>
+        <path d="M76,62Q84,92 62,117L60,64Z" fill="${lg('br', [[0, '#adb5bd'], [0.45, '#f1f3f5'], [1, '#ffffff']], 1, 0)}" stroke="#087f5b" stroke-width="2"/>
+        <path d="M46.5,66Q40,92 57,112" stroke="#63e6be" stroke-width="3" fill="none" stroke-linecap="round" opacity=".95"/>
+        <path d="M73.5,66Q80,92 63,112" stroke="#63e6be" stroke-width="3" fill="none" stroke-linecap="round" opacity=".95"/>
+        <path d="M50,72Q46,90 56,104" stroke="#fff" stroke-width="2" fill="none" opacity=".9" stroke-linecap="round"/>
+        <path d="M60,66L60,114" stroke="#20c997" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="42" cy="18" r="12.5" fill="none" stroke="#fcc419" stroke-width="10.5"/>
+        <circle cx="78" cy="18" r="12.5" fill="none" stroke="#fcc419" stroke-width="10.5"/>
+        <circle cx="42" cy="18" r="12.5" fill="none" stroke="${lg('r1', [[0, '#ff8787'], [0.6, '#e03131'], [1, '#a61e1e']])}" stroke-width="7"/>
+        <circle cx="78" cy="18" r="12.5" fill="none" stroke="${lg('r2', [[0, '#ff8787'], [0.6, '#e03131'], [1, '#a61e1e']])}" stroke-width="7"/>
+        <path d="M35,9Q40,6 46,8M71,9Q76,6 82,8" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".85"/>
+        <path d="M48,28L53,34M72,28L67,34" stroke="#c92a2a" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="60" cy="52" r="25" fill="#63e6be" opacity=".35"/>
+        <circle cx="60" cy="52" r="23" fill="${rg('dk', [[0, '#ffffff'], [0.55, '#e9ecef'], [1, '#adb5bd']])}" stroke="#495057" stroke-width="2"/>
+        <path d="M84,40Q102,30 118,38Q108,42 112,50Q100,44 86,48Z" fill="#e03131"/><path d="M86,44Q100,40 112,48" stroke="#ff8787" stroke-width="1.6" fill="none"/>
+        <path d="M84,46Q98,52 106,64Q96,60 86,56Z" fill="#c92a2a"/>
+        <path d="M35,40Q60,27 85,40L85,48Q60,35 35,48Z" fill="#e03131" stroke="#a61e1e" stroke-width="1"/>
+        <path d="M37,42Q60,31 83,42" stroke="#ff8787" stroke-width="1.4" fill="none"/>
+        <path d="M53,32L67,32L65,43L55,43Z" fill="${lg('pl', [[0, '#e9ecef'], [1, '#868e96']])}" stroke="#495057" stroke-width="1"/>
+        <path d="M60,33L63,37.5L60,42L57,37.5Z" fill="#20c997" stroke="#087f5b" stroke-width="1"/><circle cx="59" cy="36" r="0.9" fill="#fff"/>
+        <circle cx="60" cy="74" r="4.5" fill="${lg('pv', [[0, '#fff3bf'], [1, '#f59f00']])}" stroke="#e67700"/><circle cx="58.6" cy="72.6" r="1.2" fill="#fff"/>
+        ${gloss(49, 60, 5, 3)}
+        ${face(60, 57, { eyes: 'star', brows: true, mouth: 'grin', s: 0.9, iris: '#0b7285' })}
+        ${twinkle(98, 24, 7, '#ffe066')}${twinkle(16, 76, 5, '#fff')}${twinkle(110, 108, 4, '#c3fae8')}`;
       },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}

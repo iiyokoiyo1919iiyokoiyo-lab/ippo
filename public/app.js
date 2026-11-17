@@ -3510,6 +3510,14 @@ async function viewBattle(params) {
   }
   const wsSend = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
   // 1 ターンの出来事を順番に見せる: こうげきした側が飛び出し、受けた側がゆれて数字が出る
+  // 大きな演出 (斬撃・流星) は、画面の上に重ねて出す (次のターンで画面が描き直されても消えないように)
+  function overlayFx(cls, html, ms, part = 'all') {
+    const b = box(); if (!b) return;
+    const r = b.getBoundingClientRect(), h = part === 'all' ? r.height : r.height * 0.55, top = part === 'bottom' ? r.top + r.height * 0.45 : r.top;
+    const fx = document.createElement('div'); fx.className = cls; fx.innerHTML = html;
+    Object.assign(fx.style, { position: 'fixed', left: r.left + 'px', top: top + 'px', width: r.width + 'px', height: h + 'px', right: 'auto', bottom: 'auto' });
+    document.body.append(fx); setTimeout(() => fx.remove(), ms);
+  }
   function animate(events) {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const el = (p) => box()?.querySelector(`.cb-fighter[data-side="${p === you ? 'me' : 'foe'}"]`);
@@ -3533,15 +3541,19 @@ async function viewBattle(params) {
         }, t);
         t += 420;
       } else if (e.k === 'heal') { setTimeout(() => pop(e.p, `+${e.amount}`, 'heal'), t); t += 300; }
+      else if (e.k === 'skill' && e.id === 'sweep') { // しっぷうぎり: 緑の斬撃が相手の盤面を横切る
+        setTimeout(() => {
+          replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill sweep');
+          overlayFx('cb-gslash' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><i></i><b>しっぷうぎり！</b>', 1300, e.p === you ? 'top' : 'bottom');
+        }, t);
+        t += 650;
+      }
       else if (e.k === 'skill') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill'); }, t); t += 320; }
       else if (e.k === 'guard') { setTimeout(() => replay(el(e.p), 'guarding'), t); }
       else if (e.k === 'ko') { setTimeout(() => pop(e.p, 'KO!', 'ko'), t); t += 300; }
       else if (e.k === 'starfall') {
         setTimeout(() => {
-          const b = box(); if (!b) return;
-          const sky = document.createElement('div'); sky.className = 'cb-starfall' + (e.target === you ? ' on-me' : '');
-          sky.innerHTML = '<b>🌠 スターライトマーチ！</b>' + Array.from({ length: 14 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 7) * 0.09}s"></i>`).join('');
-          b.append(sky); setTimeout(() => sky.remove(), 1900);
+          overlayFx('cb-starfall' + (e.target === you ? ' on-me' : ''), '<b>🌠 スターライトマーチ！</b>' + Array.from({ length: 14 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 7) * 0.09}s"></i>`).join(''), 1900);
         }, t);
         t += 700;
       }
