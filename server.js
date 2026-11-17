@@ -78,7 +78,8 @@ function createSession(req, res, userId) {
 }
 
 // 公開するユーザー情報 (管理者かどうかも含める: 名前の横に管理者バッジを出すため)
-const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at, isAdmin: isAdmin(u) };
+const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at, isAdmin: isAdmin(u),
+  avatar: ctx.avatarOf ? ctx.avatarOf(u.id) : null }; // アイコン (写真 / 絵文字)。未設定なら null
 // 管理者: 環境変数 ADMIN_USERS (カンマ区切りのユーザー名) で指定する。未設定なら RCN413
 const ADMINS = new Set(String(process.env.ADMIN_USERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
 const isAdmin = (u) => !!u && ADMINS.has(String(u.username).toLowerCase());
@@ -301,6 +302,7 @@ const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, befor
 require('./features')(app, ctx);
 require('./pixel')(app, ctx); // PIXEL WORLD
 require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
+require('./avatar')(app, ctx); // プロフィールのアイコン
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)

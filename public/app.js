@@ -46,10 +46,14 @@ const fullTime = (t) => new Date(t).toLocaleString('ja-JP', { year: 'numeric', m
 const PALETTE = ['#4b55f0', '#6a4fd6', '#2f7fd1', '#1495a0', '#16946c', '#c9622f', '#c9466b', '#7a5ad1', '#3b6db3', '#a35a2f'];
 const colorFor = (key) => { let h = 0; for (const c of String(key)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; };
 function avatar(u, size = '', link = false) {
-  const inner = esc([...(u.displayName || u.username)][0] || '?');
-  const cls = `avatar ${size ? 'avatar-' + size : ''}`;
-  return link ? `<a class="${cls}" href="#/u/${esc(u.username)}" style="background:${colorFor(u.username)}" aria-label="${esc(u.displayName)}">${inner}</a>`
-    : `<span class="${cls}" style="background:${colorFor(u.username)}" aria-hidden="true">${inner}</span>`;
+  const a = u.avatar;
+  let inner, bg, kind = '';
+  if (a?.kind === 'image' && u.id) { inner = `<img src="/api/avatars/${Number(u.id)}?v=${Number(a.v)}" alt="" loading="lazy" decoding="async" draggable="false">`; bg = 'var(--surface-3)'; kind = ' avatar-img'; }
+  else if (a?.kind === 'emoji') { inner = `<span class="avatar-emoji">${esc(a.emoji)}</span>`; bg = esc(a.color); kind = ' avatar-em'; }
+  else { inner = esc([...(u.displayName || u.username)][0] || '?'); bg = colorFor(u.username); }
+  const cls = `avatar${kind} ${size ? 'avatar-' + size : ''}`;
+  return link ? `<a class="${cls}" href="#/u/${esc(u.username)}" style="background:${bg}" aria-label="${esc(u.displayName)}">${inner}</a>`
+    : `<span class="${cls}" style="background:${bg}" aria-hidden="true">${inner}</span>`;
 }
 
 // 管理者バッジ: 名前の横に付ける小さな印 (プロフィールでは文字付き)
@@ -682,13 +686,15 @@ async function viewUser(username, tab = 'posts') {
     <div class="stack" id="feed"></div></div>`;
   $$('[data-tab]', main).forEach((b) => b.addEventListener('click', () => viewUser(username, b.dataset.tab)));
   $('#edit-profile')?.addEventListener('click', () => editProfile(user));
+  if (isMe) { const av = $('.hero-top .avatar', main); av.classList.add('av-editable'); av.setAttribute('role', 'button'); av.setAttribute('aria-label', 'アイコンを変更'); av.addEventListener('click', () => editProfile(user)); }
   main.querySelector('.hero').addEventListener('click', (e) => { const l = e.target.closest('[data-url]'); if (l) VB.open(l.dataset.url); });
   if (isMe && tab === 'bookmarks') return renderBookmarks($('#feed'));
   await loadFeed((before) => `/users/${encodeURIComponent(username)}${before ? '?before=' + before : ''}`,
     { icon: 'edit', title: isMe ? 'まだ投稿がありません' : 'まだ投稿がありません', text: isMe ? '最初の投稿をしてみましょう。' : '' });
 }
 function editProfile(user) {
-  openPanel('プロフィールを編集', `<form class="form-stack" id="profile-form">
+  openPanel('プロフィールを編集', `<div class="av-editor" id="av-editor"></div>
+    <form class="form-stack" id="profile-form">
       <label class="field"><span class="field-label">表示名</span><input class="input" name="displayName" maxlength="50" value="${esc(user.displayName)}" required></label>
       <label class="field"><span class="field-label">自己紹介</span><textarea class="textarea" name="bio" maxlength="160" rows="4" placeholder="好きなこと、部活、ひとことなど">${esc(user.bio || '')}</textarea><span class="field-hint" id="bio-count"></span></label>
       <p class="form-error" id="profile-error"></p>
@@ -704,7 +710,114 @@ function editProfile(user) {
         close(); renderMe(); toast('プロフィールを更新しました', 'success'); viewUser(me.username);
       } catch (err) { $('#profile-error', root).textContent = err.message; }
     });
+    avatarEditor($('#av-editor', root), f);
   });
+}
+
+// ---------- アイコンの編集 (写真を切り抜く / 絵文字を選ぶ / 元に戻す) ----------
+// アイコンを変えたら、画面中のアイコンを新しいものに差し替える
+function avatarChanged(avatarInfo) {
+  me = { ...me, avatar: avatarInfo };
+  renderMe();
+  // 編集中のウィンドウは開いたままにし、閉じた時に画面のアイコンを描き直す
+  const dlg = $('#ui-dialog');
+  if (!dlg.dataset.avatarDirty) {
+    dlg.dataset.avatarDirty = '1';
+    dlg.addEventListener('close', () => { delete dlg.dataset.avatarDirty; if (location.hash.startsWith('#/u/') || location.hash === '#/settings' || location.hash.startsWith('#/dm')) route(); }, { once: true });
+  }
+}
+function avatarEditor(box, form) {
+  const show = (html) => { box.innerHTML = html; form.classList.toggle('hidden', box.dataset.mode && box.dataset.mode !== 'main'); };
+  // 最初の画面: 今のアイコンと 3 つの操作
+  function mainView() {
+    box.dataset.mode = 'main';
+    show(`<div class="av-main">${avatar(me, 'lg')}
+      <div class="av-actions">
+        <label class="btn btn-secondary btn-sm av-file">${icon('file')}写真を選ぶ<input type="file" accept="image/*" hidden></label>
+        <button class="btn btn-outline btn-sm" type="button" data-av="emoji">${icon('sparkle')}絵文字にする</button>
+        ${me.avatar ? `<button class="btn btn-ghost btn-sm" type="button" data-av="reset">元に戻す</button>` : ''}
+      </div>
+      <p class="field-hint">写真は端末で小さく切り抜き、撮影場所などの情報を消してから送ります</p></div>`);
+    $('input[type=file]', box).addEventListener('change', (e) => { const file = e.target.files[0]; if (file) cropView(file); });
+    $('[data-av=emoji]', box).addEventListener('click', emojiView);
+    $('[data-av=reset]', box)?.addEventListener('click', async () => {
+      try { await api('/me/avatar', { method: 'DELETE' }); avatarChanged(null); toast('アイコンを元に戻しました'); mainView(); } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+  // 写真: ドラッグで位置、スライダーで大きさを決めて、真ん中の円の範囲を 256×256 にする
+  async function cropView(file) {
+    if (file.size > 25 * 1024 * 1024) return toast('ファイルが大きすぎます (25MB まで)', 'error');
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+    catch { return toast('この画像は読み込めませんでした。JPEG か PNG の写真を選んでください', 'error'); }
+    box.dataset.mode = 'crop';
+    show(`<div class="av-crop">
+      <div class="av-crop-frame"><canvas width="560" height="560"></canvas><div class="av-crop-mask"></div></div>
+      <label class="av-zoom">${icon('search', 'ic-sm')}<input type="range" min="1" max="4" step="0.01" value="1" aria-label="拡大"></label>
+      <p class="field-hint">ドラッグで位置を調整できます</p>
+      <div class="modal-actions" style="margin-top:4px"><button class="btn btn-ghost" type="button" data-av="cancel">戻る</button><button class="btn btn-primary" type="button" data-av="save">このアイコンにする</button></div></div>`);
+    const cv = $('canvas', box), g = cv.getContext('2d'), range = $('input[type=range]', box), N = cv.width;
+    const base = Math.max(N / bmp.width, N / bmp.height); // 枠を埋める最小の倍率
+    let zoom = 1, ox = 0, oy = 0;
+    const clamp = () => {
+      const w = bmp.width * base * zoom, h = bmp.height * base * zoom;
+      ox = Math.min(0, Math.max(N - w, ox)); oy = Math.min(0, Math.max(N - h, oy));
+    };
+    const draw = () => { clamp(); g.fillStyle = '#fff'; g.fillRect(0, 0, N, N); g.drawImage(bmp, ox, oy, bmp.width * base * zoom, bmp.height * base * zoom); };
+    ox = (N - bmp.width * base) / 2; oy = (N - bmp.height * base) / 2; draw();
+    range.addEventListener('input', () => {
+      // 中心を保ったまま拡大
+      const nz = Number(range.value), c = N / 2;
+      ox = c - (c - ox) * (nz / zoom); oy = c - (c - oy) * (nz / zoom); zoom = nz; draw();
+    });
+    let drag = null;
+    cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); drag = { x: e.clientX, y: e.clientY, ox, oy }; });
+    cv.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const k = N / cv.getBoundingClientRect().width;
+      ox = drag.ox + (e.clientX - drag.x) * k; oy = drag.oy + (e.clientY - drag.y) * k; draw();
+    });
+    cv.addEventListener('pointerup', () => { drag = null; });
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); range.value = Math.min(4, Math.max(1, zoom * Math.exp(-e.deltaY * 0.002))); range.dispatchEvent(new Event('input')); }, { passive: false });
+    $('[data-av=cancel]', box).addEventListener('click', mainView);
+    $('[data-av=save]', box).addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.classList.add('is-loading');
+      try {
+        const out = document.createElement('canvas'); out.width = out.height = 256;
+        out.getContext('2d').drawImage(cv, 0, 0, N, N, 0, 0, 256, 256);
+        const blob = await new Promise((r) => out.toBlob(r, 'image/jpeg', 0.86));
+        const res = await fetch('/api/me/avatar/image', { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'アイコンを保存できませんでした');
+        avatarChanged(data.avatar); toast('アイコンを変更しました', 'success'); mainView();
+      } catch (err) { toast(err.message, 'error'); }
+      btn.classList.remove('is-loading');
+    });
+  }
+  // 絵文字 + 背景色
+  async function emojiView() {
+    let opts;
+    try { opts = await api('/avatar-options'); } catch { return toast('読み込めませんでした', 'error'); }
+    let emoji = me.avatar?.kind === 'emoji' ? me.avatar.emoji : opts.emojis[0];
+    let color = me.avatar?.kind === 'emoji' ? me.avatar.color : opts.colors[0];
+    box.dataset.mode = 'emoji';
+    const render = () => show(`<div class="av-emoji">
+      <div class="av-emoji-preview">${avatar({ ...me, avatar: { kind: 'emoji', emoji, color } }, 'lg')}</div>
+      <div class="av-colors">${opts.colors.map((c) => `<button type="button" class="av-color${c === color ? ' on' : ''}" style="background:${c}" data-color="${c}" aria-label="背景色 ${c}" aria-pressed="${c === color}"></button>`).join('')}</div>
+      <div class="av-emojis">${opts.emojis.map((x) => `<button type="button" class="av-emoji-btn${x === emoji ? ' on' : ''}" data-emoji="${x}" aria-pressed="${x === emoji}">${x}</button>`).join('')}</div>
+      <div class="modal-actions" style="margin-top:4px"><button class="btn btn-ghost" type="button" data-av="cancel">戻る</button><button class="btn btn-primary" type="button" data-av="save">このアイコンにする</button></div></div>`);
+    const bind = () => {
+      $$('[data-color]', box).forEach((b) => b.addEventListener('click', () => { color = b.dataset.color; render(); bind(); }));
+      $$('[data-emoji]', box).forEach((b) => b.addEventListener('click', () => { emoji = b.dataset.emoji; render(); bind(); }));
+      $('[data-av=cancel]', box).addEventListener('click', mainView);
+      $('[data-av=save]', box).addEventListener('click', async () => {
+        try { const r = await api('/me/avatar/emoji', { method: 'PUT', body: { emoji, color } }); avatarChanged(r.avatar); toast('アイコンを変更しました', 'success'); mainView(); }
+        catch (e) { toast(e.message, 'error'); }
+      });
+    };
+    render(); bind();
+  }
+  mainView();
 }
 
 // ブックマーク (この端末に保存したもの)
@@ -1055,6 +1168,10 @@ async function loadAdminUsers(q) {
       { icon: 'logout', label: '強制ログアウト', run: async () => {
         if (!(await confirmDialog({ title: `@${name} を強制ログアウトしますか？`, body: 'すべての端末でログアウトされます。パスワードを知っていれば、またログインできます。', ok: 'ログアウトさせる' }))) return;
         try { await api(`/admin/users/${name}/logout`, { method: 'POST' }); toast(`@${name} をログアウトさせました`, 'success'); } catch (e) { toast(e.message, 'error'); }
+      } },
+      { icon: 'user', label: 'アイコンを削除', run: async () => {
+        if (!(await confirmDialog({ title: `@${name} のアイコンを削除しますか？`, body: '頭文字のアイコンに戻ります。', ok: '削除する', danger: true }))) return;
+        try { const r = await api(`/admin/users/${name}/avatar`, { method: 'DELETE' }); toast(r.ok ? `@${name} のアイコンを削除しました` : 'アイコンは設定されていません'); loadAdminUsers($('#admin-search').q.value.trim()); } catch (e) { toast(e.message, 'error'); }
       } },
       { icon: 'trash', label: 'アカウントを削除', danger: true, run: async () => {
         if (!(await confirmDialog({ title: `@${name} のアカウントを削除しますか？`, body: '投稿・DM・フォロー・作成したコミュニティなど、このユーザーのデータがすべて完全に削除されます。\n元に戻すことはできません。', ok: '削除する', danger: true }))) return;

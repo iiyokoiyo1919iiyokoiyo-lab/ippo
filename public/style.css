@@ -995,3 +995,32 @@ a.list-item:hover, button.list-item:hover { background: var(--surface-2); }
 .switch:disabled { opacity: .5; }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .switch-row .desc { white-space: normal; }
+
+/* アイコン (写真 / 絵文字) */
+.avatar { overflow: hidden; position: relative; }
+.avatar-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-emoji { font-size: calc(var(--av) * .55); line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.av-editable { cursor: pointer; }
+.av-editable::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: rgba(0, 0, 0, 0); transition: background var(--t1); }
+.av-editable:hover::after { background: rgba(0, 0, 0, .12); }
+.av-editor { margin-bottom: var(--s4); }
+.av-main { display: flex; flex-direction: column; align-items: center; gap: var(--s3); text-align: center; }
+.av-main .avatar-lg { box-shadow: 0 0 0 1px var(--border); }
+.av-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s2); }
+.av-file { cursor: pointer; }
+.av-crop { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
+.av-crop-frame { position: relative; width: min(280px, 70vw); aspect-ratio: 1; border-radius: var(--r-md); overflow: hidden; touch-action: none; background: var(--surface-2); }
+.av-crop-frame canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+.av-crop-frame canvas:active { cursor: grabbing; }
+.av-crop-mask { position: absolute; inset: 0; pointer-events: none; border-radius: 50%; box-shadow: 0 0 0 999px rgba(14, 17, 34, .5); outline: 2px solid rgba(255, 255, 255, .9); outline-offset: -2px; }
+.av-zoom { display: flex; align-items: center; gap: 10px; width: min(280px, 70vw); color: var(--text-3); }
+.av-zoom input { flex: 1; accent-color: var(--accent); }
+.av-emoji { display: flex; flex-direction: column; gap: var(--s3); }
+.av-emoji-preview { display: flex; justify-content: center; }
+.av-colors { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.av-color { width: 30px; height: 30px; border-radius: 50%; border: 0; cursor: pointer; transition: transform var(--t1) var(--ease-spring); }
+.av-color.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); transform: scale(1.08); }
+.av-emojis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; max-height: 210px; overflow-y: auto; padding: 2px; }
+.av-emoji-btn { aspect-ratio: 1; border: 0; border-radius: var(--r-sm); background: var(--surface-2); font-size: 22px; cursor: pointer; display: grid; place-items: center; transition: background var(--t1), transform var(--t1); }
+.av-emoji-btn:hover { background: var(--surface-3); }
+.av-emoji-btn.on { background: var(--accent-soft-2); box-shadow: inset 0 0 0 2px var(--accent); }
