@@ -1843,3 +1843,13 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 :root[data-theme="dark"] .ev-bn.char { background: linear-gradient(120deg, #4a2a10, #4a1d3d 55%, #1d3550) padding-box, conic-gradient(from var(--cb-a), #ff6b6b, #ffd43b, #74c0fc, #ff6b6b) border-box; color: #fff; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ev-bn.char { background: linear-gradient(120deg, #4a2a10, #4a1d3d 55%, #1d3550) padding-box, conic-gradient(from var(--cb-a), #ff6b6b, #ffd43b, #74c0fc, #ff6b6b) border-box; color: #fff; } }
 @media (prefers-reduced-motion: reduce) { .ev-bn, .ev-art, .ev-sky i { animation: none !important; } }
+
+/* ドパバナー (画像) */
+.ev-bn.ev-img { padding: 0; }
+.ev-pic { display: block; position: relative; overflow: hidden; border-radius: 16px; text-decoration: none !important; }
+.ev-pic img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.ev-shine { position: absolute; inset: -30%; background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, .6) 50%, transparent 58%); transform: translateX(-70%); animation: cb-sweep 2.6s ease-in-out infinite; pointer-events: none; }
+.ev-cap { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 12px; background: linear-gradient(transparent, rgba(0, 0, 0, .6)); color: #fff; }
+.ev-cap .ev-tag { color: #fff !important; font-size: 13px; } .ev-cap small { font-size: 12px; opacity: .9; }
+.ev-img .ev-close { background: rgba(0, 0, 0, .35); color: #fff !important; border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) { .ev-shine { animation: none; display: none; } }

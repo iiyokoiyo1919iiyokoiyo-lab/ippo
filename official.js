@@ -7,7 +7,14 @@
 //   期限 (until) を過ぎた予定は投稿しない (あとで起動したときに古いお知らせを出さない)
 // =====================================================================
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const cards = require('./cards');
+const { cleanJpeg } = require('./avatar');
+// ドパバナー (告知画像): tools/make_banners.js で作って public/banners/ に置く。あれば投稿とアプリのバナーに使う
+const BANNER_DIR = path.join(__dirname, 'public', 'banners');
+const bannerName = (kind, id) => `${kind}-${String(id).replace(/[^a-z0-9-]/gi, '')}`;
+const bannerFile = (name) => { const f = path.join(BANNER_DIR, name + '.jpg'); return fs.existsSync(f) ? f : null; };
 
 const MIGRATION = `
 CREATE TABLE official_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -46,7 +53,7 @@ function schedule() {
   for (const [id, at] of Object.entries(RELEASES)) {
     const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity]) continue;        // ガチャに出ないキャラ (クエストの報酬) はクエストの投稿で知らせる
     const pk = PICKUPS.find((x) => x.id === id);
-    out.push({ key: `release:${id}`, at, until: at + D,
+    out.push({ key: `release:${id}`, at, until: at + D, banner: bannerName('char', id),
       text: `🆕【新キャラ登場】${c.rarity}「${c.name}」がガチャに登場しました！
 わざ「${SKILLS[c.skill].name}」${SKILLS[c.skill].desc.replace(/\s*\([^()]*だけのわざ\)/, '')}${pk ? `\n🎯 ピックアップ中は 1 体 ${pk.rate}%！${pk.end ? ` (${fmt(pk.end)} まで)` : ''}` : ''}\n${TAG}` });
   }
@@ -60,7 +67,7 @@ function schedule() {
   }
   for (const q of QUESTS) {
     const r = CARDS[q.reward];
-    out.push({ key: `quest-start:${q.id}`, at: q.start, until: q.start + D,
+    out.push({ key: `quest-start:${q.id}`, at: q.start, until: q.start + D, banner: bannerName('quest', q.id),
       text: `🌠【期間限定クエスト開始】「${q.name}」が始まりました！
 ${q.enemy.map(([id, lv]) => `${CARDS[id].name} Lv${lv}`).join('・')} に勝つと、${r.rarity}「${r.name}」が仲間に！
 わざ「${SKILLS[r.skill].name}」は 5 ターンのあいだ流星を降らせる！
@@ -86,7 +93,7 @@ function banners(now = Date.now()) {
   for (const q of QUESTS) {
     if (now < q.start - D || now >= q.end) continue;
     const live = now >= q.start, r = CARDS[q.reward];
-    out.push({ id: 'quest:' + q.id, kind: 'quest', live, href: '#/games/cards/quest', art: { id: r.id, rarity: r.rarity },
+    out.push({ id: 'quest:' + q.id, kind: 'quest', live, image: bannerFile(bannerName('quest', q.id)) ? `/banners/${bannerName('quest', q.id)}.jpg` : null, href: '#/games/cards/quest', art: { id: r.id, rarity: r.rarity },
       tag: live ? '🌠 期間限定クエスト 開催中' : `🌠 ${jstDay(q.start) === jstDay(now) ? '本日' : fmt(q.start).replace(/ .*/, '')} ${hm(q.start)} から 期間限定クエスト`,
       title: q.name, text: `クリアで ${r.rarity}「${r.name}」が仲間に！`, sub: live ? `${fmt(q.end)} まで` : `${fmt(q.start)} 開始`, start: q.start, end: q.end });
   }
@@ -95,7 +102,7 @@ function banners(now = Date.now()) {
     const pk = PICKUPS.find((x) => x.id === id), end = pk?.end || at + 7 * D;
     if (now < at - D || now >= end) continue;
     const live = now >= at;
-    out.push({ id: 'char:' + id, kind: 'char', live, href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
+    out.push({ id: 'char:' + id, kind: 'char', live, image: bannerFile(bannerName('char', id)) ? `/banners/${bannerName('char', id)}.jpg` : null, href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
       tag: live ? '🆕 新キャラ登場！' : `🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
       title: `${c.rarity}「${c.name}」`, text: `わざ「${SKILLS[c.skill].name}」${pk ? ` · ピックアップ 1 体 ${pk.rate}%` : ''}`,
       sub: live ? (pk?.end ? `ピックアップは ${fmt(pk.end)} まで` : 'ガチャに登場中') : `${fmt(at)} ガチャに登場`, start: at, end });
@@ -136,12 +143,18 @@ module.exports = function install(app, ctx) {
   ctx.isReservedName = (username) => RESERVED.test(String(username || ''));
 
   // ---------- 時刻になったら投稿する ----------
-  function post(text) {
+  function post(text, banner = null) {
     if (!officialId || !db.prepare('SELECT 1 FROM users WHERE id = ?').get(officialId)) officialId = hasUsers() ? ensureAccount() : null;
     if (!officialId) return null;
     const r = db.prepare('INSERT INTO posts (user_id, content, created_at) VALUES (?, ?, ?)').run(officialId, text.slice(0, 280), Date.now());
+    const postId = Number(r.lastInsertRowid);
+    const f = banner && bannerFile(banner);
+    if (f) { // ドパバナーの画像をつける (ふつうの写真と同じように保存)
+      try { const c = cleanJpeg(fs.readFileSync(f)); db.prepare('INSERT INTO post_images (post_id, user_id, position, width, height, image, created_at) VALUES (?, ?, 0, ?, ?, ?, ?)').run(postId, officialId, c.width, c.height, c.jpeg, Date.now()); }
+      catch (e) { console.warn('[official] バナー画像を付けられませんでした', banner, e.message); }
+    }
     ctx.invalidateTrends?.();
-    return Number(r.lastInsertRowid);
+    return postId;
   }
   const posted = db.prepare('SELECT 1 FROM official_posts WHERE key = ?');
   function tick(now = Date.now()) {
@@ -149,7 +162,7 @@ module.exports = function install(app, ctx) {
     if (!officialId) return;
     for (const e of schedule()) {
       if (now < e.at || now >= e.until || posted.get(e.key)) continue;
-      const id = post(e.text);
+      const id = post(e.text, e.banner);
       db.prepare('INSERT OR IGNORE INTO official_posts (key, post_id, posted_at) VALUES (?, ?, ?)').run(e.key, id, now);
       console.log(`[official] 投稿しました: ${e.key}`);
     }
@@ -163,4 +176,4 @@ module.exports = function install(app, ctx) {
     res.json({ banners: banners(), official: u ? u.username : null });
   });
 };
-Object.assign(module.exports, { schedule, banners, UPDATES });
+Object.assign(module.exports, { schedule, banners, UPDATES, bannerName });
