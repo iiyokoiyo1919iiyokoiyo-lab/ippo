@@ -57,9 +57,17 @@ function avatar(u, size = '', link = false) {
 }
 
 // 管理者バッジ: 名前の横に付ける小さな印 (プロフィールでは文字付き)
-const adminBadge = (u, withLabel = false) => !u?.isAdmin ? ''
+const adminBadge = (u, withLabel = false) => (!u?.isAdmin ? ''
   : withLabel ? `<span class="admin-badge-label" title="IppO の管理者">${icon('badge')}管理者</span>`
-  : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`;
+  : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`) + verifiedBadge(u, withLabel);
+// 認証マーク (管理者が確認したアカウント。権限は増えない表示だけの印)
+function verifiedBadge(u, withLabel = false) {
+  const v = u?.verified;
+  if (!v) return '';
+  const title = `認証済み${v.label ? ' · ' + v.label : ''}（IppO 運営が確認したアカウント）`;
+  return withLabel ? `<span class="verified-label" title="${esc(title)}">${icon('verified')}認証済み${v.label ? ` · ${esc(v.label)}` : ''}</span>`
+    : `<span class="verified-badge" title="${esc(title)}" aria-label="${esc(title)}" role="img">${icon('verified')}</span>`;
+}
 
 // ---------- リアルタイム接続 (DM の新着・入力中・既読・オンライン) ----------
 const RT = (() => {
@@ -769,6 +777,7 @@ async function viewUser(username, tab = 'posts') {
         <h2>${esc(user.displayName)}${adminBadge(user, true)}</h2>
         <div class="handle">@${esc(user.username)}</div>
         ${user.bio ? `<p class="hero-bio">${richText(user.bio)}</p>` : isMe ? '<p class="hero-bio muted">自己紹介を書いてみましょう</p>' : ''}
+        ${user.verified ? `<p class="verified-note">${icon('verified')}<span>IppO 運営が確認したアカウントです${user.verified.label ? `（${esc(user.verified.label)}）` : ''}</span></p>` : ''}
         <div class="hero-meta"><span>${icon('calendar')}${new Date(user.createdAt).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}から利用</span></div>
         <div class="stats">
           <div class="stat"><b>${user.stats.posts}</b><span>投稿</span></div>
@@ -790,7 +799,8 @@ async function viewUser(username, tab = 'posts') {
 function editProfile(user) {
   openPanel('プロフィールを編集', `<div class="av-editor" id="av-editor"></div>
     <form class="form-stack" id="profile-form">
-      <label class="field"><span class="field-label">表示名</span><input class="input" name="displayName" maxlength="50" value="${esc(user.displayName)}" required></label>
+      <label class="field"><span class="field-label">表示名</span><input class="input" name="displayName" maxlength="50" value="${esc(user.displayName)}" required>
+        ${me.verified ? `<span class="field-hint">${icon('verified', 'ic-sm')} 表示名を変えると、運営が確認し直すまで認証マークが外れます</span>` : ''}</label>
       <label class="field"><span class="field-label">自己紹介</span><textarea class="textarea" name="bio" maxlength="160" rows="4" placeholder="好きなこと、部活、ひとことなど">${esc(user.bio || '')}</textarea><span class="field-hint" id="bio-count"></span></label>
       <p class="form-error" id="profile-error"></p>
       <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>キャンセル</button><button class="btn btn-primary" type="submit">保存</button></div>
@@ -1375,6 +1385,24 @@ async function viewAdmin(q = '') {
   } catch (e) { $('#admin-stats').innerHTML = emptyState({ icon: 'alert', title: e.message }); }
   loadAdminUsers(q);
 }
+// 認証マークを付ける (メモは任意: 生徒会・先生 など)
+function grantVerification(name, label = '') {
+  openPanel('認証マークを付ける', `<form class="form-stack" id="verify-form">
+      <p class="text-sm" style="color:var(--text-2)">@${esc(name)} の名前の横に ${icon('verified', 'ic-sm verified-inline')} を表示します。<b>権限は増えません</b>。本人であることを確認したアカウントにだけ付けてください。</p>
+      <label class="field"><span class="field-label">メモ <span class="muted">（任意・20文字まで）</span></span>
+        <input class="input" name="label" maxlength="20" value="${esc(label)}" placeholder="例: 生徒会 / 先生 / 写真部 部長"><span class="field-hint">プロフィールに「認証済み · メモ」と表示されます</span></label>
+      <p class="field-hint">本人が表示名を変えると、確認し直すまで印は外れます。</p>
+      <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>キャンセル</button><button class="btn btn-primary" type="submit">付ける</button></div>
+    </form>`, (root, close) => {
+    $('#verify-form', root).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await api(`/admin/users/${name}/verify`, { method: 'PUT', body: { label: e.target.label.value } });
+        close(); toast(`@${name} に認証マークを付けました`, 'success'); loadAdminUsers($('#admin-search')?.q.value.trim() || '');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  });
+}
 async function loadAdminUsers(q) {
   const el = $('#admin-users');
   el.innerHTML = `<div class="list-card">${'<div class="list-item"><div class="sk sk-circle"></div><div style="flex:1"><div class="sk sk-line" style="width:40%"></div></div></div>'.repeat(3)}</div>`;
@@ -1384,14 +1412,24 @@ async function loadAdminUsers(q) {
   el.innerHTML = `<div class="list-card">${users.map((u) => `<div class="list-item admin-user" data-u="${esc(u.username)}">
       ${avatar(u, 'sm', true)}
       <div class="grow">
-        <div class="title">${esc(u.displayName)} <span class="muted text-sm" style="font-weight:500">@${esc(u.username)}</span>${adminBadge(u, true)}</div>
+        <div class="title">${esc(u.displayName)} <span class="muted text-sm" style="font-weight:500">@${esc(u.username)}</span>${adminBadge(u, true)}${u.verification?.status === 'pending' ? `<span class="chip chip-warn" title="認証した時の表示名: ${esc(u.verification.verifiedName)}">認証保留中（表示名を変更）</span>` : ''}</div>
         <div class="desc">${new Date(u.createdAt).toLocaleDateString('ja-JP')} 登録${u.invitedBy ? ` · <a href="#/u/${esc(u.invitedBy)}">@${esc(u.invitedBy)}</a> の招待` : ''} · 投稿 ${u.posts} · フォロワー ${u.followers}${u.invited ? ` · 招待した人 ${u.invited}` : ''}</div>
       </div>
-      ${u.isAdmin ? '' : `<button class="icon-btn" type="button" data-admin-menu aria-label="操作">${icon('more')}</button>`}
+      <button class="icon-btn" type="button" data-admin-menu data-vstatus="${u.verification?.status || 'none'}" data-vlabel="${esc(u.verification?.label || '')}" data-admin-target="${u.isAdmin ? 1 : 0}" aria-label="操作">${icon('more')}</button>
     </div>`).join('')}</div>`;
   $$('[data-admin-menu]', el).forEach((b) => b.addEventListener('click', () => {
-    const name = b.closest('[data-u]').dataset.u;
+    const name = b.closest('[data-u]').dataset.u, vs = b.dataset.vstatus, vlabel = b.dataset.vlabel;
+    const verifyItems = [
+      { icon: 'verified', label: vs === 'none' ? '認証マークを付ける' : vs === 'pending' ? '確認し直して認証マークを戻す' : '認証マークのメモを変える', run: () => grantVerification(name, vlabel) },
+      ...(vs !== 'none' ? [{ icon: 'x', label: '認証マークを外す', danger: true, run: async () => {
+        if (!(await confirmDialog({ title: `@${name} の認証マークを外しますか？`, body: '権限は変わりません。名前の横の印が消えます。', ok: '外す', danger: true }))) return;
+        try { await api(`/admin/users/${name}/verify`, { method: 'DELETE' }); toast(`@${name} の認証マークを外しました`); loadAdminUsers($('#admin-search').q.value.trim()); } catch (e) { toast(e.message, 'error'); }
+      } }] : []),
+    ];
+    // 管理者に対しては認証マークの操作だけ
+    if (b.dataset.adminTarget === '1') return openMenu(b, verifyItems);
     openMenu(b, [
+      ...verifyItems,
       { icon: 'user', label: 'プロフィールを見る', run: () => { location.hash = '#/u/' + name; } },
       { icon: 'logout', label: '強制ログアウト', run: async () => {
         if (!(await confirmDialog({ title: `@${name} を強制ログアウトしますか？`, body: 'すべての端末でログアウトされます。パスワードを知っていれば、またログインできます。', ok: 'ログアウトさせる' }))) return;

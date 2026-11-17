@@ -463,6 +463,7 @@ module.exports = function install(app, ctx) {
     res.json({ users: rows.map((u) => ({
       ...publicUser(u),
       isAdmin: isAdmin(u),
+      verification: ctx.verificationStatus ? ctx.verificationStatus(u) : { status: 'none' },
       invitedBy: u.invited_by ? by.get(u.invited_by)?.username || null : null,
       posts: count('SELECT COUNT(*) AS n FROM posts WHERE user_id = ? AND repost_of IS NULL', u.id),
       followers: count('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?', u.id),

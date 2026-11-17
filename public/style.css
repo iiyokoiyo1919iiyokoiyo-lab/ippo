@@ -1093,3 +1093,18 @@ a.announce-title:hover { color: var(--accent-text); }
 .lightbox.single .lb-prev, .lightbox.single .lb-next { display: none; }
 .lb-count { position: absolute; bottom: calc(16px + var(--safe-bottom)); left: 50%; transform: translateX(-50%); color: rgba(255, 255, 255, .85); font-size: var(--fs-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
 @media (max-width: 767px) { .lb-prev, .lb-next { display: none; } }
+
+/* 認証マーク */
+:root { --verified: #0f9d8a; }
+:root[data-theme="dark"] { --verified: #3fd3bd; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --verified: #3fd3bd; } }
+.verified-badge { display: inline-flex; vertical-align: -2px; margin-left: 3px; color: var(--verified); flex: none; }
+.verified-badge .ic { width: 16px; height: 16px; }
+.post-name .verified-badge { margin-left: -2px; }
+.page-head h1 .verified-badge .ic { width: 18px; height: 18px; }
+.verified-label { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 7px; margin-left: 8px; border-radius: var(--r-full); background: color-mix(in srgb, var(--verified) 12%, transparent); color: var(--verified); font-size: var(--fs-xs); font-weight: 750; vertical-align: 5px; }
+.verified-label .ic { width: 15px; height: 15px; }
+.verified-note { display: flex; align-items: center; gap: 6px; margin-top: var(--s3); font-size: var(--fs-sm); color: var(--text-2); }
+.verified-note .ic { width: 18px; height: 18px; color: var(--verified); flex: none; }
+.verified-inline { color: var(--verified); display: inline; vertical-align: -3px; }
+.chip-warn { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); margin-left: 6px; }

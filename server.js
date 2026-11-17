@@ -79,7 +79,8 @@ function createSession(req, res, userId) {
 
 // 公開するユーザー情報 (管理者かどうかも含める: 名前の横に管理者バッジを出すため)
 const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at, isAdmin: isAdmin(u),
-  avatar: ctx.avatarOf ? ctx.avatarOf(u.id) : null }; // アイコン (写真 / 絵文字)。未設定なら null
+  avatar: ctx.avatarOf ? ctx.avatarOf(u.id) : null, // アイコン (写真 / 絵文字)。未設定なら null
+  verified: ctx.verifiedOf ? ctx.verifiedOf(u) : null }; // 認証マーク (管理者が付与)
 // 管理者: 環境変数 ADMIN_USERS (カンマ区切りのユーザー名) で指定する。未設定なら RCN413
 const ADMINS = new Set(String(process.env.ADMIN_USERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
 const isAdmin = (u) => !!u && ADMINS.has(String(u.username).toLowerCase());
@@ -309,6 +310,7 @@ require('./realtime')(app, ctx); // DM のオンライン表示・入力中・�
 require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真
+require('./verify')(app, ctx); // 認証マーク
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
