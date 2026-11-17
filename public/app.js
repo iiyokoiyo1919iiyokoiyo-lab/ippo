@@ -505,12 +505,12 @@ function composeHtml({ placeholder = 'いまどうしてる？', context = '', s
     </div>
   </div>`;
 }
-function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
+function bindCompose(root, { replyTo = null, onDone, extra = {}, prefill = '', presetImages = [] } = {}) {
   const ta = $('textarea', root), btn = $('.composer-foot .btn', root), bar = $('.ring .bar', root), ring = $('.ring', root), num = $('.ring-num', root), wrap = $('.ring-wrap', root);
   const C = 2 * Math.PI * 10;
   // 添付する写真 (端末で縮めてから先にアップロードしておく)
   const imgBox = $('.composer-images', root), fileInput = $('.composer-photo input', root);
-  let images = []; // { key, id, url, uploading }
+  let images = presetImages.map((im) => ({ key: Math.random().toString(36).slice(2), id: im.id, url: im.url, uploading: false })); // { key, id, url, uploading }
   const renderImages = () => {
     imgBox.innerHTML = images.map((im) => `<div class="composer-img${im.uploading ? ' uploading' : ''}" data-key="${im.key}">
       <img src="${im.url}" alt="">${im.uploading ? '<span class="composer-img-spin"></span>' : ''}
@@ -564,10 +564,12 @@ function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
     btn.classList.remove('is-loading');
   });
   update();
+  if (prefill) ta.value = prefill;
+  if (images.length || prefill) { renderImages(); update(); }
   return ta;
 }
 // 投稿作成モーダル (返信 / コミュニティ / 今日の質問 にも使う)
-function openCompose({ replyTo = null, handle = '', extra = {}, title = '', placeholder = '', quote = null } = {}) {
+function openCompose({ replyTo = null, handle = '', extra = {}, title = '', placeholder = '', quote = null, prefill = '', presetImages = [] } = {}) {
   if (!me) return openAuth();
   const dlg = $('#compose-dialog'), slot = $('#compose-modal-slot');
   if (!replyTo && !quote && !extra.question && !extra.community && currentCommunity) extra = { community: currentCommunity.slug };
@@ -580,7 +582,7 @@ function openCompose({ replyTo = null, handle = '', extra = {}, title = '', plac
   $('#compose-title').textContent = replyTo ? 'コメントする' : quote ? '引用リポスト' : extra.question ? '今日の質問に答える' : '新しい投稿';
   slot.innerHTML = composeHtml({ placeholder: placeholder || (quote ? 'ひとこと添える' : replyTo ? 'コメントを書く' : 'いまどうしてる？'), context, submit: replyTo ? 'コメント' : quote ? '投稿' : '投稿する' });
   if (quote) $('.composer-main', slot).insertAdjacentHTML('beforeend', `<div class="compose-quote">${quoteEmbed(quote)}</div>`);
-  const ta = bindCompose(slot, { replyTo, extra, onDone: (post) => {
+  const ta = bindCompose(slot, { replyTo, extra, prefill, presetImages, onDone: (post) => {
     closeModal(dlg);
     toast(replyTo ? 'コメントしました' : quote ? '引用リポストしました' : '投稿しました', 'success');
     // いま見ている画面に関係する投稿なら、その場に追加する
@@ -797,8 +799,8 @@ async function viewPost(id) {
 // プロフィール
 async function viewUser(username, tab = 'posts') {
   main.innerHTML = pageHead({ title: '@' + esc(username), back: '#/' }) + loadingBlock();
-  let user;
-  try { ({ user } = await api('/users/' + encodeURIComponent(username) + '?before=0', { noAuthPrompt: true })); }
+  let user, horse;
+  try { ({ user, horse } = await api('/users/' + encodeURIComponent(username) + '?before=0', { noAuthPrompt: true })); }
   catch (e) { main.innerHTML = pageHead({ title: 'プロフィール', back: '#/' }) + emptyState({ icon: 'user', title: e.message }); return; }
   const isMe = me && me.id === user.id;
   const actions = isMe
@@ -813,6 +815,7 @@ async function viewUser(username, tab = 'posts') {
         <div class="handle">@${esc(user.username)}</div>
         ${user.bio ? `<p class="hero-bio">${richText(user.bio)}</p>` : isMe ? '<p class="hero-bio muted">自己紹介を書いてみましょう</p>' : ''}
         ${user.verified ? `<p class="verified-note">${icon('verified')}<span>IppO 運営が確認したアカウントです${user.verified.label ? `（${esc(user.verified.label)}）` : ''}</span></p>` : ''}
+        ${horseNote(horse)}
         <div class="hero-meta"><span>${icon('calendar')}${new Date(user.createdAt).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}から利用</span></div>
         <div class="stats">
           <div class="stat"><b>${user.stats.posts}</b><span>投稿</span></div>
@@ -985,6 +988,9 @@ async function viewSearch(q) {
     res.innerHTML = `<a class="card pw-banner" href="#/pixel">
         <span class="pw-banner-art" aria-hidden="true">${Array.from({ length: 36 }, (_, i) => `<i style="background:${['#4b55f0', '#1f2766', '#4CC9F0', '#FFD43B', '#F06EAA', '#94D82D', '#ffffff', '#7B4AE2', '#F4802A'][(i * 7 + (i >> 2)) % 9]}"></i>`).join('')}</span>
         <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、60秒に1マスずつ描こう</span></span>${icon('chevron', 'chev')}</a>
+      <a class="card pw-banner horse-banner" href="#/horse">
+        <span class="horse-banner-art" aria-hidden="true">🐴</span>
+        <span class="pw-banner-text"><b>117万分の1 競走馬版</b><span>ミニゲーム · 今年生まれる馬の一頭になって、その一生をたどる</span></span>${icon('chevron', 'chev')}</a>
       <div class="shortcuts">
         <a class="card shortcut" href="#/schedule"><span class="shortcut-icon">${icon('calendar')}</span><b>予定表</b><span>学校の行事</span></a>
         <a class="card shortcut" href="#/q"><span class="shortcut-icon">${icon('sparkle')}</span><b>今日の質問</b><span>みんなの回答</span></a>
@@ -2478,6 +2484,7 @@ function route() {
   if (h === '/news') { setActiveNav('news'); return viewNews(); }
   if ((m = h.match(/^\/news\/(\d+)/))) { setActiveNav('news'); return viewNewsItem(m[1]); }
   if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
+  if (h === '/horse') { setActiveNav('horse'); return viewHorse(); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
   if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) { setActiveNav(''); return viewInviteLanding(m[1]); }
@@ -2703,3 +2710,37 @@ const VB = (() => {
   loadScheduleWidget();
   route();
 })();
+
+// ---------- ミニゲーム「117万分の1 競走馬版」 (非公式のファン作品) ----------
+// ゲームは /games/horse/ にあり、同じドメインの iframe で開く。ゲームとのやり取りは postMessage (同じドメインからだけ受け取る)
+const HORSE_RARITY = { g1: 'UR', g2: 'SSR', g3: 'SR', l: 'R', n: 'N' };
+function horseNote(h) {
+  if (!h || (!h.best && !h.badges && !h.births)) return '';
+  const parts = [h.best ? `最高 <b>${esc(HORSE_RARITY[h.best] || '')}</b>` : '', `バッジ ${Number(h.badges) || 0}/${Number(h.badgeTotal) || 29}`, h.births ? `${Number(h.births)}回生まれた` : ''].filter(Boolean);
+  return `<a class="horse-note" href="#/horse"><span aria-hidden="true">🐴</span><span>117万分の1 競走馬版: ${parts.join(' · ')}</span></a>`;
+}
+function viewHorse() {
+  main.innerHTML = pageHead({ title: '117万分の1 競走馬版', sub: 'ミニゲーム · 非公式のファン作品' }) +
+    `<div class="horse-wrap"><iframe class="horse-frame" id="horse-frame" src="/games/horse/" title="117万分の1 競走馬版"></iframe></div>`;
+  const frame = $('#horse-frame');
+  // ゲームの中で画面全体の演出 (カットイン・下のボタン) が使えるよう、見えている高さぴったりにする
+  const fit = () => {
+    const tab = $('.tabbar'), tabH = tab && getComputedStyle(tab).display !== 'none' ? tab.getBoundingClientRect().height : 0;
+    const top = frame.getBoundingClientRect().top + window.scrollY;
+    frame.style.height = Math.max(380, window.innerHeight - top - tabH) + 'px';
+  };
+  fit(); window.scrollTo(0, 0);
+  window.addEventListener('resize', fit);
+  viewCleanup = () => window.removeEventListener('resize', fit);
+}
+window.addEventListener('message', (e) => {
+  const frame = $('#horse-frame');
+  if (!frame || e.source !== frame.contentWindow || e.origin !== location.origin) return;
+  const d = e.data;
+  if (!d || typeof d !== 'object' || d.source !== 'ippo-horse') return;
+  if (d.type === 'login') return openAuth();
+  if (d.type === 'share') {
+    const id = Number.isInteger(d.imageId) && d.imageId > 0 ? d.imageId : null;
+    openCompose({ prefill: String(d.text || '').slice(0, 400), presetImages: id ? [{ id, url: '/api/images/' + id }] : [] });
+  }
+});

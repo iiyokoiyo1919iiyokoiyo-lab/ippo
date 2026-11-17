@@ -1,0 +1,17 @@
+/* IppO の中で動かすための小さな追加 (元のゲームの見た目はそのまま) */
+html, body { max-width: 100%; overflow-x: hidden; }
+/* みんなの結果: 投稿者 (IppO のアイコンと表示名) */
+.ippo-who { display: inline-flex; align-items: center; gap: 0.3rem; color: inherit; text-decoration: none; vertical-align: middle; max-width: 100%; }
+a.ippo-who:hover { text-decoration: underline; }
+.ippo-who.mine { font-weight: 700; color: var(--accent); }
+.ippo-av { flex: none; display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; overflow: hidden; font-size: 0.7rem; font-weight: 800; color: #fff; line-height: 1; }
+.ippo-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* IppO でシェア */
+.btn-ippo { background: #4b55f0; color: #fff; border: 2px solid #4b55f0; width: 100%; }
+.btn-ippo:disabled { opacity: 0.6; }
+.btn-ippo:focus-visible { outline: 3px solid var(--hero); outline-offset: 3px; }
+/* ログイン前の図鑑の取りこみ */
+.ippo-import { margin: 1rem 0; padding: 1rem; border-radius: 0.8rem; background: var(--surface); border: 2px solid var(--line); color: var(--ink); }
+.ippo-import p { margin: 0 0 0.7rem; }
+.ippo-import .btn { margin: 0 0.5rem 0.6rem 0; width: auto; }
+.ippo-import .small { margin: 0; }

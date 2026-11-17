@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="今年生まれる馬の一頭になって、その一生をたどる非公式のファン作品ゲーム。図鑑・実績・10連馬生・みんなの結果つき。">
+<title>117万分の1 競走馬版</title>
+<style>
+:root{
+  --paper:#F6F4FF; --surface:#FFFFFF; --ink:#33345A; --muted:#6B6B8F; --line:#E2DDF7;
+  --accent:#2E8F79; --hero:#5568E0;
+  --mint:#C4EEE0; --lav:#E0DBFF; --pink:#FFDCE8; --sky:#D5E9FF; --butter:#FFF1B8;
+  --primary:#93A5F9; --on-primary:#1E2150; --gold:#FFD35E;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#1C1A2E; --surface:#28253F; --ink:#F0EDFF; --muted:#B9B4D8; --line:#3A3560;
+    --accent:#7FE0C0; --hero:#B3C0FF;
+    --mint:#2C5A4D; --lav:#383268; --pink:#5A3447; --sky:#2D4766; --butter:#5A5126;
+    --primary:#A8B7FF; --on-primary:#15163A; --gold:#FFD35E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#1C1A2E; --surface:#28253F; --ink:#F0EDFF; --muted:#B9B4D8; --line:#3A3560;
+  --accent:#7FE0C0; --hero:#B3C0FF;
+  --mint:#2C5A4D; --lav:#383268; --pink:#5A3447; --sky:#2D4766; --butter:#5A5126;
+  --primary:#A8B7FF; --on-primary:#15163A; --gold:#FFD35E;
+  color-scheme: dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif;
+  font-size:1rem; line-height:1.8; -webkit-text-size-adjust:100%;
+}
+.app{max-width:34rem; margin:0 auto; padding:1.5rem 1.25rem 7rem; min-height:100vh;}
+.display{font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif; font-weight:900; letter-spacing:0;}
+.muted{color:var(--muted);}
+.small{font-size:0.84rem; line-height:1.7;}
+h1,h2,h3,p{margin:0;}
+.panel{background:var(--lav); border-radius:1.6rem; padding:1.6rem 1.3rem 1.8rem;}
+.kicker{display:inline-block; background:var(--mint); color:var(--ink); font-weight:700; font-size:0.9rem; padding:0.05rem 0.9rem; border-radius:99px;}
+.hero-num{font-size:clamp(3.2rem,18vw,5.6rem); line-height:1.1; color:var(--hero); margin-top:0.7rem;}
+.hero-sub{margin-top:1rem; font-size:1.02rem;}
+.btn{
+  appearance:none; border:0; cursor:pointer; font:inherit; font-weight:700;
+  padding:0.95rem 1.2rem; border-radius:1.1rem; min-height:3rem;
+}
+.btn-primary{background:var(--primary); color:var(--on-primary);}
+.btn-ghost{background:var(--surface); color:var(--ink); border:2px solid var(--line);}
+.btn-ghost[aria-pressed="true"]{background:var(--mint); border-color:var(--mint);}
+.btn:focus-visible,summary:focus-visible{outline:3px solid var(--hero); outline-offset:3px;}
+.start .btn{margin-top:1.4rem; width:100%;}
+.start .btn + .btn{margin-top:0.7rem;}
+.start .foot{margin-top:1.6rem; padding:0 0.3rem;}
+
+.timeline{list-style:none; margin:0; padding:0.4rem 0 0;}
+.step{display:grid; grid-template-columns:3.6rem 1fr; column-gap:0.5rem; animation:in 0.3s ease-out both;}
+.step .age{font-weight:700; color:var(--accent); padding-top:0.1rem; text-align:right; padding-right:0.2rem; line-height:1.35;}
+.step .age small{display:block; font-weight:500; color:var(--muted); font-size:0.78rem;}
+.step .body{position:relative; border-left:4px solid var(--line); padding:0 0 1.35rem 1.1rem;}
+.step .body::before{content:""; position:absolute; left:-0.62rem; top:0.45rem; width:1rem; height:1rem; border-radius:50%; background:var(--mint); border:3px solid var(--paper); box-shadow:0 0 0 2px var(--accent);}
+.step.hit .body{border-left-color:var(--gold);}
+.step.hit .body::before{background:var(--gold); box-shadow:0 0 0 2px var(--gold);}
+.step .head{font-weight:700; font-size:1rem;}
+.step .txt{margin-top:0.1rem;}
+.step .kid{margin-top:0.45rem; padding:0.3rem 0.8rem; border-radius:0.8rem; background:var(--butter); font-size:0.92rem;}
+.step .kid.hit{font-weight:700;}
+.step.minor .head{font-weight:500; color:var(--muted); font-size:0.88rem;}
+@keyframes in{from{opacity:0; transform:translateY(0.4rem);} to{opacity:1; transform:none;}}
+@media (prefers-reduced-motion: reduce){.step{animation:none;}}
+
+.bar{
+  position:fixed; left:0; right:0; bottom:0; z-index:5;
+  background:var(--paper); border-top:1px solid var(--line);
+  padding:0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom,0px));
+}
+.bar .inner{max-width:34rem; margin:0 auto; display:flex; gap:0.5rem;}
+.bar .btn-primary{flex:2;}
+.bar .btn-ghost{flex:1; padding-inline:0.6rem;}
+
+.bib{background:var(--pink); border-radius:1.4rem; padding:0.5rem; margin:0.4rem 0 1.25rem;}
+.bib .in{border:3px dashed var(--surface); border-radius:1.05rem; padding:1.3rem 1rem 1.4rem; text-align:center;}
+.bib .lead{font-size:0.9rem; font-weight:700;}
+.bib .num{font-size:clamp(2.5rem,14vw,4.3rem); line-height:1.2; margin:0.2rem 0 0.1rem; color:var(--hero);}
+.bib .tail{font-size:0.9rem;}
+.result h2{font-size:1.5rem; line-height:1.4;}
+.result .sub{margin-top:0.3rem;}
+.chips{display:flex; flex-wrap:wrap; gap:0.45rem; margin:0.9rem 0 1.4rem; padding:0; list-style:none;}
+.chips li{border-radius:99px; padding:0.2rem 0.9rem; font-size:0.88rem; background:var(--mint);}
+.chips li:nth-child(3n+2){background:var(--lav);}
+.chips li:nth-child(3n){background:var(--pink);}
+.kidsum{margin:0 0 1.2rem; background:var(--sky); border-radius:1.2rem; padding:0.9rem 1.1rem 1rem;}
+.kidsum h3{margin:0 0 0.2rem; font-size:1.05rem;}
+.kidsum ul{margin:0.4rem 0 0; padding-left:1.2rem;}
+.result .btns{display:grid; gap:0.6rem; margin:1.4rem 0 1.6rem;}
+details{border-top:2px solid var(--line); padding:0.9rem 0;}
+summary{cursor:pointer; font-weight:700;}
+details ul{margin:0.6rem 0 0; padding-left:1.2rem;}
+details li{margin:0.35rem 0;}
+.sfx{
+  appearance:none; border:2px solid var(--line); background:var(--surface); color:var(--ink);
+  font:inherit; font-size:0.82rem; font-weight:700; padding:0.2rem 0.8rem; border-radius:99px; cursor:pointer;
+}
+.sfx[aria-pressed="true"]{background:var(--mint); border-color:var(--mint);}
+.sfx:focus-visible{outline:3px solid var(--hero); outline-offset:3px;}
+.app{padding-top:2.8rem;}
+.hidden{display:none !important;}
+
+.cut-svg{width:100%;display:block;height:auto}
+.cut-svg .sky{fill:#D5E9FF} .cut-svg .hill1{fill:#BFE8D6} .cut-svg .grass{fill:#CDEFD9} .cut-svg .track{fill:#FFE6C9}
+.cut-svg .o{stroke:var(--outline);stroke-width:2.6;stroke-linejoin:round}
+.cut-svg .coat,.cut-svg .coat-c{fill:var(--coat)} .cut-svg .far-c,.cut-svg .coat-d{fill:var(--coat-d)} .cut-svg .muzzle{fill:var(--coat-l)}
+.cut-svg .mane{fill:var(--mane)} .cut-svg .hoof{fill:#6B5566} .cut-svg .silk{fill:var(--silk)} .cut-svg .bib-c{fill:var(--bibc)}
+.cut-svg .bibtxt{font:900 24px "Zen Maru Gothic",system-ui,sans-serif;fill:#6B4A5A}
+.cut-svg .leg{transform-origin:0 0}
+.cut-svg .lh{animation:legB .5s linear infinite;animation-delay:-.05s}
+.cut-svg .rh{animation:legB .5s linear infinite;animation-delay:-.18s}
+.cut-svg .lf{animation:legF .5s linear infinite;animation-delay:-.3s}
+.cut-svg .rf{animation:legF .5s linear infinite;animation-delay:-.42s}
+@keyframes legB{0%{transform:rotate(-26deg)}50%{transform:rotate(44deg)}100%{transform:rotate(-26deg)}}
+@keyframes legF{0%{transform:rotate(26deg)}50%{transform:rotate(-46deg)}100%{transform:rotate(26deg)}}
+.cut-svg .bob{animation:bob .25s ease-in-out infinite alternate}
+@keyframes bob{from{transform:translateY(-1px)}to{transform:translateY(5px)}}
+.cut-svg .tail{transform-origin:0 0;animation:wag .35s ease-in-out infinite alternate}
+@keyframes wag{from{transform:rotate(-8deg)}to{transform:rotate(10deg)}}
+.cut-svg .head-g{transform-origin:150px 80px;animation:nod .25s ease-in-out infinite alternate}
+@keyframes nod{from{transform:rotate(-2deg)}to{transform:rotate(3deg)}}
+.cut-svg .scroll-fast{animation:sc 0.5s linear infinite} .cut-svg .scroll-mid{animation:sc2 0.7s linear infinite} .cut-svg .scroll-slow{animation:sc3 6s linear infinite}
+@keyframes sc{to{transform:translateX(-70px)}} @keyframes sc2{to{transform:translateX(-44px)}} @keyframes sc3{to{transform:translateX(-400px)}}
+.cut-svg .cloud{animation:cl 14s linear infinite} @keyframes cl{to{transform:translateX(-60px)}}
+.cut-svg .goal{transform:translateX(590px)}
+.cutin.play .cut-svg .goal{animation:goal 2.4s linear .15s forwards}
+@keyframes goal{from{transform:translateX(590px)}to{transform:translateX(-30px)}}
+.cut-svg .goal .flag{animation:flag .3s ease-in-out infinite alternate;transform-origin:-1px 110px}
+@keyframes flag{from{transform:skewY(-6deg)}to{transform:skewY(6deg)}}
+.cut-svg .speed rect{animation:spd .35s linear infinite;animation-delay:var(--d)}
+@keyframes spd{from{transform:translateX(60px);opacity:0}30%{opacity:.9}to{transform:translateX(-140px);opacity:0}}
+.cut-svg .flash{opacity:0}
+.cutin.play .cut-svg .flash{animation:fl .4s ease-out calc(1.7s + var(--off,0s)) forwards}
+@keyframes fl{0%{opacity:.6}100%{opacity:0}}
+.cut-svg .star{transform-box:fill-box;transform-origin:center;opacity:0}
+.cutin.play .cut-svg .star{animation:st .7s ease-out calc(var(--d) + var(--off,0s)) both}
+@keyframes st{0%{opacity:0;transform:scale(0) rotate(0)}40%{opacity:1;transform:scale(1.2) rotate(40deg)}100%{opacity:0;transform:scale(.4) rotate(90deg)}}
+.cut-svg .conf{opacity:0}
+.cutin.play .cut-svg .conf{animation:fall var(--t) ease-in forwards;animation-delay:calc(1.7s + var(--d) + var(--off,0s))}
+@keyframes fall{0%{opacity:1;transform:translateY(0) rotate(var(--r))}100%{opacity:1;transform:translateY(270px) rotate(calc(var(--r) + 480deg))}}
+.cutin.play .cut-svg .horse-wrap{animation:hrun 2.6s ease-out both}
+@keyframes hrun{0%{transform:translateX(-6px)}60%{transform:translateX(8px)}100%{transform:translateX(10px)}}
+
+.cutin{position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:1rem; background:rgba(51,52,90,.55); cursor:pointer; animation:cfade .2s ease-out;}
+@keyframes cfade{from{opacity:0}to{opacity:1}}
+.cutin-card{width:min(94vw,34rem); background:var(--surface); border-radius:1.6rem; overflow:hidden; padding-bottom:0.9rem; text-align:center;}
+.cutin-stage{position:relative;}
+.cutin-title{position:absolute; left:50%; top:2%; transform:translateX(-50%) scale(.4); opacity:0; white-space:nowrap; font-weight:900; font-size:clamp(1.8rem,9.5vw,2.8rem); line-height:1.15; color:#FF7FA8;
+  text-shadow:3px 3px 0 #fff,-3px -3px 0 #fff,3px -3px 0 #fff,-3px 3px 0 #fff,0 3px 0 #fff,0 -3px 0 #fff,3px 0 0 #fff,-3px 0 0 #fff,0 7px 0 rgba(107,74,90,.3);}
+.lv3 .cutin-title{color:#FFB000;}
+.lv2 .cutin-title{color:#8F7BFF;}
+.lv0 .cutin-title{color:#43BE9B;}
+.cutin.play .cutin-title{animation:cpop .55s cubic-bezier(.2,1.7,.4,1) calc(1.7s + var(--off,0s)) forwards;}
+@keyframes cpop{to{opacity:1; transform:translateX(-50%) scale(1)}}
+.cutin-sub{margin:0.7rem 1rem 0; font-weight:700; font-size:1.05rem; opacity:0;}
+.cutin.play .cutin-sub{animation:cfadeup .5s ease-out calc(1.95s + var(--off,0s)) forwards;}
+@keyframes cfadeup{from{opacity:0; transform:translateY(0.4rem)}to{opacity:1; transform:none}}
+.cutin-hint{margin-top:0.3rem;}
+.cutin:not(.lv2):not(.lv3) .star{display:none;}
+@media (prefers-reduced-motion: reduce){.cutin{display:none !important;}}
+.toggles{position:fixed; z-index:6; top:calc(env(safe-area-inset-top,0px) + 0.6rem); right:0.8rem; display:flex; gap:0.4rem;}
+
+.cut3d{display:none; width:100%; aspect-ratio:5/3; background:#D5E9FF;}
+.cutin.is3d .cut3d{display:block;}
+.cutin.is3d #cutSvg{display:none;}
+.cut-fx{display:none; position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
+.cutin.is3d .cut-fx{display:block;}
+
+/* ===== ロイヤル(紺・紫・金・明朝) ===== */
+:root{
+  --paper:#F5EFE0; --surface:#FFFCF4; --ink:#171A4B; --muted:#585B84; --line:#D8C58A;
+  --accent:#8A6A12; --hero:#1E2A78;
+  --mint:#E9DFB8; --lav:#DDE0F5; --pink:#EBD9E3; --sky:#E4E8F7; --butter:#F4E7B5;
+  --primary:#25308C; --on-primary:#F6E7B1; --gold:#C9A227;
+  --royal:#1B2468; --royal2:#34195F; --goldlt:#E6CC7A; --crimson:#8E1B3A;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0C0F2E; --surface:#161A4A; --ink:#F5EBCB; --muted:#B7B5D8; --line:#6B5C25;
+    --accent:#E3C265; --hero:#E3C265;
+    --mint:#2D2A52; --lav:#232A78; --pink:#3A2350; --sky:#1C2260; --butter:#3E3516;
+    --primary:#3A47B8; --on-primary:#FFF1C2; --gold:#E3C265;
+    --royal:#1F2878; --royal2:#3C2170;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0C0F2E; --surface:#161A4A; --ink:#F5EBCB; --muted:#B7B5D8; --line:#6B5C25;
+  --accent:#E3C265; --hero:#E3C265;
+  --mint:#2D2A52; --lav:#232A78; --pink:#3A2350; --sky:#1C2260; --butter:#3E3516;
+  --primary:#3A47B8; --on-primary:#FFF1C2; --gold:#E3C265;
+  --royal:#1F2878; --royal2:#3C2170;
+}
+body{font-family:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-weight:500; line-height:1.85; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M14 3 L25 14 L14 25 L3 14 Z' fill='none' stroke='%23C9A227' stroke-opacity='.17'/%3E%3C/svg%3E");}
+.display{font-family:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif; font-weight:800;}
+.cut-svg .bibtxt{font-family:"Shippori Mincho","Hiragino Mincho ProN",serif; font-weight:800;}
+.panel{background:var(--royal); color:#F7ECCB; border:3px double var(--gold); border-radius:0.4rem; padding:1.4rem 1.3rem 1.7rem;}
+.panel::before{content:""; display:block; width:3.4rem; height:2.2rem; margin:0 0 0.5rem; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 40'%3E%3Cpath d='M5 33 L8 11 L22 23 L32 5 L42 23 L56 11 L59 33 Z' fill='%23E6CC7A' stroke='%239A7A16' stroke-width='2' stroke-linejoin='round'/%3E%3Crect x='6' y='33' width='52' height='5' rx='2' fill='%23E6CC7A' stroke='%239A7A16' stroke-width='2'/%3E%3Ccircle cx='8' cy='9' r='3.2' fill='%23E6CC7A' stroke='%239A7A16' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='3.8' r='3.2' fill='%23E6CC7A' stroke='%239A7A16' stroke-width='1.5'/%3E%3Ccircle cx='56' cy='9' r='3.2' fill='%23E6CC7A' stroke='%239A7A16' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='28' r='3' fill='%238E1B3A'/%3E%3C/svg%3E") no-repeat left center/contain;}
+.kicker{background:var(--gold); color:#17194A; border-radius:0.2rem; letter-spacing:0.14em; font-weight:700; padding:0.05rem 0.85rem;}
+.hero-num{color:#EBD28A; font-weight:800; letter-spacing:0.02em; text-shadow:0 2px 0 rgba(0,0,0,.35); line-height:1.12; font-size:clamp(2.3rem,12.3vw,4.4rem);}
+.hero-sub{color:#F2E6C2;}
+.btn{border-radius:0.4rem; letter-spacing:0.05em; font-weight:700;}
+.btn-primary{background:var(--primary); color:var(--on-primary); border:2px solid var(--gold);}
+.btn-ghost{background:var(--surface); color:var(--ink); border:2px solid var(--line);}
+.btn-ghost[aria-pressed="true"]{background:var(--butter); border-color:var(--gold);}
+.btn:focus-visible,summary:focus-visible{outline:3px solid var(--gold); outline-offset:3px;}
+.panel .btn-primary{background:var(--gold); color:#17194A; border-color:#F2DC93;}
+.panel .btn-ghost{background:transparent; color:#F7ECCB; border-color:rgba(230,204,122,.75);}
+.step .age{color:var(--accent);}
+.step .body{border-left:2px solid var(--line);}
+.step .body::before{left:-0.52rem; top:0.5rem; width:0.78rem; height:0.78rem; border-radius:0; transform:rotate(45deg); background:var(--surface); border:2px solid var(--gold); box-shadow:none;}
+.step.hit .body{border-left-color:var(--gold);}
+.step.hit .body::before{background:var(--gold); border-color:var(--gold); box-shadow:0 0 0 3px rgba(201,162,39,.25);}
+.step .kid{border-radius:0.25rem; background:var(--butter); border-left:3px solid var(--gold);}
+.bar{border-top:1px solid var(--gold);}
+.bib{background:var(--royal2); border:2px solid var(--gold); border-radius:0.35rem; padding:0.45rem;}
+.bib .in{border:3px double var(--goldlt); border-radius:0.2rem; color:#F7ECCB;}
+.bib .lead{color:var(--goldlt); letter-spacing:0.14em;}
+.bib .lead::before{content:"\25C6  ";} .bib .lead::after{content:"  \25C6";}
+.bib .num{color:#F6DD8B; text-shadow:0 2px 0 rgba(0,0,0,.4); font-weight:800; font-size:clamp(2rem,10.6vw,3.9rem);}
+.bib .tail{color:#F2E6C2;}
+.result h2{font-weight:800; letter-spacing:0.03em;}
+.chips li{border-radius:0.2rem; border:1px solid var(--gold); background:var(--surface); color:var(--ink);}
+.chips li:nth-child(3n+2){background:var(--lav);}
+.chips li:nth-child(3n){background:var(--butter);}
+.kidsum{border-radius:0.3rem; border-left:4px solid var(--gold); background:var(--sky);}
+details{border-top:1px solid var(--gold);}
+.sfx{border:1px solid var(--gold); background:var(--surface); color:var(--ink); border-radius:0.25rem; font-weight:700;}
+.sfx[aria-pressed="true"]{background:var(--butter); border-color:var(--gold);}
+.cutin{background:rgba(8,10,38,.82);}
+.cutin-card{border:3px double var(--gold); border-radius:0.5rem; background:var(--surface);}
+.cutin-title{color:#B3203F;}
+.lv3 .cutin-title{color:#E0A800;}
+.lv2 .cutin-title{color:#5B2D9A;}
+.lv0 .cutin-title{color:#25308C;}
+.cutin-sub{color:var(--ink);}
+.cardbox{margin:0 0 1.4rem;}
+.cardbox h3{margin:0 0 0.5rem; font-size:1.1rem;}
+.cardwrap{position:relative; overflow:hidden; border-radius:0.6rem; box-shadow:0 10px 28px rgba(10,8,50,.45); background:#1A1450; aspect-ratio:1600/1000;}
+.cardwrap img{display:block; width:100%; height:auto;}
+.cardwrap::after{content:""; position:absolute; inset:0; background:linear-gradient(110deg, transparent 35%, rgba(255,255,255,.55) 48%, transparent 60%); transform:translateX(-120%); animation:cardsweep 3.6s ease-in-out infinite; pointer-events:none;}
+@keyframes cardsweep{0%{transform:translateX(-120%)}55%,100%{transform:translateX(120%)}}
+@media (prefers-reduced-motion: reduce){.cardwrap::after{animation:none; display:none;}}
+.namerow{display:flex; gap:0.5rem; align-items:center; margin:0.8rem 0;}
+.namerow label{font-weight:700; white-space:nowrap;}
+.namerow input{flex:1; min-width:0; font:inherit; font-size:1.1rem; padding:0.6rem 0.8rem; border:2px solid var(--gold); background:var(--surface); color:var(--ink); border-radius:0.4rem;}
+.namerow .btn{padding:0.6rem 0.8rem; white-space:nowrap; min-height:2.8rem;}
+#btnCard{width:100%;}
+
+/* ---------- みんなの結果(ネット版) ---------- */
+.board{margin-top:2rem; background:var(--surface); border:2px solid var(--line); border-radius:1.4rem; padding:1.2rem 1rem 1.1rem;}
+.board h2{font-size:1.25rem; line-height:1.4;}
+.board .stat{margin-top:0.35rem; font-variant-numeric:tabular-nums;}
+.board .tally{display:flex; flex-wrap:wrap; gap:0.35rem; margin:0.7rem 0 0; padding:0; list-style:none;}
+.board .tally li{font-size:0.8rem; font-weight:700; padding:0.05rem 0.6rem; border-radius:99px; background:var(--lav); font-variant-numeric:tabular-nums;}
+.tabs{display:flex; gap:0.4rem; margin:0.9rem 0 0.5rem;}
+.tabs button{appearance:none; font:inherit; font-size:0.9rem; font-weight:700; cursor:pointer; flex:1; padding:0.45rem 0.6rem; border-radius:99px; border:2px solid var(--line); background:var(--paper); color:var(--ink);}
+.tabs button[aria-selected="true"]{background:var(--primary); border-color:var(--primary); color:var(--on-primary);}
+.tabs button:focus-visible{outline:3px solid var(--hero); outline-offset:2px;}
+.feed{list-style:none; margin:0; padding:0;}
+.feed li{display:grid; grid-template-columns:2.9rem 1fr auto; gap:0.2rem 0.7rem; align-items:center; padding:0.6rem 0; border-top:1px solid var(--line);}
+.feed li:first-child{border-top:0;}
+.feed .rk{grid-row:span 2; display:grid; place-items:center; height:2.4rem; border-radius:0.7rem; font-size:0.8rem; font-weight:900; color:#fff; letter-spacing:0.02em;}
+.feed .rk-g1{background:linear-gradient(135deg,#6A1B9A,#C0287F);} .feed .rk-g2{background:linear-gradient(135deg,#7B2A8F,#E0801F);}
+.feed .rk-g3{background:linear-gradient(135deg,#1C5DA8,#2BB5D4);} .feed .rk-l{background:linear-gradient(135deg,#12806D,#58C9A0);}
+.feed .rk-n{background:linear-gradient(135deg,#4B4F8A,#8486C4);}
+.feed .nm{font-weight:800; min-width:0; overflow-wrap:anywhere; line-height:1.4;}
+.feed .odds{font-weight:800; color:var(--hero); white-space:nowrap; font-variant-numeric:tabular-nums; text-align:right;}
+.feed .meta{grid-column:2 / 4; font-size:0.8rem; color:var(--muted); line-height:1.5; min-width:0; overflow-wrap:anywhere;}
+.feed .mine{color:var(--accent); font-weight:700;}
+.feed .rank{font-variant-numeric:tabular-nums; color:var(--muted); font-weight:700; margin-right:0.3rem;}
+.board .empty{padding:0.8rem 0 0.2rem;}
+.post{display:grid; gap:0.4rem; margin:0 0 1.2rem; padding:1rem; border-radius:1.2rem; background:var(--sky);}
+.post .btn{width:100%;}
+.nickrow{margin:0 0 0.2rem;}
+.nickrow label{flex:none; font-weight:700; font-size:0.9rem;}
+.post .btn[disabled]{opacity:0.6; cursor:default;}
+
+/* ---------- 10連・図鑑・実績 ---------- */
+.ten .panel{margin-bottom:1rem;}
+.ten-title{font-size:1.5rem; line-height:1.4; margin-top:0.5rem;}
+.ten-hint{margin:0 0 0.4rem;}
+.tenlist{list-style:none; margin:0; padding:0; display:grid; gap:0.5rem;}
+.tenlist button{appearance:none; font:inherit; color:var(--ink); text-align:left; cursor:pointer; width:100%; display:grid; grid-template-columns:2.9rem 1fr auto; gap:0.1rem 0.7rem; align-items:center; padding:0.65rem 0.8rem; border-radius:1rem; border:2px solid var(--line); background:var(--surface);}
+.tenlist button:focus-visible{outline:3px solid var(--hero); outline-offset:2px;}
+.tenlist button.best{border-color:var(--gold); background:var(--butter);}
+.tenlist .rk, .zgrid .rk{grid-row:span 2; display:grid; place-items:center; height:2.4rem; border-radius:0.7rem; font-size:0.8rem; font-weight:900; color:#fff;}
+.rk-g1{background:linear-gradient(135deg,#6A1B9A,#C0287F);} .rk-g2{background:linear-gradient(135deg,#7B2A8F,#E0801F);}
+.rk-g3{background:linear-gradient(135deg,#1C5DA8,#2BB5D4);} .rk-l{background:linear-gradient(135deg,#12806D,#58C9A0);}
+.rk-n{background:linear-gradient(135deg,#4B4F8A,#8486C4);}
+.tenlist .nm{font-weight:800; min-width:0; overflow-wrap:anywhere; line-height:1.4;}
+.tenlist .odds{font-weight:800; color:var(--hero); white-space:nowrap; font-variant-numeric:tabular-nums;}
+.tenlist .meta{grid-column:2 / 4; font-size:0.8rem; color:var(--muted); line-height:1.5; min-width:0;}
+.tenlist .tag{display:inline-block; margin-left:0.4rem; font-size:0.72rem; font-weight:800; padding:0 0.5rem; border-radius:99px; background:var(--gold); color:#3A2A00; vertical-align:middle;}
+.ten .btns{display:grid; gap:0.6rem; margin:1.4rem 0;}
+.album-head{display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:0.8rem;}
+.album-head h2{font-size:1.6rem;}
+.album-head .btn{min-height:2.6rem; padding:0.5rem 1rem;}
+.zstats{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:0.5rem; margin:0 0 1.4rem;}
+.zstats div{background:var(--lav); border-radius:1rem; padding:0.6rem 0.5rem; text-align:center; min-width:0;}
+.zstats dt{font-size:0.75rem; color:var(--muted); font-weight:700; line-height:1.4;}
+.zstats dd{margin:0; font-size:1.2rem; font-weight:900; font-variant-numeric:tabular-nums; line-height:1.4; overflow-wrap:anywhere;}
+.zh{font-size:1.05rem; margin:0 0 0.5rem;}
+.zh span{font-size:0.85rem; font-variant-numeric:tabular-nums;}
+.badges{list-style:none; margin:0 0 1.6rem; padding:0; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:0.45rem;}
+.badges li{display:flex; gap:0.5rem; align-items:center; padding:0.45rem 0.6rem; border-radius:0.9rem; background:var(--surface); border:2px dashed var(--line); color:var(--muted); min-width:0;}
+.badges li.got{border-style:solid; border-color:var(--gold); background:var(--butter); color:var(--ink);}
+.badges .ic{flex:none; width:1.9rem; height:1.9rem; border-radius:50%; display:grid; place-items:center; font-size:1rem; background:var(--line);}
+.badges li.got .ic{background:var(--gold);}
+.badges b{display:block; font-size:0.86rem; line-height:1.35;}
+.badges small{display:block; font-size:0.72rem; line-height:1.35;}
+.badges div{min-width:0;}
+.zfilter{display:grid; grid-template-columns:repeat(3, minmax(0,1fr));}
+.zfilter button{padding:0.35rem 0.4rem;}
+.zsort{display:flex; justify-content:flex-end; margin:0 0 0.6rem;}
+.zgrid{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:0.5rem;}
+.zgrid button{appearance:none; font:inherit; cursor:pointer; width:100%; height:100%; text-align:left; color:#fff; border:0; border-radius:1rem; padding:0.7rem 0.75rem 0.75rem; display:flex; flex-direction:column; gap:0.15rem; min-width:0;}
+.zgrid button:focus-visible{outline:3px solid var(--hero); outline-offset:2px;}
+.zgrid .lb{font-size:0.75rem; font-weight:900; letter-spacing:0.04em; opacity:0.9;}
+.zgrid .nm{font-weight:800; font-size:1rem; line-height:1.35; overflow-wrap:anywhere;}
+.zgrid .hd{font-size:0.78rem; line-height:1.45; opacity:0.92; overflow-wrap:anywhere;}
+.zgrid .od{font-size:0.82rem; font-weight:800; margin-top:auto; font-variant-numeric:tabular-nums;}
+.zfoot{margin-top:1.2rem;}
+.viewer{position:fixed; inset:0; z-index:20; background:rgba(20,18,40,0.72); display:grid; place-items:center; padding:1rem max(16px, env(safe-area-inset-right,0px)) 1rem max(16px, env(safe-area-inset-left,0px));}
+.viewer-card{background:var(--surface); color:var(--ink); border-radius:1.3rem; padding:1rem; width:100%; max-width:34rem; max-height:100%; overflow:auto; display:grid; gap:0.6rem;}
+.viewer-card h3{font-size:1.15rem;}
+.viewer-card img{width:100%; height:auto; border-radius:0.6rem;}
+.vbtns{display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;}
+.toast{position:fixed; z-index:25; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom,0px) + 1rem); width:min(30rem, calc(100% - 32px)); background:var(--ink); color:var(--paper); border-radius:1rem; padding:0.7rem 1rem; font-weight:700; font-size:0.92rem; line-height:1.6; box-shadow:0 8px 24px rgba(0,0,0,0.25);}
+.newbadges{background:var(--butter); border:2px solid var(--gold); border-radius:1.1rem; padding:0.7rem 0.9rem; margin:0 0 1.2rem;}
+.newbadges h3{font-size:0.95rem;}
+.newbadges ul{margin:0.3rem 0 0; padding-left:1.2rem;}
+.lineage{margin:-0.6rem 0 1.2rem;}
+.unofficial{margin:1.2rem 0 0; padding:0.7rem 0.9rem; border-radius:0.9rem; background:var(--surface); border:2px solid var(--line); color:var(--muted); line-height:1.7;}
+.unofficial strong{color:var(--ink);}
+.result .unofficial{margin:0 0 1rem;}
+.btn-x{display:flex; align-items:center; justify-content:center; gap:0.45rem; text-decoration:none; background:#0F1419; color:#FFFFFF; border:2px solid #0F1419;}
+.btn-x:focus-visible{outline:3px solid var(--hero); outline-offset:3px;}
+.xlogo{font-size:1.15rem; line-height:1;}
+#btnAlbumX{margin:0 0 1.4rem;}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .btn-x{border-color:#3A3F47;} }
+:root[data-theme="dark"] .btn-x{border-color:#3A3F47;}
+.btn-support{display:flex; align-items:center; justify-content:center; text-decoration:none; background:var(--butter); color:var(--ink); border:2px solid var(--gold);}
+.btn-support:focus-visible{outline:3px solid var(--hero); outline-offset:3px;}
+.support-link{display:block; margin-top:1rem; text-align:center; font-weight:700; color:var(--accent);}
+.support-link:focus-visible{outline:3px solid var(--hero); outline-offset:3px; border-radius:0.3rem;}
+</style>
+<link rel="stylesheet" href="ippo.css">
+</head>
+<body>
+<div class="toggles"><button class="sfx" id="btnZukan" type="button">📖 図鑑</button><button class="sfx" id="btnCut" type="button" aria-pressed="true">🎬 演出あり</button><button class="sfx" id="btnSfx" type="button" aria-pressed="true">🔊 音あり</button></div>
+<main class="app" id="app">
+
+<section class="start" id="start">
+  <div class="panel">
+  <p class="kicker">競走馬版</p>
+  <h1 class="display hero-num" id="heroNum">117万分の1</h1>
+  <p class="hero-sub">今年、パートI国のどこかで生まれる馬の一頭になる。どの国で、どんな馬に生まれるかは、統計をもとにランダムに決まる。半年ごとに、その馬の一生が進んでいく。</p>
+  <button class="btn btn-primary" id="btnBorn" type="button">生まれる</button>
+  <button class="btn btn-ghost" id="btnBornTB" type="button">サラブレッドに生まれる</button>
+  <button class="btn btn-ghost" id="btnTen" type="button">10連馬生(10頭ぶんの一生を一度に)</button>
+  </div>
+  <p class="foot small muted">確率はISBC・FAO・IFHAなどの公的な統計をもとにした推定値です。遊びやすくするため、サラブレッドに生まれる確率だけ実際の3倍にしています(結果に出る確率は統計どおり)。効果音とカットインの演出があります。右上のボタンで消せます。「サラブレッドに生まれる」を押すと、必ず競走馬として生まれます(出生国は、サラブレッドの産駒数の割合で決まります)。</p>
+  <p class="unofficial small" id="unofficialNote">このゲームは、個人が作った<strong>非公式</strong>のファン作品です。JRA・地方競馬・IFHA・ISBCなどの競馬の団体や主催者、実在の馬・人物とは関係ありません。競走名や統計は、公開されている情報をもとにしています。</p>
+  <a class="support-link small" href="https://ofuse.me/640dc097" target="_blank" rel="noopener noreferrer">🐴 このゲームを応援する(OFUSE)</a>
+
+<section class="board" id="board" aria-labelledby="boardTitle">
+  <h2 class="display" id="boardTitle">みんなの結果</h2>
+  <p class="small muted stat" id="boardStat">みんなの結果を読み込んでいます…</p>
+  <ul class="tally" id="boardTally"></ul>
+  <div class="tabs" role="tablist" aria-label="表示の切り替え">
+    <button type="button" role="tab" id="tabNew" aria-selected="true" aria-controls="feed">新着</button>
+    <button type="button" role="tab" id="tabRare" aria-selected="false" aria-controls="feed">レア馬ランキング</button>
+  </div>
+  <ol class="feed" id="feed" aria-live="polite"></ol>
+  <p class="small muted empty hidden" id="feedEmpty">まだだれも結果を載せていません。生まれて、結果画面の「みんなの結果に載せる」を押すと、最初の一頭としてここに出ます。</p>
+</section>
+</section>
+
+<section class="story hidden" id="story" aria-live="polite">
+  <ol class="timeline" id="timeline"></ol>
+</section>
+
+<section class="result hidden" id="result"></section>
+
+<section class="ten hidden" id="ten" aria-labelledby="tenTitle">
+  <div class="panel">
+    <p class="kicker">10連馬生</p>
+    <h2 class="display ten-title" id="tenTitle">10頭の一生</h2>
+    <p class="small" id="tenSum"></p>
+  </div>
+  <p class="small muted ten-hint">馬をタップすると、その一生の結果とカードが見られます。</p>
+  <ol class="tenlist" id="tenList"></ol>
+  <div class="btns">
+    <button class="btn btn-ippo" id="btnTenX" type="button">IppOで10連の結果をシェア</button>
+    <button class="btn btn-primary" id="btnTenAgain" type="button">もう一度10連</button>
+    <button class="btn btn-ghost" id="btnTenTB" type="button">サラブレッドで10連</button>
+    <button class="btn btn-ghost" id="btnTenTop" type="button">はじめの画面へ</button>
+  </div>
+</section>
+
+<section class="album hidden" id="album" aria-labelledby="albumTitle">
+  <div class="album-head">
+    <h2 class="display" id="albumTitle">図鑑</h2>
+    <button class="btn btn-ghost" id="btnAlbumBack" type="button">もどる</button>
+  </div>
+  <dl class="zstats" id="zStats"></dl>
+  <button class="btn btn-ippo" id="btnAlbumX" type="button">IppOで図鑑の記録をシェア</button>
+  <h3 class="zh">実績バッジ <span class="muted" id="zBadgeCount"></span></h3>
+  <ul class="badges" id="zBadges"></ul>
+  <h3 class="zh">出会った馬のカード</h3>
+  <div class="tabs zfilter" id="zFilter" role="tablist" aria-label="レア度でしぼる"></div>
+  <div class="zsort"><button type="button" class="sfx" id="zSort" aria-pressed="false">新しい順</button></div>
+  <ul class="zgrid" id="zGrid"></ul>
+  <p class="small muted hidden" id="zEmpty">まだカードがありません。生まれて、一生を最後まで見ると、その馬のカードがここに入ります。</p>
+  <p class="small muted zfoot" id="zFoot">図鑑は、この端末のブラウザに保存されます。ほかの端末やブラウザには引き継がれません。カードは新しい順に500枚まで残り、それを超えると、レア度の低い古いカードから消えます。</p>
+</section>
+
+</main>
+
+
+<div class="cutin hidden" id="cutin" role="dialog" aria-label="勝利の演出" aria-hidden="true">
+  <div class="cutin-card">
+    <div class="cutin-stage">
+<canvas class="cut3d" id="cut3d"></canvas>
+
+<svg class="cut-svg" id="cutSvg" viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="レースに勝つ馬のカットイン" style="--coat:#B98563;--coat-d:#8E5F44;--coat-l:#F6DCC6;--mane:#FF9DC0;--outline:#6B4A5A;--silk:#7C8FF0;--bibc:#FFD35E">
+  <defs><clipPath id="cl"><rect width="400" height="240"/></clipPath></defs>
+  <g clip-path="url(#cl)">
+    <rect class="sky" width="400" height="240"/>
+    <g class="cloud c1"><g transform="translate(60,36)"><ellipse rx="34" ry="12" fill="#fff"/><ellipse cx="-14" cy="-8" rx="16" ry="12" fill="#fff"/><ellipse cx="12" cy="-12" rx="20" ry="14" fill="#fff"/></g></g>
+    <g class="cloud c2"><g transform="translate(250,56)"><ellipse rx="30" ry="10" fill="#fff"/><ellipse cx="-10" cy="-7" rx="14" ry="10" fill="#fff"/><ellipse cx="10" cy="-10" rx="16" ry="12" fill="#fff"/></g></g>
+    <g class="hills"><g class="scroll-slow"><path class="hill1" d="M0 140 C40 104 90 104 130 134 C170 100 230 100 270 132 C310 104 360 104 400 136 C440 104 490 104 530 134 C570 100 630 100 670 132 C710 104 760 104 800 136 L800 160 L0 160 Z"/></g></g>
+    <rect class="grass" y="136" width="400" height="30"/>
+    <g class="rail-g"><g class="scroll-mid">
+      <rect x="0" y="140" width="1000" height="5" rx="2.5" fill="#fff"/>
+      <rect x="0" y="152" width="1000" height="4" rx="2" fill="#fff"/>
+      <rect x="0" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="44" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="88" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="132" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="176" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="220" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="264" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="308" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="352" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="396" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="440" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="484" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="528" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="572" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="616" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="660" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="704" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="748" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="792" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="836" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="880" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="924" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="968" y="134" width="7" height="30" rx="3" fill="#fff"/><rect x="1012" y="134" width="7" height="30" rx="3" fill="#fff"/>
+    </g></g>
+    <rect class="track" y="160" width="400" height="80"/>
+    <g class="scroll-fast"><rect x="10" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="80" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="150" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="220" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="290" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="360" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="430" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="500" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="570" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="640" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="710" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="780" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="850" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="920" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="990" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="1060" y="176" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="1130" y="194" width="38" height="4" rx="2" fill="#fff" opacity=".45"/><rect x="1200" y="212" width="38" height="4" rx="2" fill="#fff" opacity=".45"/></g>
+    <!-- ゴール -->
+    <g class="goal"><g transform="translate(0,0)">
+      <rect x="0" y="160" width="12" height="80" fill="url(#chk)"/>
+      <rect x="-6" y="96" width="5" height="66" rx="2" fill="#fff" stroke="#6B4A5A" stroke-width="1.5"/>
+      <path d="M-1 98 L36 108 L-1 120 Z" fill="#FF9DC0" stroke="#6B4A5A" stroke-width="1.5" class="flag"/>
+    </g></g>
+    <defs><pattern id="chk" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#fff"/><rect width="6" height="6" fill="#6B4A5A"/><rect x="6" y="6" width="6" height="6" fill="#6B4A5A"/></pattern></defs>
+    <!-- スピード線 -->
+    <g class="speed"><rect x="300" y="70" width="70" height="3" rx="1.5" fill="#fff" style="--d:0s"/><rect x="250" y="92" width="90" height="3" rx="1.5" fill="#fff" style="--d:0.15s"/><rect x="320" y="118" width="60" height="3" rx="1.5" fill="#fff" style="--d:0.3s"/><rect x="280" y="196" width="80" height="3" rx="1.5" fill="#fff" style="--d:0.1s"/><rect x="340" y="214" width="60" height="3" rx="1.5" fill="#fff" style="--d:0.25s"/><rect x="230" y="160" width="70" height="3" rx="1.5" fill="#fff" style="--d:0.4s"/></g>
+    <!-- 馬 -->
+    <g transform="translate(40,66) scale(1.1)"><g class="horse-wrap">
+<g id="horse">
+  <!-- 影 -->
+  <ellipse cx="96" cy="152" rx="70" ry="7" fill="#000" opacity=".12" class="shadow"/>
+  <g class="bob">
+    <!-- 尻尾 -->
+    <g transform="translate(36,66)"><g class="tail">
+      <path d="M2 0 C-22 -14 -44 8 -34 40 C-28 24 -14 16 4 20 Z" class="mane o"/>
+      <path d="M-6 6 C-22 4 -32 18 -30 32" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>
+    </g></g>
+    <!-- 奥の脚 -->
+    <g transform="translate(60,100)"><g class="leg lh far"><path class="leg-shape far-c o" d="M-8 0 L8 0 L6 42 L-6 42 Z"/><rect class="hoof o" x="-8" y="40" width="16" height="10" rx="4"/></g></g>
+    <g transform="translate(128,98)"><g class="leg lf far"><path class="leg-shape far-c o" d="M-8 0 L8 0 L6 42 L-6 42 Z"/><rect class="hoof o" x="-8" y="40" width="16" height="10" rx="4"/></g></g>
+    <!-- 手前の脚 -->
+    <g transform="translate(76,102)"><g class="leg rh"><path class="leg-shape coat-c o" d="M-8 0 L8 0 L6 42 L-6 42 Z"/><rect class="hoof o" x="-8" y="40" width="16" height="10" rx="4"/></g></g>
+    <g transform="translate(112,100)"><g class="leg rf"><path class="leg-shape coat-c o" d="M-8 0 L8 0 L6 42 L-6 42 Z"/><rect class="hoof o" x="-8" y="40" width="16" height="10" rx="4"/></g></g>
+    <!-- 胴体 -->
+    <ellipse class="coat o" cx="94" cy="80" rx="66" ry="38"/>
+    <path d="M44 96 C60 112 120 114 142 96" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="4" stroke-linecap="round"/>
+    <!-- ゼッケン(背中の番号布) -->
+    <g transform="translate(46,56) rotate(-6 19 18)">
+      <rect class="bib-c o" x="0" y="0" width="38" height="34" rx="9"/>
+      <text id="bibNum" x="19" y="26" text-anchor="middle" class="bibtxt">1</text>
+    </g>
+    <!-- 首・頭 -->
+    <g class="head-g">
+      <path class="coat o" d="M122 62 C132 40 146 28 162 26 L182 72 C166 88 144 94 128 100 Z"/>
+      <!-- たてがみ(後ろ) -->
+      <path class="mane o" d="M150 16 C128 6 106 22 104 46 C102 66 112 82 124 94 C120 76 124 60 138 50 C150 42 158 32 150 16 Z"/>
+      <!-- 耳(奥) -->
+      <path class="coat-d o" d="M170 20 C170 4 182 -4 190 -2 C192 10 190 22 184 30 Z"/>
+      <!-- 頭 -->
+      <ellipse class="coat o" cx="172" cy="52" rx="36" ry="33"/>
+      <!-- 耳(手前) -->
+      <path class="coat o" d="M152 24 C148 6 158 -6 168 -4 C172 8 172 20 168 30 Z"/>
+      <path d="M156 20 C156 10 160 4 165 2 C166 10 166 16 164 24 Z" fill="#FFB7CC"/>
+      <!-- 鼻先 -->
+      <ellipse class="muzzle o" cx="198" cy="66" rx="22" ry="18"/>
+      <!-- 前髪 -->
+      <path class="mane o" d="M158 22 C146 24 144 40 156 46 C154 38 158 30 168 28 C176 26 182 28 186 34 C184 22 172 16 158 22 Z"/>
+      <!-- 目 -->
+      <ellipse cx="180" cy="50" rx="10" ry="13" fill="#fff" stroke="#3A2F4B" stroke-width="2"/>
+      <ellipse class="pupil" cx="182" cy="52" rx="7" ry="10" fill="#3A2F4B"/>
+      <circle cx="185" cy="46" r="3.4" fill="#fff"/><circle cx="179" cy="57" r="1.8" fill="#fff"/>
+      <path d="M170 38 C174 34 182 33 188 38" fill="none" stroke="#3A2F4B" stroke-width="2.6" stroke-linecap="round"/>
+      <!-- ほっぺ -->
+      <ellipse cx="170" cy="70" rx="9" ry="5.5" fill="#FF9DB8" opacity=".75"/>
+      <!-- 鼻・口 -->
+      <ellipse cx="212" cy="64" rx="2.2" ry="3.2" fill="#3A2F4B"/>
+      <path d="M194 78 Q203 85 212 76" fill="none" stroke="#3A2F4B" stroke-width="2.6" stroke-linecap="round"/>
+    </g>
+    <!-- 騎手 -->
+    <g class="jockey">
+      <g transform="translate(72,4) rotate(6 30 44)">
+        <ellipse cx="30" cy="50" rx="11" ry="13" fill="#fff" stroke="#6B4A5A" stroke-width="2.4"/>
+        <ellipse cx="33" cy="63" rx="10" ry="5.5" fill="#6B5566" stroke="#6B4A5A" stroke-width="2.4"/>
+        <path class="silk o" d="M8 46 C4 28 14 14 28 14 C42 14 48 28 44 46 C34 52 18 52 8 46 Z"/>
+        <path d="M38 28 C50 30 58 36 64 44" fill="none" stroke="#6B4A5A" stroke-width="13" stroke-linecap="round"/>
+        <path d="M38 28 C50 30 58 36 64 44" fill="none" stroke="var(--silk)" stroke-width="8.4" stroke-linecap="round"/>
+        <circle cx="65" cy="45" r="5.4" fill="#FFE3D0" stroke="#6B4A5A" stroke-width="2.2"/>
+        <circle cx="28" cy="1" r="14.5" fill="#FFE3D0" stroke="#6B4A5A" stroke-width="2.4"/>
+        <path class="silk o" d="M13 -1 C12 -16 42 -17 43 -2 C35 -7 22 -7 13 -1 Z"/>
+        <circle cx="19" cy="6" r="3.6" fill="#FF9DB8" opacity=".85"/>
+        <circle cx="34" cy="4" r="2" fill="#3A2F4B"/><path d="M23 9 Q28 13 33 9" fill="none" stroke="#3A2F4B" stroke-width="2" stroke-linecap="round"/>
+      </g>
+    </g>
+  </g>
+</g></g></g>
+    <!-- フラッシュ -->
+    <rect class="flash" width="400" height="240" fill="#fff"/>
+    <g transform="translate(70,50) scale(1.0)"><path class="star" style="--d:1.75s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(330,44) scale(1.3)"><path class="star" style="--d:1.85s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(350,120) scale(0.8)"><path class="star" style="--d:1.95s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(40,110) scale(0.9)"><path class="star" style="--d:2.0s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(200,30) scale(1.2)"><path class="star" style="--d:1.8s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g>
+    
+  <g id="confetti"></g>
+  </g>
+</svg>
+      <svg class="cut-svg cut-fx" viewBox="0 0 400 240" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect class="flash" width="400" height="240" fill="#fff"/><g transform="translate(70,50) scale(1.0)"><path class="star" style="--d:1.75s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(330,44) scale(1.3)"><path class="star" style="--d:1.85s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(350,120) scale(0.8)"><path class="star" style="--d:1.95s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(40,110) scale(0.9)"><path class="star" style="--d:2.0s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g transform="translate(200,30) scale(1.2)"><path class="star" style="--d:1.8s" d="M0 -12 L3.4 -3.6 L12 0 L3.4 3.6 L0 12 L-3.4 3.6 L-12 0 L-3.4 -3.6 Z" fill="#FFF"/></g><g id="confetti3"></g></svg>
+      <div class="cutin-title" id="cutinTitle"></div>
+    </div>
+    <p class="cutin-sub" id="cutinSub"></p>
+    <p class="cutin-hint small muted">タップで閉じる</p>
+  </div>
+</div>
+
+
+<div class="viewer hidden" id="viewer" role="dialog" aria-modal="true" aria-labelledby="vTitle">
+  <div class="viewer-card">
+    <h3 id="vTitle"></h3>
+    <img id="vImg" alt="馬名カード" width="1600" height="1000">
+    <p class="small" id="vMeta"></p>
+    <div class="vbtns">
+      <button class="btn btn-primary" id="vSave" type="button">カードをダウンロード</button>
+      <button class="btn btn-ghost" id="vClose" type="button">閉じる</button>
+    </div>
+    <p class="small muted" id="vNote"></p>
+  </div>
+</div>
+<div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+<div class="bar hidden" id="bar">
+  <div class="inner">
+    <button class="btn btn-primary" id="btnNext" type="button">次へ</button>
+    <button class="btn btn-ghost" id="btnAuto" type="button" aria-pressed="false">オート</button>
+    <button class="btn btn-ghost" id="btnSkip" type="button">結果へ</button>
+  </div>
+</div>
+
+<script src="logic.js"></script>
+<script src="ippo.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -57,6 +57,24 @@ Fly.io なら `fly certs add ippo.example.com` を実行し、表示された DN
 - 仮想ブラウザ: 1ユーザー1セッション、同時起動数の上限、10分の制限時間、内部ネットワーク宛通信の遮断、ダウンロード無効
 - 非 root ユーザーでの実行、ヘルスチェック（`/healthz`）
 
+## ミニゲーム「117万分の1 競走馬版」
+
+非公式のファン作品のミニゲームを `#/horse` で遊べます (IppO の画面の中に、同じドメインの iframe で表示)。
+
+- `public/games/horse/` の `index.html` `logic.js` `game.js` は、元のゲームから `tools/build_horse.py` で作ったもの (手で編集しない)。
+  `ippo.js` `ippo.css` と `tools/horse_board.js` が IppO とのつなぎです
+- 生まれるたびにサーバーが乱数の種を出し、サーバーでも同じ `logic.js` を動かしてレア度と確率を計算します。
+  「みんなの結果」には、サーバーが計算した値しか載りません
+- 元のゲームを更新したときは、次のコマンドで作り直します
+
+```bash
+git clone -b claude/net-version-support-sepna5 https://github.com/iiyokoiyo1919iiyokoiyo-lab/- /tmp/horse
+```
+
+```bash
+python3 tools/build_horse.py /tmp/horse/docs/index.html
+```
+
 ## 環境変数
 
 | 変数 | 既定値 | 説明 |

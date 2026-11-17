@@ -16,12 +16,14 @@ app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
 
 // セキュリティヘッダー
 app.use((req, res, next) => {
+  // ミニゲーム (/games/) だけは IppO 自身の画面の中 (同じドメインの iframe) に表示できる。ほかのサイトには埋め込めない
+  const framable = req.path.startsWith('/games/');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; " +
-    "frame-src https://www.youtube-nocookie.com; " +
-    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
+    "frame-src 'self' https://www.youtube-nocookie.com; " +
+    `frame-ancestors ${framable ? "'self'" : "'none'"}; base-uri 'none'; form-action 'self'; object-src 'none'`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', framable ? 'SAMEORIGIN' : 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -302,7 +304,7 @@ app.get('/api/users/:username', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE username = ?').get(req.params.username);
   if (!u) return res.status(404).json({ error: 'ユーザーが見つかりません' });
   const rows = db.prepare('SELECT * FROM posts WHERE user_id = ? AND id < ? ORDER BY id DESC LIMIT 30').all(u.id, beforeId(req));
-  res.json({ user: profile(u, req.user), posts: hydrateAll(rows, req.user) });
+  res.json({ user: profile(u, req.user), posts: hydrateAll(rows, req.user), horse: ctx.horseSummaryOf ? ctx.horseSummaryOf(u.id) : null });
 });
 
 app.patch('/api/me', requireAuth, (req, res) => {
@@ -334,6 +336,7 @@ require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真
 require('./verify')(app, ctx); // 認証マーク
+require('./horse')(app, ctx); // ミニゲーム「117万分の1 競走馬版」
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)

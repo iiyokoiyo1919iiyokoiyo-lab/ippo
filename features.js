@@ -416,6 +416,7 @@ module.exports = function install(app, ctx) {
       db.prepare('DELETE FROM user_avatars WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM announcement_seen WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM post_images WHERE user_id = ?').run(u.id);
+      if (ctx.eraseHorse) ctx.eraseHorse(u.id); // ミニゲームの結果・図鑑・種も消す
       if (mode === 'account') {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
