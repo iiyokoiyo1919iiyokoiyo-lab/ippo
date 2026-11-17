@@ -96,6 +96,7 @@ module.exports = function install(app, ctx) {
   ctx.rt = {
     presenceOf,
     broadcast(msg) { const s = JSON.stringify(msg); for (const set of sockets.values()) for (const ws of set) if (ws.readyState === 1) ws.send(s); },
+    sendToUsers(ids, msg) { for (const id of new Set(ids)) sendTo(id, msg); },
     // 相手が自分のメッセージをどこまで読んだか (見せてよい時だけ)
     readByPeer(viewerId, peerId) {
       if (!canSeeRead(viewerId, peerId)) return null;

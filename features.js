@@ -257,7 +257,11 @@ module.exports = function install(app, ctx) {
   // 既存のデータ (返信・メンション・リポスト・いいね・フォロー) から読み取るだけ。データベースの構造は変えない。
   // いいね・フォローには日時の記録がないので、追加された順 (rowid) で並べる
   const notifLimit = rateLimit({ windowMs: 60 * 1000, max: 240, key: (req) => 'nt' + req.user.id });
-  function notificationsFor(me) {
+  // FF (相互フォロー) の人たち
+  const MUTUALS = `SELECT f1.followee_id FROM follows f1 JOIN follows f2 ON f2.follower_id = f1.followee_id AND f2.followee_id = f1.follower_id WHERE f1.follower_id = $me`;
+  ctx.mutualsOf = (userId) => db.prepare(MUTUALS).all({ $me: userId }).map((r) => r.followee_id);
+  const FF_DAYS = 3;
+  function notificationsFor(me, { ff = true } = {}) {
     const mine = 'SELECT id FROM posts WHERE user_id = $me AND repost_of IS NULL';
     const replies = db.prepare(`SELECT * FROM posts WHERE reply_to IN (${mine}) AND user_id != $me ORDER BY id DESC LIMIT 50`).all({ $me: me.id });
     const reposts = db.prepare(`SELECT * FROM posts WHERE repost_of IN (${mine}) AND user_id != $me ORDER BY id DESC LIMIT 50`).all({ $me: me.id });
@@ -268,15 +272,20 @@ module.exports = function install(app, ctx) {
     const likes = db.prepare(`SELECT l.rowid AS rid, l.user_id, l.post_id FROM likes l JOIN posts p ON p.id = l.post_id
       WHERE p.user_id = $me AND l.user_id != $me ORDER BY l.rowid DESC LIMIT 100`).all({ $me: me.id });
     const follows = db.prepare('SELECT rowid AS rid, follower_id FROM follows WHERE followee_id = ? ORDER BY rowid DESC LIMIT 50').all(me.id);
-    return { replies, reposts, mentions, likes, follows };
+    // FF の新しい投稿 (直近 3 日・返信やリポストではない、みんなに見える投稿)。メンション・返信として通知済みのものは除く
+    const already = new Set([...replies, ...mentions].map((p) => p.id));
+    const ffPosts = ff ? db.prepare(`SELECT * FROM posts WHERE user_id IN (${MUTUALS}) AND reply_to IS NULL AND repost_of IS NULL AND community_id IS NULL
+      AND created_at > $since ORDER BY id DESC LIMIT 50`).all({ $me: me.id, $since: Date.now() - FF_DAYS * 86400_000 }).filter((p) => !already.has(p.id)) : [];
+    return { replies, reposts, mentions, likes, follows, ffPosts };
   }
   app.get('/api/notifications', requireAuth, notifLimit, (req, res) => {
-    const me = req.user, n = notificationsFor(me);
+    const me = req.user, n = notificationsFor(me, { ff: req.query.ff !== '0' });
     const user = (id) => publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id));
     const activity = [
       ...n.replies.map((p) => ({ type: 'reply', at: p.created_at, user: user(p.user_id), post: hydrate(p, me) })),
       ...n.mentions.map((p) => ({ type: 'mention', at: p.created_at, user: user(p.user_id), post: hydrate(p, me) })),
       ...n.reposts.map((p) => ({ type: 'repost', at: p.created_at, user: user(p.user_id), post: hydrate(db.prepare('SELECT * FROM posts WHERE id = ?').get(p.repost_of), me) })),
+      ...n.ffPosts.map((p) => ({ type: 'ff', at: p.created_at, user: user(p.user_id), post: hydrate(p, me) })),
     ].filter((a) => a.user && a.post).sort((a, b) => b.at - a.at).slice(0, 60);
     // いいねは投稿ごとにまとめる
     const byPost = new Map();
@@ -298,9 +307,9 @@ module.exports = function install(app, ctx) {
   });
   // 未読数 (既読の位置は端末側で記録し、ここに渡す)
   app.get('/api/notifications/unread', requireAuth, notifLimit, (req, res) => {
-    const me = req.user, n = notificationsFor(me);
+    const me = req.user, n = notificationsFor(me, { ff: req.query.ff !== '0' });
     const at = Number(req.query.at) || 0, likeR = Number(req.query.like) || 0, followR = Number(req.query.follow) || 0;
-    const count = [...n.replies, ...n.mentions, ...n.reposts].filter((p) => p.created_at > at).length
+    const count = [...n.replies, ...n.mentions, ...n.reposts, ...n.ffPosts].filter((p) => p.created_at > at).length
       + n.likes.filter((l) => l.rid > likeR).length + n.follows.filter((f) => f.rid > followR).length;
     res.json({ unread: count });
   });

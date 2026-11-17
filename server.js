@@ -239,7 +239,13 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
     .run(req.user.id, content, replyTo, communityId, questionDay, quoteOf, Date.now());
   if (imgs.ids.length) ctx.attachImages(Number(r.lastInsertRowid), req.user, imgs.ids);
   ctx.invalidateTrends();
-  res.json({ post: hydrate(qPost.get(r.lastInsertRowid), req.user) });
+  const created = qPost.get(r.lastInsertRowid);
+  // FF (相互フォロー) に「投稿しました」を知らせる (返信・コミュニティ内の投稿は除く)
+  if (!created.reply_to && !created.community_id && ctx.mutualsOf && ctx.rt?.sendToUsers) {
+    ctx.rt.sendToUsers(ctx.mutualsOf(req.user.id), { t: 'ff-post', from: req.user.username, name: req.user.display_name, postId: created.id,
+      preview: created.content ? created.content.slice(0, 40) : '📷 写真' });
+  }
+  res.json({ post: hydrate(created, req.user) });
 });
 
 app.get('/api/posts/:id', (req, res) => {

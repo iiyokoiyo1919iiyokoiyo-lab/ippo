@@ -700,6 +700,8 @@ document.addEventListener('click', async (e) => {
 
 // ---------- バッジ (通知・DM) ----------
 const notifSeen = () => store.get('ippo_notif_seen', { at: 0, like: 0, follow: 0 });
+// FF (相互フォロー) の投稿を通知するか (この端末の設定。最初はオン)
+const ffNotify = () => store.get('ippo_ff_notify', true) !== false;
 let badgeAt = 0;
 async function refreshBadges(force = false) {
   // 画面を切り替えるたびに呼ばれるので、5秒以内の連続呼び出しはまとめる
@@ -712,7 +714,7 @@ async function refreshBadges(force = false) {
   try { const { unread } = await api('/dm/unread', { noAuthPrompt: true }); show('.dm-badge', unread); } catch {}
   try {
     const s = notifSeen();
-    const { unread } = await api(`/notifications/unread?at=${s.at}&like=${s.like}&follow=${s.follow}`, { noAuthPrompt: true });
+    const { unread } = await api(`/notifications/unread?at=${s.at}&like=${s.like}&follow=${s.follow}&ff=${ffNotify() ? 1 : 0}`, { noAuthPrompt: true });
     const n = location.hash === '#/notifications' ? 0 : unread;
     show('.sidebar .notif-badge', n);
     show('.topbar .notif-badge', n + news); // スマホはお知らせも 🔔 から見る
@@ -1016,16 +1018,16 @@ async function viewSearch(q) {
 async function viewNotifications() {
   main.innerHTML = pageHead({ title: '通知' }) + `<div class="content" id="notifs">${'<div class="card card-pad"><div class="row"><div class="sk sk-circle"></div><div style="flex:1"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line" style="width:40%;margin-top:8px"></div></div></div></div>'.repeat(3)}</div>`;
   let data;
-  try { data = await api('/notifications'); } catch (e) { $('#notifs').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  try { data = await api('/notifications?ff=' + (ffNotify() ? 1 : 0)); } catch (e) { $('#notifs').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   const seen = notifSeen();
   store.set('ippo_notif_seen', { at: Math.max(seen.at, data.cursor.at), like: Math.max(seen.like, data.cursor.like), follow: Math.max(seen.follow, data.cursor.follow) });
   refreshBadges(true);
-  const label = { reply: 'があなたの投稿にコメントしました', mention: 'があなたをメンションしました', repost: 'があなたの投稿をリポストしました' };
-  const ic = { reply: 'comment', mention: 'at', repost: 'repeat' };
+  const label = { reply: 'があなたの投稿にコメントしました', mention: 'があなたをメンションしました', repost: 'があなたの投稿をリポストしました', ff: 'が投稿しました' };
+  const ic = { reply: 'comment', mention: 'at', repost: 'repeat', ff: 'users' };
   const quote = (p) => p.content ? esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content) : `📷 写真${p.images?.length || ''}枚`;
   const activity = data.activity.map((a) => `<a class="notif${a.at > seen.at ? ' unread' : ''}" href="#/p/${a.type === 'repost' ? a.post.id : a.post.id}">
       <span class="notif-icon ${a.type}">${icon(ic[a.type])}</span>
-      <div class="notif-body"><div class="notif-text"><b>${esc(a.user.displayName)}${adminBadge(a.user)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>
+      <div class="notif-body"><div class="notif-text">${a.type === 'ff' ? '<span class="ff-chip">FF</span>' : ''}<b>${esc(a.user.displayName)}${adminBadge(a.user)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>
       <time>${timeAgo(a.at)}</time></a>`).join('');
   const likes = data.likes.map((g) => `<a class="notif${g.rid > seen.like ? ' unread' : ''}" href="#/p/${g.post.id}">
       <span class="notif-icon like">${icon('heart')}</span>
@@ -1041,7 +1043,7 @@ async function viewNotifications() {
       <time>${timeAgo(a.createdAt)}</time></a>`).join('');
   const newsSection = newsHtml ? `<div class="section-row"><h2 class="section-title">運営からのお知らせ</h2><a class="link-sm" href="#/news">すべて見る</a></div><div class="list-card">${newsHtml}</div>` : '';
   $('#notifs').innerHTML = newsSection + ((!activity && !likes && !follows)
-    ? emptyState({ icon: 'bell', title: 'まだ通知はありません', text: 'コメントやいいね、フォローがあるとここでお知らせします。' })
+    ? emptyState({ icon: 'bell', title: 'まだ通知はありません', text: 'コメントやいいね、フォロー、FF (相互フォロー) の投稿があるとここでお知らせします。' })
     : (activity ? `<h2 class="section-title">アクティビティ</h2><div class="list-card">${activity}</div>` : '') +
       (likes ? `<h2 class="section-title">いいね</h2><div class="list-card">${likes}</div>` : '') +
       (follows ? `<h2 class="section-title">新しいフォロワー</h2><div class="list-card">${follows}</div>` : ''));
@@ -1161,6 +1163,20 @@ async function viewNewsItem(id) {
   bindAnnounceAdmin($('#news-item'), [r.announcement], r.canManage, () => viewNewsItem(id));
   markAnnouncementsSeen(r.announcement.id);
 }
+// FF (相互フォロー) が投稿したら、すぐに知らせる
+RT.on((m) => {
+  if (m.t !== 'ff-post' || !ffNotify()) return;
+  const mentioned = me && new RegExp('(^|[^\\w])@' + me.username + '(?![A-Za-z0-9_])', 'i').test(m.preview);
+  toast(mentioned ? `${m.name}さんがあなたをメンションしました: ${m.preview}` : `${m.name}さんが投稿しました: ${m.preview}`);
+  refreshBadges(true);
+  if (location.hash === '#/notifications') viewNotifications();
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'ff-notify') return;
+  store.set('ippo_ff_notify', e.target.checked);
+  toast(e.target.checked ? 'FF の投稿を通知します' : 'FF の投稿を通知しません', 'success');
+  refreshBadges(true);
+});
 // 新しいお知らせはすぐに知らせる
 RT.on((m) => {
   if (m.t === 'announce') {
@@ -1325,6 +1341,12 @@ function viewSettings() {
           <input type="checkbox" class="switch" data-priv="showPresence" disabled></label>
         <label class="list-item switch-row"><div class="grow"><div class="title">「既読」を表示</div><div class="desc">オフにすると相手に既読が付かなくなり、あなたも相手の既読を見られなくなります</div></div>
           <input type="checkbox" class="switch" data-priv="showRead" disabled></label>
+      </div>
+    </section>
+    <section class="settings-group"><h2>通知</h2>
+      <div class="list-card">
+        <label class="list-item switch-row"><div class="grow"><div class="title">FF (相互フォロー) の投稿を通知</div><div class="desc">おたがいにフォローしている人が投稿したら、通知とポップアップでお知らせします (この端末の設定)</div></div>
+          <input type="checkbox" class="switch" id="ff-notify" ${ffNotify() ? 'checked' : ''}></label>
       </div>
     </section>
     <section class="settings-group"><h2>表示</h2>

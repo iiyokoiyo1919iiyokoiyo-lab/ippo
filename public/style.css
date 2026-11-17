@@ -1619,3 +1619,7 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
   .rc-lane.you .rc-name { top: auto; bottom: 22px; left: 46px; }
   .rc-mark span { display: none; }
 }
+
+/* FF の投稿の通知 */
+.notif-icon.ff { background: color-mix(in srgb, #0f9d8a 14%, transparent); color: #0f9d8a; }
+.ff-chip { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: #0f9d8a; color: #fff; font-size: 10px; font-weight: 900; vertical-align: 1px; }
