@@ -1415,9 +1415,18 @@ async function viewAdmin(q = '') {
       <form class="search-field" id="admin-search">${icon('search')}<input class="input" name="q" placeholder="ユーザー名・表示名で検索" value="${esc(q)}" autocomplete="off" autocapitalize="off"></form>
       <div id="admin-users"></div>
     </section>
+    <section class="settings-group"><h2>永久バン</h2>
+      <div class="card card-pad ban-box">
+        <p class="text-sm" style="color:var(--text-2)">ユーザー名に、ここに入れた文字を<b>含む</b>アカウントを、<b>アカウントごと完全に削除</b>します (投稿・DM なども消え、元に戻せません)。以後、その文字を含むユーザー名では新しく登録できなくなります。管理者のアカウントは対象外です。</p>
+        <form class="ban-form" id="ban-form"><input class="input" name="word" placeholder="例: konnichiha" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false" required><button class="btn btn-outline" type="submit">対象を確認</button></form>
+        <div id="ban-preview"></div>
+      </div>
+      <div id="ban-list"></div>
+    </section>
     <p class="text-xs muted">管理者は Railway の環境変数 ADMIN_USERS で指定します。管理者の操作はサーバーの記録 (ログ) に残ります。DM の内容は管理者にも見えません。</p>
   </div>`;
   $('#admin-search').addEventListener('submit', (e) => { e.preventDefault(); loadAdminUsers(e.target.q.value.trim()); });
+  bindBans();
   try {
     const s = await api('/admin/stats');
     const card = (label, value, sub = '') => `<div class="card stat-card"><span class="stat-label">${label}</span><b>${value.toLocaleString()}</b>${sub ? `<span class="stat-sub">${sub}</span>` : ''}</div>`;
@@ -1425,6 +1434,49 @@ async function viewAdmin(q = '') {
       card('コミュニティ', s.communities) + card('最近ログインした人', s.activeUsers, '直近7日') + card('DM', s.dms, '件数のみ') + card('未使用の招待', s.openInvites);
   } catch (e) { $('#admin-stats').innerHTML = emptyState({ icon: 'alert', title: e.message }); }
   loadAdminUsers(q);
+}
+// 永久バン: 禁止ワードを含むユーザー名のアカウントを削除し、以後の登録も止める
+function bindBans() {
+  const form = $('#ban-form'), box = $('#ban-preview');
+  const loadList = async () => {
+    try {
+      const { bans } = await api('/admin/bans');
+      $('#ban-list').innerHTML = bans.length ? `<div class="list-card">${bans.map((b) => `<div class="list-item" data-word="${esc(b.word)}">
+          <div style="flex:1;min-width:0"><div class="title">「${esc(b.word)}」を含むユーザー名は登録できません</div>
+          <div class="text-xs muted">@${esc(b.createdBy)} · ${new Date(b.createdAt).toLocaleString('ja-JP')} · 削除したアカウント ${Number(b.deletedAccounts)}件</div></div>
+          <button class="btn btn-ghost btn-sm" type="button" data-unban>登録の制限を外す</button></div>`).join('')}</div>` : '';
+      $$('[data-unban]', $('#ban-list')).forEach((b) => b.addEventListener('click', async () => {
+        const w = b.closest('[data-word]').dataset.word;
+        if (!(await confirmDialog({ title: `「${w}」の登録制限を外しますか？`, body: 'この文字を含むユーザー名で、また登録できるようになります。削除したアカウントは戻りません。', ok: '外す' }))) return;
+        try { await api('/admin/bans/' + encodeURIComponent(w), { method: 'DELETE' }); toast('登録の制限を外しました'); loadList(); } catch (e) { toast(e.message, 'error'); }
+      }));
+    } catch {}
+  };
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    box.innerHTML = '<div class="sk sk-line" style="margin:12px 0"></div>';
+    let r;
+    try { r = await api('/admin/bans/preview?word=' + encodeURIComponent(form.word.value.trim())); }
+    catch (err) { box.innerHTML = `<p class="text-sm" style="color:var(--danger)">${esc(err.message)}</p>`; return; }
+    const n = r.targets.length;
+    box.innerHTML = `<div class="ban-result">
+        <p class="text-sm"><b>「${esc(r.word)}」を含むアカウント: ${n}件</b>${r.skippedAdmins.length ? `<span class="muted">（管理者 @${r.skippedAdmins.map(esc).join(', @')} は対象外）</span>` : ''}</p>
+        ${n ? `<div class="list-card ban-targets">${r.targets.map((u) => `<div class="list-item">${avatar(u, 'sm')}<div style="min-width:0"><div class="title">${esc(u.displayName)}</div><div class="text-xs muted">@${esc(u.username)}</div></div></div>`).join('')}</div>` : '<p class="text-sm muted">いま当てはまるアカウントはありません。実行すると、今後の登録だけを止めます。</p>'}
+        <button class="btn btn-danger" type="button" id="ban-run">${n ? `${n}件のアカウントを削除して永久バン` : 'この文字を含むユーザー名の登録を止める'}</button>
+      </div>`;
+    $('#ban-run').addEventListener('click', async () => {
+      if (!(await confirmDialog({ title: n ? `${n}件のアカウントを削除しますか？` : `「${r.word}」の登録を止めますか？`,
+        body: n ? `@${r.targets.map((u) => u.username).join(', @')} のアカウントと、投稿・DM などのデータをすべて消します。元に戻せません。` : `「${r.word}」を含むユーザー名では、新しく登録できなくなります。`,
+        ok: n ? '削除して永久バン' : '登録を止める', danger: true }))) return;
+      try {
+        const res = await api('/admin/bans', { method: 'POST', body: { word: r.word, expect: n } });
+        toast(res.deleted.length ? `${res.deleted.length}件のアカウントを削除し、永久バンしました` : `「${res.word}」を含むユーザー名の登録を止めました`, 'success');
+        if (res.failed.length) toast(`削除できなかったアカウント: @${res.failed.join(', @')}`, 'error');
+        box.innerHTML = ''; form.reset(); loadList(); loadAdminUsers($('#admin-search')?.q.value.trim() || '');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  });
+  loadList();
 }
 // 認証マークを付ける (メモは任意: 生徒会・先生 など)
 function grantVerification(name, label = '') {

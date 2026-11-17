@@ -93,6 +93,7 @@ app.post('/api/register', authLimit, (req, res) => {
   const { username, password, displayName } = req.body || {};
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username || '')) return res.status(400).json({ error: 'ユーザー名は英数字と_で3〜15文字です' });
   if (typeof password !== 'string' || password.length < 8) return res.status(400).json({ error: 'パスワードは8文字以上にしてください' });
+  if (ctx.isBannedName && ctx.isBannedName(username)) return res.status(400).json({ error: 'このユーザー名は使えません。別のユーザー名にしてください' });
   const name = String(displayName || username).trim().slice(0, 50) || username;
   // 招待制: 有効な招待コードが必要 (まだ誰もいない時の最初の1人だけは不要)
   const invite = ctx.checkInvite(req.body?.invite);

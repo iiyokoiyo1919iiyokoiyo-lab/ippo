@@ -1131,3 +1131,10 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .horse-note { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--s3); padding: 4px 12px 4px 8px; border-radius: var(--r-full); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sm); text-decoration: none !important; }
 .horse-note b { color: var(--text); }
 .horse-note:hover { background: var(--surface-3); }
+
+/* 永久バン */
+.ban-form { display: flex; gap: var(--s2); margin-top: var(--s3); }
+.ban-form .input { flex: 1; min-width: 0; }
+.ban-result { margin-top: var(--s3); display: grid; gap: var(--s3); }
+.ban-targets { max-height: 320px; overflow: auto; }
+#ban-list { margin-top: var(--s3); }

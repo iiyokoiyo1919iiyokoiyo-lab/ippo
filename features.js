@@ -501,6 +501,61 @@ module.exports = function install(app, ctx) {
     res.json({ ok: true });
   });
 
+  // ======================= 永久バン (ユーザー名に禁止ワードを含むアカウント) =======================
+  // ・禁止ワードを含むユーザー名のアカウントは、アカウントごと完全に削除する (管理者のアカウントは対象外)
+  // ・以後、禁止ワードを含むユーザー名では新規登録できない (ユーザー名はあとから変えられないので、これで作り直しも防げる)
+  db.migrate('2026-11-20-banned-words', `
+CREATE TABLE banned_words (
+  word TEXT PRIMARY KEY,                       -- 小文字で保存。ユーザー名にこの文字列を含むと対象 (大文字・小文字は区別しない)
+  created_by TEXT NOT NULL,                    -- 登録した管理者のユーザー名
+  created_at INTEGER NOT NULL,
+  deleted_accounts INTEGER NOT NULL DEFAULT 0  -- 登録したときに削除したアカウントの数
+);`);
+  const BAN_WORD = /^[a-z0-9_]{3,15}$/;
+  const qBanWords = db.prepare('SELECT word FROM banned_words');
+  ctx.isBannedName = (username) => {
+    const u = String(username || '').toLowerCase();
+    return qBanWords.all().some((r) => u.includes(r.word));
+  };
+  // ユーザー名に word を含むアカウント (instr は大文字・小文字を区別するので、両方を小文字にして比べる)
+  const matching = (word) => db.prepare('SELECT * FROM users WHERE instr(lower(username), ?) > 0 ORDER BY id').all(word);
+  const banWord = (req, res) => {
+    const w = String(req.body?.word ?? req.query.word ?? '').trim().replace(/^@/, '').toLowerCase();
+    if (!BAN_WORD.test(w)) { res.status(400).json({ error: '禁止ワードは英数字と_で3〜15文字にしてください' }); return null; }
+    return w;
+  };
+  // 実行前の確認: 対象になるアカウントの一覧
+  app.get('/api/admin/bans/preview', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const w = banWord(req, res); if (!w) return;
+    const users = matching(w);
+    res.json({ word: w, targets: users.filter((u) => !isAdmin(u)).map(publicUser), skippedAdmins: users.filter(isAdmin).map((u) => u.username) });
+  });
+  app.get('/api/admin/bans', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    res.json({ bans: db.prepare('SELECT word, created_by, created_at, deleted_accounts FROM banned_words ORDER BY created_at DESC').all()
+      .map((r) => ({ word: r.word, createdBy: r.created_by, createdAt: r.created_at, deletedAccounts: r.deleted_accounts })) });
+  });
+  // 実行: 禁止ワードを登録して、当てはまるアカウントを削除する
+  // expect には確認画面で見た対象の数を送る (確認のあとに対象が増えていたら、実行せずにもう一度確認してもらう)
+  app.post('/api/admin/bans', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const w = banWord(req, res); if (!w) return;
+    const targets = matching(w).filter((u) => !isAdmin(u));
+    if (req.body?.expect !== targets.length) return res.status(409).json({ error: '確認したあとに対象のアカウントが変わりました。もう一度確認してください', targets: targets.length });
+    db.prepare(`INSERT INTO banned_words (word, created_by, created_at, deleted_accounts) VALUES (?, ?, ?, 0)
+      ON CONFLICT(word) DO NOTHING`).run(w, req.user.username, Date.now());
+    const deleted = [], failed = [];
+    for (const u of targets) (eraseUser(u.id, 'account') ? deleted : failed).push(u.username);
+    db.prepare('UPDATE banned_words SET deleted_accounts = deleted_accounts + ? WHERE word = ?').run(deleted.length, w);
+    console.log(`[admin] ${req.user.username} が禁止ワード「${w}」で永久バン: 削除 ${deleted.length} 件${deleted.length ? ' (@' + deleted.join(', @') + ')' : ''}${failed.length ? ` / 失敗 ${failed.length} 件` : ''}`);
+    res.json({ word: w, deleted, failed });
+  });
+  // 禁止ワードを外す (新規登録の制限だけが外れる。削除したアカウントは戻らない)
+  app.delete('/api/admin/bans/:word', requireAuth, requireAdmin, adminLimit, (req, res) => {
+    const w = String(req.params.word || '').toLowerCase();
+    const r = db.prepare('DELETE FROM banned_words WHERE word = ?').run(w);
+    if (r.changes) console.log(`[admin] ${req.user.username} が禁止ワード「${w}」を外した`);
+    res.json({ ok: r.changes > 0 });
+  });
+
   // ======================= YouTube (再生ボタンを押すまで利用者の端末は YouTube に接続しない) =======================
   // サムネイルとタイトルは IppO のサーバーが代わりに取得する。接続先は YouTube の固定ホストだけ
   const YT_ID = /^[A-Za-z0-9_-]{11}$/;
