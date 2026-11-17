@@ -3041,6 +3041,10 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
 }
+// 自分のカード: ガチャ限定 SR を 3 枚引いて UR に昇格していたら、UR の姿と能力にする
+function cbMine(c, mine) {
+  return mine?.ur?.includes(c.id) && c.urStats ? { ...c, ...c.urStats, rarity: 'UR', baseRarity: c.rarity, promoted: true } : c;
+}
 // カードを指 (マウス) でなぞると傾いて、ホロの光が動く
 (() => {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -3088,7 +3092,7 @@ async function viewCards() {
   main.innerHTML = pageHead({ title: 'ぶんぼうぐバトラーズ', sub: 'カードを集めて、3枚のデッキで対戦', back: '#/games' }) + `<div class="content stack" id="cb">${loadingBlock()}</div>`;
   let cat, mine = null;
   try { cat = await cbCatalog(); if (me) mine = await api('/cards/me'); } catch (e) { $('#cb').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
-  const C = Object.fromEntries([...cat.cards, ...(mine?.horses || [])].map((c) => [c.id, c]));
+  const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...(mine?.horses || [])].map((c) => [c.id, c]));
   const root = $('#cb'); if (!root) return;
   root.innerHTML = `
     ${cbRateUpBanner(cat)}${cbNewBanner(cat)}
@@ -3197,19 +3201,20 @@ async function viewGacha() {
   let cat, mine, timers = [];
   try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbg').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   viewCleanup = () => timers.forEach(clearTimeout);
-  const RANK = { N: 0, R: 1, SR: 2, SSR: 3 };
+  const RANK = { N: 0, R: 1, SR: 2, SSR: 3, UR: 3 };
   const render = (results = null) => {
     const root = $('#cbg'); if (!root) return;
     timers.forEach(clearTimeout); timers = [];
-    const best = results ? results.reduce((a, c) => (RANK[c.rarity] > RANK[a] ? c.rarity : a), 'N') : null;
+    const best = results ? results.map((c) => c.baseRarity || c.rarity).reduce((a, r) => (RANK[r] > RANK[a] ? r : a), 'N') : null;
     const price = mine.prices || { pull: cat.pullCost, ten: cat.tenCost, sale: cat.sale };
     const saleEnd = price.sale ? new Date(price.sale.end).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }) : '';
     root.innerHTML = `${results ? '' : cbRateUpBanner(cat, false) + cbNewBanner(cat, false)}${price.sale ? `<div class="card cb-sale"><b>🔥 ${esc(price.sale.name)}</b><span>ガチャが 1回 <s>${price.sale.pull}</s> → <em>${price.pull}</em>🪙 · 10回 <s>${price.sale.ten}</s> → <em>${price.ten}</em>🪙</span><small>${esc(saleEnd)} まで</small></div>` : ''}<section class="card card-pad cb-gacha">
         <div class="cb-gacha-top">${cbCoins(mine.coins)}<span class="text-sm muted">SSR 確定まであと <b>${cat.pity - mine.pity}</b> 回</span></div>
         <div class="cb-stage${results ? ' rolling best-' + best : ''}" id="cb-stage">
           ${results ? `<div class="cb-capsule"><i></i><b></b></div><div class="cb-burst"></div><div class="cb-shout">${best === 'SSR' ? 'SSR！！' : best === 'SR' ? 'SR！' : ''}</div>
-            <div class="cb-reveal">${results.map((c) => `<div class="cb-flip r-${esc(c.rarity)}"><div class="cb-flip-in"><div class="cb-back"><span>✦</span></div>
-              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
+            <div class="cb-reveal">${results.map((c) => `<div class="cb-flip r-${esc(c.baseRarity || c.rarity)}"><div class="cb-flip-in"><div class="cb-back"><span>✦</span></div>
+              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.urUp ? '<span class="cb-new ur">UR 昇格！</span>' : c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
+            ${results.some((c) => c.urUp) ? `<p class="cb-ur-shout cb-gacha-ur">✨ ${results.filter((c) => c.urUp).map((c) => esc(c.name)).join('・')} が UR に昇格！！ ✨</p>` : ''}
             <p class="cb-skip">タップでとばす</p>`
           : `<div class="cb-machine">${CBArt.svg('case', 'SSR')}<p>きょうは何が出るかな？</p></div>`}
         </div>
@@ -3224,7 +3229,8 @@ async function viewGacha() {
           return `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${Number(v.toFixed(2))}%</b><small>${list.length}種類 · ${up.length ? `確率アップ 1体 ${cat.perCard[up[0].id].toFixed(2)}%${normal.length ? ` / ほか 1体 ${cat.perCard[normal[0].id].toFixed(2)}%` : ''}` : `1種類あたり ${(v / list.length).toFixed(2)}%`}</small></div>`; }).join('')}</div>
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
           <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、最大 Lv${cat.maxLevel})</li>
-          <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}%</li>
+          <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
+          <li>ガチャ限定の SR は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
           ${(cat.rateUps || []).map((x) => `<li>${esc(x.name)}: ${x.ids.map((id) => esc(cat.cards.find((c) => c.id === id)?.name || '')).join('・')} の出る確率が ${x.mult} 倍。上がった分、ほかのレア度の確率が少し下がります</li>`).join('')}
           <li>コインはお金では買えません</li></ul></section>`;
     $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
@@ -3243,6 +3249,7 @@ async function viewGacha() {
       stage.classList.remove('rolling'); stage.classList.add('opened', 'shown');
       flips.forEach((f) => f.classList.add('open'));
       if (best === 'SSR' || best === 'SR') cbConfetti(stage, best === 'SSR' ? 70 : 36, best === 'SSR' ? undefined : ['#b197fc', '#e5dbff', '#fff', '#ffd43b']);
+      if (results.some((c) => c.urUp)) cbConfetti(stage, 120, ['#ffd43b', '#ff6b6b', '#fff3bf', '#fab005', '#e8590c', '#fff']);
     };
     at(900, () => stage.classList.add('burst'));                       // 光る
     at(1350, () => { stage.classList.remove('rolling'); stage.classList.add('opened'); });
@@ -3268,7 +3275,7 @@ async function viewCollection() {
   let deck = [...mine.deck];
   const lvOf = (c) => (c.horse ? c.level : Math.min(mine.owned[c.id] || 1, cat.maxLevel));
   const render = () => {
-    const C = Object.fromEntries([...cat.cards, ...mine.horses].map((c) => [c.id, c]));
+    const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...mine.horses].map((c) => [c.id, c]));
     const root = $('#cbc'); if (!root) return;
     const have = cat.cards.filter((c) => mine.owned[c.id]).length;
     const pickCls = (c) => 'pick' + (mode === 'deck' && deck.includes(c.id) ? ' chosen' : '') + (mode === 'level' ? (lvOf(c) >= cat.maxLevel ? ' maxed' : lvOf(c) <= mine.scrolls ? ' can-lv' : '') : '');
@@ -3286,8 +3293,9 @@ async function viewCollection() {
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日1頭だけ連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
+        <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>SR</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
-          ? cbCard(c, { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
+          ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
           : cbCard(c, { locked: true })).join('')}</div></section>`;
     $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
     $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
@@ -3333,7 +3341,7 @@ async function viewCollection() {
       });
     });
   }
-  const C2 = (id) => cat.cards.find((x) => x.id === id) || mine.horses.find((x) => x.id === id);
+  const C2 = (id) => { const c = cat.cards.find((x) => x.id === id); return c ? cbMine(c, mine) : mine.horses.find((x) => x.id === id); };
   render();
 }
 

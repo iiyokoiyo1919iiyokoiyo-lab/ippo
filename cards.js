@@ -26,6 +26,7 @@ const SKILLS = {
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
 const RARITY = { N: { rate: 50, mult: 1.0 }, R: { rate: 35, mult: 1.04 }, SR: { rate: 12, mult: 1.08 }, SSR: { rate: 3, mult: 1.12 } };
+const UR_MULT = 1.2; // UR (昇格したカード・馬) の能力の倍率
 const LEVEL_BONUS = 0.02;
 // [id, 名前, 絵文字, レア度, 相性, HP, 攻撃, 防御, 素早さ, わざ]
 const CARD_LIST = [
@@ -68,10 +69,13 @@ const poolOf = (r, now = Date.now()) => BY_RARITY[r].filter((id) => isReleased(i
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
 const MAX_LEVEL = 5;
 
-// レベル (同じカードを引くと上がる) とレア度で強さが決まる
-function statsOf(cardId, level = 1) {
-  const c = CARDS[cardId], m = RARITY[c.rarity].mult * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
-  return { id: c.id, name: c.name, emoji: c.emoji, rarity: c.rarity, type: c.type, skill: c.skill, level,
+// ガチャ限定の SR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
+const UR_PROMOTE = { from: 'SR', copies: 3 };
+const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from && copies >= UR_PROMOTE.copies;
+// レベル (同じカードを引くと上がる) とレア度で強さが決まる。ur: UR に昇格したカード
+function statsOf(cardId, level = 1, ur = false) {
+  const c = CARDS[cardId], m = (ur ? UR_MULT : RARITY[c.rarity].mult) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
+  return { id: c.id, name: c.name, emoji: c.emoji, rarity: ur ? 'UR' : c.rarity, ...(ur ? { baseRarity: c.rarity, promoted: true } : {}), type: c.type, skill: c.skill, level,
     maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd };
 }
 
@@ -294,7 +298,6 @@ function rollHorse(rnd) {
 }
 // 連れてきた馬が UR に昇格する確率 (競走馬版でのランクが高いほど高い)。UR は能力 +20% (SSR は +12%)
 const HORSE_UR_CHANCE = { UR: 0.15, SSR: 0.08, SR: 0.04, R: 0.02, N: 0.01 };
-const UR_MULT = 1.2;
 const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT NULL DEFAULT 'SSR';`; // 'SSR' か 'UR'
 // レベルアップ書: 試合をこなすともらえる (3 ターン以上戦った試合だけ。勝ち 2 枚・負けと引き分け 1 枚、こうさんした側は 0)。
 // レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv5
@@ -324,7 +327,7 @@ function install(app, ctx) {
     maxHp: Math.round(h.hp * m), atk: Math.round(h.atk * m), def: Math.round(h.def * m), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
   const cardStats = (uid, id, o) => {
     if (id.startsWith('h:')) { const h = qHorse.get(id.slice(2)); return h && h.user_id === uid ? horseStats(h) : null; }
-    return CARDS[id] ? statsOf(id, Math.min(o[id] || 1, MAX_LEVEL)) : null;
+    return CARDS[id] ? statsOf(id, Math.min(o[id] || 1, MAX_LEVEL), urOf(uid).includes(id)) : null;
   };
   const dayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return d.getTime() - 9 * 3600_000; };
   const horseToday = (uid) => db.prepare('SELECT COUNT(*) AS n FROM card_horses WHERE user_id = ? AND created_at >= ?').get(uid, dayStart()).n > 0;
@@ -341,22 +344,25 @@ function install(app, ctx) {
     }
     return p;
   }
+  const copiesOf = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, r.count]));
+  const urOf = (uid) => Object.entries(copiesOf(uid)).filter(([id, n]) => isPromoted(id, n)).map(([id]) => id);
   const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count, lv_bonus FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, Math.min(MAX_LEVEL, r.count + r.lv_bonus)]));
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
-    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
+    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
   // カードの一覧・排出率 (誰でも見られる)
   app.get('/api/cards/catalog', (req, res) => res.json({
-    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
+    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
+      ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}) })),
     newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
 
@@ -376,7 +382,7 @@ function install(app, ctx) {
     const price = pricesNow(), cost = n === 10 ? price.ten : price.pull; // セール中はセールの値段 (サーバーの時刻で決める)
     const p = player(req.user.id);
     if (p.coins < cost) return res.status(400).json({ error: `コインが足りません (あと ${cost - p.coins} コイン)` });
-    const before = owned(req.user.id);
+    const before = owned(req.user.id), copies = copiesOf(req.user.id);
     const r = pull(n, p.pity);
     db.exec('BEGIN');
     try {
@@ -390,7 +396,12 @@ function install(app, ctx) {
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); return res.status(400).json({ error: 'コインが足りません' }); }
     const seen = { ...before };
-    const results = r.cards.map((c) => { const prev = seen[c.id] || 0; seen[c.id] = prev + 1; return { ...statsOf(c.id, Math.min(prev + 1, MAX_LEVEL)), level: Math.min(prev + 1, MAX_LEVEL), isNew: prev === 0, levelUp: prev > 0 && prev < MAX_LEVEL }; });
+    const results = r.cards.map((c) => {
+      const prev = seen[c.id] || 0, n = (copies[c.id] || 0) + 1; seen[c.id] = prev + 1; copies[c.id] = n;
+      const ur = isPromoted(c.id, n);
+      return { ...statsOf(c.id, Math.min(prev + 1, MAX_LEVEL), ur), level: Math.min(prev + 1, MAX_LEVEL), copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < MAX_LEVEL, urUp: ur && n === UR_PROMOTE.copies };
+    });
+    if (results.some((c) => c.urUp)) console.log(`[cards] @${req.user.username} UR に昇格: ${results.filter((c) => c.urUp).map((c) => c.id).join(',')}`);
     console.log(`[cards] @${req.user.username} ガチャ ${n} 回: ${r.cards.map((c) => c.rarity).join(',')}`);
     res.json({ results, ...me(req.user.id) });
   });
@@ -444,7 +455,7 @@ function install(app, ctx) {
       apply();
       db.exec('COMMIT');
     } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: 'レベルアップ書が足りません' }); }
-    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, level + 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
+    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, level + 1, urOf(uid).includes(id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
     res.json({ card, from: level, to: level + 1, used: cost, ...me(uid) });
   });
 
@@ -490,7 +501,7 @@ function install(app, ctx) {
   // CPU のデッキ: 相手と同じくらいの強さ (同じレア度の、ちがうカード)
   function cpuDeck(uid) {
     const mine = deckStats(uid);
-    return mine.map((c) => { const pool = poolOf(c.rarity === 'UR' ? 'SSR' : c.rarity).filter((id) => !mine.some((m) => m.id === id)); return statsOf(pool[Math.floor(rnd() * pool.length)] || (CARDS[c.id] ? c.id : 'gold'), c.level); });
+    return mine.map((c) => { const pool = poolOf(c.promoted ? c.baseRarity : c.rarity === 'UR' ? 'SSR' : c.rarity).filter((id) => !mine.some((m) => m.id === id)); return statsOf(pool[Math.floor(rnd() * pool.length)] || (CARDS[c.id] ? c.id : 'gold'), c.level, !!c.promoted); });
   }
   function nextTurn(b) {
     if (b.ended) return;
@@ -615,4 +626,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
