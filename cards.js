@@ -87,21 +87,49 @@ function pricesNow(now = Date.now()) {
   const s = SALES.find((x) => now >= x.start && now < x.end);
   return s ? { pull: s.pull, ten: s.ten, sale: { name: s.name, end: s.end, pull: PULL_COST, ten: TEN_COST } } : { pull: PULL_COST, ten: TEN_COST, sale: null };
 }
-function rollRarity(rnd) {
+// ---------- 確率アップ (特定のキャラの出る確率を何倍かにする) ----------
+// 1 体あたりの確率 = (そのレア度の本来の確率 ÷ そのレア度の種類数) × 倍率。上がった分だけ、ほかのレア度の確率が同じ割合で下がる
+// テストのときは環境変数 CB_RATEUP_START / CB_RATEUP_END (ミリ秒の時刻、END は 0 で終わりなし) で上書きできる
+const RATE_UPS = [
+  { name: '恒常SSR 確率2倍', ids: ['gold', 'chalk', 'case'], mult: 2, start: Date.parse('2026-11-17T16:50:00+09:00'), end: null }, // 終わりなし
+];
+if (process.env.CB_RATEUP_START) Object.assign(RATE_UPS[0], { start: Number(process.env.CB_RATEUP_START), end: Number(process.env.CB_RATEUP_END) || null });
+const rateUpsNow = (now = Date.now()) => RATE_UPS.filter((x) => now >= x.start && (!x.end || now < x.end));
+const weightOf = (id, now = Date.now()) => rateUpsNow(now).reduce((w, x) => (x.ids.includes(id) ? w * x.mult : w), 1);
+// いまの確率 (%): レア度ごとと、1 体ごと
+function ratesNow(now = Date.now()) {
+  const raw = {};
+  for (const [r, v] of Object.entries(RARITY)) { const pool = poolOf(r, now); raw[r] = pool.length ? v.rate * pool.reduce((a, id) => a + weightOf(id, now), 0) / pool.length : 0; }
+  const boosted = Object.keys(RARITY).filter((r) => raw[r] !== RARITY[r].rate);
+  const fixed = boosted.reduce((a, r) => a + raw[r], 0), restBase = Object.keys(RARITY).filter((r) => !boosted.includes(r)).reduce((a, r) => a + RARITY[r].rate, 0);
+  const rates = {};
+  for (const r of Object.keys(RARITY)) rates[r] = boosted.includes(r) ? raw[r] : RARITY[r].rate * (100 - fixed) / restBase;
+  const perCard = {};
+  for (const r of Object.keys(RARITY)) { const pool = poolOf(r, now), tw = pool.reduce((a, id) => a + weightOf(id, now), 0); for (const id of pool) perCard[id] = rates[r] * weightOf(id, now) / tw; }
+  return { rates, perCard };
+}
+function rollRarity(rnd, now = Date.now()) {
+  const { rates } = ratesNow(now);
   let u = rnd() * 100;
-  for (const [r, v] of Object.entries(RARITY)) { u -= v.rate; if (u < 0) return r; }
+  for (const r of Object.keys(RARITY)) { u -= rates[r]; if (u < 0) return r; }
   return 'N';
+}
+// そのレア度の中から 1 体えらぶ (確率アップのキャラは重みが大きい)
+function pickIn(r, rnd, now) {
+  const list = poolOf(r, now), w = list.map((id) => weightOf(id, now));
+  let u = rnd() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < list.length; i++) { u -= w[i]; if (u < 0) return list[i]; }
+  return list[list.length - 1];
 }
 // n 回引く。pity は「最後に SSR が出てからの回数」。10 連の最後の 1 枚は SR 以上
 function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now = Date.now()) {
   const out = [];
   for (let i = 0; i < n; i++) {
-    let r = rollRarity(rnd);
+    let r = rollRarity(rnd, now);
     if (pity + 1 >= PITY) r = 'SSR';                                         // 天井
     else if (n === 10 && i === 9 && !out.some((x) => x.rarity === 'SR' || x.rarity === 'SSR') && (r === 'N' || r === 'R')) r = 'SR';
     pity = r === 'SSR' ? 0 : pity + 1;
-    const list = poolOf(r, now); // まだ登場していないキャラは出ない
-    out.push({ id: list[Math.floor(rnd() * list.length)], rarity: r });
+    out.push({ id: pickIn(r, rnd, now), rarity: r }); // まだ登場していないキャラは出ない
   }
   return { cards: out, pity };
 }
@@ -302,7 +330,8 @@ function install(app, ctx) {
   app.get('/api/cards/catalog', (req, res) => res.json({
     cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
-    rates: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, v.rate])), types: TYPES, beats: BEATS,
+    ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
+    rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
     pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
@@ -533,4 +562,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased });
+Object.assign(module.exports, { CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
