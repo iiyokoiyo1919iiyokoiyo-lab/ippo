@@ -3031,12 +3031,14 @@ const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400' };
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
+  const lvMul = level > 1 && cbCatalogCache && c.skillName ? 1 + cbCatalogCache.levelBonus * (Math.min(level, cbCatalogCache.maxLevel) - 1) : 1; // 図鑑のカードはレベル 1 の能力なので、レベルの分を足す
+  const sv = (v) => Math.round(v * lvMul);
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
     <span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
-    ${small ? '' : `<span class="cb-stats"><i>HP ${Number(c.maxHp)}</i><i>攻 ${Number(c.atk)}</i><i>防 ${Number(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
+    ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
 }
 // カードを指 (マウス) でなぞると傾いて、ホロの光が動く
@@ -3095,7 +3097,7 @@ async function viewCards() {
       <li>おたがいに、毎ターン同時に行動を選びます: <b>こうげき</b> / <b>ガード</b> (ダメージ 6 割減) / <b>わざ</b> (使うと 2 ターン休み) / <b>こうたい</b></li>
       <li>相性: ${Object.entries(cat.beats).map(([a, b]) => `${esc(cat.types[a].icon)}${esc(cat.types[a].name)} は ${esc(cat.types[b].icon)}${esc(cat.types[b].name)} に強い (1.5 倍)`).join('、')}</li>
       <li>素早いカードから先に動きます。相手の 3 枚をすべてたおすと勝ち。30 ターンたったら残り HP の多いほうの勝ち</li>
-      <li>レア度やレベルで能力は変わりません (対戦はフェア)。ちがいは相性・わざ・能力の配分です</li>
+      <li>レア度が高いほど、レベルが上がるほど強くなります (R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}%、レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%)。相性と作戦しだいで逆転もできます</li>
       <li>コインはお金では買えません。毎日のボーナスと対戦でもらえます</li></ul></details></section>`;
   $('#cb-login')?.addEventListener('click', () => openAuth());
   $('#cb-daily')?.addEventListener('click', async (e) => {
@@ -3155,7 +3157,8 @@ async function viewGacha() {
       <section class="card card-pad"><div class="panel-head"><h3>提供割合</h3></div>
         <div class="cb-rates">${Object.entries(cat.rates).reverse().map(([r, v]) => `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${v}%</b><small>${cat.cards.filter((c) => c.rarity === r).length}種類 · 1種類あたり ${(v / cat.cards.filter((c) => c.rarity === r).length).toFixed(2)}%</small></div>`).join('')}</div>
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
-          <li>同じカードが出るとレベルが上がります (最大 Lv${cat.maxLevel})。対戦の能力は変わりません</li>
+          <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、最大 Lv${cat.maxLevel})</li>
+          <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}%</li>
           <li>コインはお金では買えません</li></ul></section>`;
     $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
       $$('[data-n]', root).forEach((x) => { x.disabled = true; });

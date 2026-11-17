@@ -21,10 +21,11 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
 };
-// 対戦はフェア: レア度やレベルで能力は変わらない (mult と LEVEL_BONUS を 0 より大きくすると差を付けられる)。
-// カードの基本の強さは、1 対 1 で戦わせて勝率がほぼ 50% になるよう調整してある。ちがいは相性・わざ・能力の配分
-const RARITY = { N: { rate: 50, mult: 1.0 }, R: { rate: 35, mult: 1.0 }, SR: { rate: 12, mult: 1.0 }, SSR: { rate: 3, mult: 1.0 } };
-const LEVEL_BONUS = 0;
+// レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
+// この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
+// カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
+const RARITY = { N: { rate: 50, mult: 1.0 }, R: { rate: 35, mult: 1.04 }, SR: { rate: 12, mult: 1.08 }, SSR: { rate: 3, mult: 1.12 } };
+const LEVEL_BONUS = 0.02;
 // [id, 名前, 絵文字, レア度, 相性, HP, 攻撃, 防御, 素早さ, わざ]
 const CARD_LIST = [
   ['pencil', 'えんぴつ見習い', '✏️', 'N', 'cut', 61, 16, 9, 12, 'power'],
@@ -236,7 +237,7 @@ function install(app, ctx) {
   app.get('/api/cards/catalog', (req, res) => res.json({
     cards: CARD_LIST.map(([id]) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     rates: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, v.rate])), types: TYPES, beats: BEATS,
-    pullCost: PULL_COST, tenCost: TEN_COST, pity: PITY, dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    pullCost: PULL_COST, tenCost: TEN_COST, pity: PITY, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
 
