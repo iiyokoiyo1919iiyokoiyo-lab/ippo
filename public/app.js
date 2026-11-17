@@ -2596,6 +2596,7 @@ function route() {
   if (h === '/games/cards/gacha') { setActiveNav('games'); return viewGacha(); }
   if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
   if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
+  if (h === '/games/cards/usage') { setActiveNav('games'); return viewCardUsage(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
@@ -3143,7 +3144,7 @@ async function viewCards() {
       <span class="text-xs muted">対戦の報酬は今日あと ${Math.max(0, mine.rewardsLeft)} 回 (CPU 戦は回数制限なし)</span>
     </section>
     <section class="card card-pad">
-      <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></div>
+      <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><span><a class="btn btn-ghost btn-sm" href="#/games/cards/usage">📊 採用率</a><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></span></div>
       <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse ? C[id].level : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
     </section>
     <section class="card card-pad">
@@ -3385,6 +3386,38 @@ async function viewCollection() {
   }
   const C2 = (id) => { const c = cat.cards.find((x) => x.id === id); return c ? cbMine(c, mine) : mine.horses.find((x) => x.id === id); };
   render();
+}
+
+// ---------- デッキの採用率 ----------
+async function viewCardUsage() {
+  main.innerHTML = pageHead({ title: 'デッキ採用率', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbu">${loadingBlock()}</div>`;
+  let cat; try { cat = await cbCatalog(); } catch (e) { $('#cbu').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  let days = 7, scope = 'all';
+  const C = Object.fromEntries(cat.cards.map((c) => [c.id, c]));
+  async function load() {
+    const root = $('#cbu'); if (!root) return;
+    let u; try { u = await api(`/cards/usage?days=${days}&scope=${scope}`, { noAuthPrompt: true }); } catch (e) { root.innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+    if (!$('#cbu')) return;
+    const max = Math.max(1, ...u.cards.map((x) => x.rate), u.horse.rate);
+    const seg = (name, cur, opts) => `<div class="segmented cb-mode" role="tablist">${opts.map(([v, l]) => `<button type="button" class="seg${cur === v ? ' active' : ''}" data-${name}="${v}">${l}</button>`).join('')}</div>`;
+    const row = (rank, art, name, rarity, x) => `<li class="cbu-row"><span class="cbu-rank${rank <= 3 && x.count ? ' top' + rank : ''}">${rank}</span>
+        <span class="cbu-art" aria-hidden="true">${art}</span>
+        <span class="cbu-main"><span class="cbu-name"><b>${esc(name)}</b>${rarity ? `<span class="cb-rbadge" style="--rc:${CB_RCOL[rarity] || '#888'}">${esc(rarity)}</span>` : ''}</span>
+          <span class="cbu-bar"><i style="width:${(x.rate / max) * 100}%;--rc:${CB_RCOL[rarity] || '#c9783a'}"></i></span></span>
+        <span class="cbu-pct"><b>${x.rate.toFixed(1)}%</b><small>${x.count}人</small></span></li>`;
+    let rank = 0, last = -1;
+    $('#cbu').innerHTML = `<section class="card card-pad stack-sm">
+        ${seg('days', days, [[1, '今日'], [7, '7日間'], [30, '30日間'], [0, 'ぜんぶ']])}
+        ${seg('scope', scope, [['all', 'すべての対戦'], ['random', 'レート戦だけ']])}
+        <p class="text-xs muted" style="margin:0">${days ? `この ${days === 1 ? '1 日' : days + ' 日間'}` : 'これまで'}に${scope === 'random' ? 'ランダム対戦 (レート戦)' : '対戦'}をした <b>${u.players}</b> 人の、いまのデッキに入っている割合です (1 人 3 枚なので、合計は 300% になります)。1 分ごとに更新。</p></section>
+      ${u.players ? `<section class="card card-pad"><ol class="cbu-list">
+        ${u.cards.map((x, i) => { if (x.count !== last) { rank = i + 1; last = x.count; } const c = C[x.id]; return c ? row(rank, CBArt.svg(c.id, c.rarity), c.name, c.rarity, x) : ''; }).join('')}
+        ${u.horse.count ? row('🐴', CBArt.svg('h:x', 'SSR', { coat: '栗毛' }), '連れてきた馬 (どれか 1 頭以上)', '', u.horse) : ''}
+      </ol></section>` : emptyState({ icon: 'sparkle', title: 'この期間に対戦した人はいません', text: '期間を変えてみてください' })}`;
+    $$('[data-days]').forEach((b) => b.addEventListener('click', () => { days = Number(b.dataset.days); load(); }));
+    $$('[data-scope]').forEach((b) => b.addEventListener('click', () => { scope = b.dataset.scope; load(); }));
+  }
+  load();
 }
 
 // ---------- 期間限定クエスト ----------

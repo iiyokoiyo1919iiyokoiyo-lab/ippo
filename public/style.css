@@ -1853,3 +1853,16 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .ev-cap .ev-tag { color: #fff !important; font-size: 13px; } .ev-cap small { font-size: 12px; opacity: .9; }
 .ev-img .ev-close { background: rgba(0, 0, 0, .35); color: #fff !important; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) { .ev-shine { animation: none; display: none; } }
+
+/* デッキ採用率 */
+.cbu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cbu-row { display: grid; grid-template-columns: 28px 44px 1fr auto; gap: 10px; align-items: center; padding: 4px 0; }
+.cbu-rank { font-weight: 900; text-align: center; color: var(--text-2); }
+.cbu-rank.top1 { color: #e2a400; font-size: 20px; } .cbu-rank.top2 { color: #868e96; font-size: 18px; } .cbu-rank.top3 { color: #c9783a; font-size: 17px; }
+.cbu-art { width: 44px; height: 44px; } .cbu-art svg { width: 100%; height: 100%; }
+.cbu-main { display: grid; gap: 4px; min-width: 0; }
+.cbu-name { display: flex; align-items: center; gap: 6px; min-width: 0; } .cbu-name b { font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cbu-name .cb-rbadge { font-size: 10px; }
+.cbu-bar { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--text) 8%, transparent); overflow: hidden; }
+.cbu-bar i { display: block; height: 100%; border-radius: inherit; background: var(--rc); transition: width .5s ease; }
+.cbu-pct { display: grid; justify-items: end; line-height: 1.15; } .cbu-pct b { font-size: 16px; } .cbu-pct small { font-size: 11px; color: var(--text-2); }

@@ -55,7 +55,7 @@ const CARD_LIST = [
   ['gold', '黄金えんぴつ王', '👑', 'SSR', 'cut', 52, 16, 9, 14, 'power'],
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
-  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 59, 12, 6, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 12, 6, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
@@ -536,6 +536,32 @@ function install(app, ctx) {
     if (!Array.isArray(d) || d.length !== 3 || new Set(d).size !== 3 || !d.every((id) => typeof id === 'string' && (id.startsWith('h:') ? !!cardStats(req.user.id, id, o) : o[id]))) return res.status(400).json({ error: '持っているカードを、ちがうもの 3 枚えらんでください' });
     db.prepare('UPDATE card_players SET deck = ? WHERE user_id = ?').run(JSON.stringify(d), req.user.id);
     res.json(me(req.user.id));
+  });
+
+  // ---------- デッキの採用率 (その期間に対戦した人の、いまのデッキに入っている割合。だれのデッキかは出さない) ----------
+  // days: 1 / 7 / 30 / 0 (全期間)、scope: all (全部の対戦) / random (ランダム対戦 = レート戦だけ)
+  const usageCache = new Map();
+  app.get('/api/cards/usage', rateLimit({ windowMs: 60_000, max: 60 }), (req, res) => {
+    const days = [1, 7, 30, 0].includes(Number(req.query.days)) ? Number(req.query.days) : 7;
+    const scope = req.query.scope === 'random' ? 'random' : 'all';
+    const key = `${days}:${scope}`, hit = usageCache.get(key);
+    if (hit && Date.now() - hit.at < 60_000) return res.json(hit.data);
+    const since = days ? Date.now() - days * 86400_000 : 0;
+    const ids = db.prepare(`SELECT DISTINCT u FROM (SELECT p1 AS u, mode, created_at FROM card_battles UNION ALL SELECT p2 AS u, mode, created_at FROM card_battles)
+      WHERE u IS NOT NULL AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).all(since).map((r) => r.u);
+    const count = {}; let horse = 0;
+    for (const uid of ids) {
+      const p = qPlayer.get(uid); if (!p) continue;
+      let deck; try { deck = JSON.parse(p.deck); } catch { continue; }
+      if (deck.some((id) => String(id).startsWith('h:'))) horse++;
+      for (const id of new Set(deck)) if (CARDS[id]) count[id] = (count[id] || 0) + 1;
+    }
+    const n = ids.length, rate = (c) => (n ? (c / n) * 100 : 0);
+    const data = { days, scope, players: n, updatedAt: Date.now(),
+      cards: releasedIds().map((id) => ({ id, count: count[id] || 0, rate: rate(count[id] || 0) })).sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
+      horse: { count: horse, rate: rate(horse) } };
+    usageCache.set(key, { at: Date.now(), data });
+    res.json(data);
   });
 
   // レートのランキング (ランダム対戦を 1 回以上した人)
