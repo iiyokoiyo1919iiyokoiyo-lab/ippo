@@ -733,10 +733,12 @@ async function viewHome() {
   main.innerHTML = pageHead({ title: 'ホーム', tabs }).replace('class="page-head', 'class="page-head home-head') + `<div class="content">
     ${me ? `<div class="card compose-card" id="home-compose">${composeHtml()}</div>` : welcomeCard()}
     <div id="announce-banner"></div>
+    <div id="event-banners" class="ev-list"></div>
     <div id="question-card" class="hidden"></div>
     <div class="stack" id="feed"></div></div>`;
   questionCard();
   loadAnnounceBanner();
+  loadEventBanners();
   $$('.tabs button', main).forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.mode === 'following' && !me) return openAuth();
     tlMode = b.dataset.mode; viewHome();
@@ -1060,6 +1062,27 @@ async function markAnnouncementsSeen(upTo) {
   refreshBadges(true);
 }
 // ホームのバナー (固定されたお知らせ、または未読の重要なお知らせ)。× で閉じるとこの端末では出さない
+// 新キャラ・期間限定クエストの告知バナー (サーバーの時刻で、予告 → 開催中 → 終わったら消える)
+async function loadEventBanners() {
+  const el = $('#event-banners'); if (!el) return;
+  let r; try { r = await api('/events/banners', { noAuthPrompt: true }); } catch { return; }
+  if (!$('#event-banners')) return;
+  const closed = store.get('ippo_ev_closed', []);
+  const list = r.banners.filter((b) => !closed.includes(`${b.id}:${b.live ? 1 : 0}`));
+  el.innerHTML = list.map((b) => `<div class="ev-bn ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
+      <span class="ev-sky" aria-hidden="true"><i></i><i></i><i></i></span>
+      <a class="ev-body" href="${esc(b.href)}">
+        <span class="ev-art" aria-hidden="true">${window.CBArt ? CBArt.svg(b.art.id, b.art.rarity) : ''}</span>
+        <span class="ev-text"><span class="ev-tag">${esc(b.tag)}</span><b>${esc(b.title)}</b><span>${esc(b.text)}</span><small>${esc(b.sub)}</small></span>
+      </a>
+      <button class="icon-btn ev-close" type="button" aria-label="このお知らせを閉じる">${icon('x')}</button></div>`).join('')
+    + (list.length && r.official ? `<a class="ev-official" href="#/u/${esc(r.official)}">📢 アップデート情報は公式アカウント <b>@${esc(r.official)}</b> でお知らせしています</a>` : '');
+  $$('.ev-close', el).forEach((b) => b.addEventListener('click', () => {
+    const card = b.closest('.ev-bn');
+    store.set('ippo_ev_closed', [card.dataset.ev, ...store.get('ippo_ev_closed', [])].slice(0, 40));
+    card.remove(); if (!$('.ev-bn', el)) $('.ev-official', el)?.remove();
+  }));
+}
 async function loadAnnounceBanner() {
   const el = $('#announce-banner');
   if (!el) return;
@@ -2836,6 +2859,7 @@ window.addEventListener('message', (e) => {
 // =====================================================================
 function viewGames() {
   main.innerHTML = pageHead({ title: 'ミニゲーム', sub: 'みんなで遊べるゲーム' }) + `<div class="content stack">
+    <div id="event-banners" class="ev-list"></div>
     <a class="card game-card" href="#/games/poker">
       <span class="game-card-art pk-art" aria-hidden="true">${pkCard('As')}${pkCard('Ah')}</span>
       <span class="game-card-body"><b>レート戦ポーカー</b><span>1対1のテキサスホールデム。相手のチップを全部とったら勝ち (お金やコインは賭けません)</span>
@@ -2853,6 +2877,7 @@ function viewGames() {
       <span class="game-card-body"><b>117万分の1 競走馬版</b><span>今年生まれる馬の一頭になって、その一生をたどる（非公式のファン作品）。生まれた馬でオンラインレースも</span>
         <span class="chip chip-accent">🏇 図鑑の馬でレース・レート</span></span>${icon('chevron', 'chev')}</a>
   </div>`;
+  loadEventBanners();
 }
 
 // =====================================================================

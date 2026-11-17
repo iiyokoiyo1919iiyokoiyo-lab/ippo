@@ -93,6 +93,7 @@ app.post('/api/register', authLimit, (req, res) => {
   const { username, password, displayName } = req.body || {};
   if (!/^[A-Za-z0-9_]{3,15}$/.test(username || '')) return res.status(400).json({ error: 'ユーザー名は英数字と_で3〜15文字です' });
   if (typeof password !== 'string' || password.length < 8) return res.status(400).json({ error: 'パスワードは8文字以上にしてください' });
+  if (ctx.isReservedName && ctx.isReservedName(username)) return res.status(400).json({ error: 'このユーザー名は公式アカウント用のため使えません。別のユーザー名にしてください' });
   if (ctx.isBannedName && ctx.isBannedName(username)) return res.status(400).json({ error: 'このユーザー名は使えません。別のユーザー名にしてください' });
   const name = String(displayName || username).trim().slice(0, 50) || username;
   // 招待制: 有効な招待コードが必要 (まだ誰もいない時の最初の1人だけは不要)
@@ -188,8 +189,8 @@ const beforeId = (req) => Number(req.query.before) || Number.MAX_SAFE_INTEGER;
 app.get('/api/timeline', (req, res) => {
   const following = req.query.mode === 'following' && req.user;
   const rows = following
-    ? db.prepare(`SELECT * FROM posts WHERE id < ? AND community_id IS NULL AND (user_id = ? OR user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?))
-        ORDER BY id DESC LIMIT 30`).all(beforeId(req), req.user.id, req.user.id)
+    ? db.prepare(`SELECT * FROM posts WHERE id < ? AND community_id IS NULL AND (user_id = ? OR user_id = ? OR user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?))
+        ORDER BY id DESC LIMIT 30`).all(beforeId(req), req.user.id, ctx.officialId?.() || 0, req.user.id) // 公式アカウントのお知らせは、フォローしていなくても出す
     : db.prepare('SELECT * FROM posts WHERE id < ? AND reply_to IS NULL AND community_id IS NULL ORDER BY id DESC LIMIT 30').all(beforeId(req));
   res.json({ posts: hydrateAll(rows, req.user) });
 });
@@ -347,6 +348,7 @@ require('./horse')(app, ctx); // ミニゲーム「117万分の1 競走馬版」
 require('./race')(app, ctx); // 競走馬版: 図鑑の馬でレース (オンライン対戦)
 require('./games')(app, ctx); // ミニゲーム「暗算ダッシュ」(ランキングつき)
 require('./cards')(app, ctx); // ミニゲーム「ぶんぼうぐバトラーズ」(ガチャ・オンライン対戦)
+require('./official')(app, ctx); // IppO 公式アカウント (アップデート情報の自動投稿) と、イベントの告知バナー
 require('./poker')(app, ctx); // ミニゲーム「レート戦ポーカー」(1 対 1 のテキサスホールデム。お金・コインは賭けない)
 
 // ---------- ダイレクトメッセージ ----------

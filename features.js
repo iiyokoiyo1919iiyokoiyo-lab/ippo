@@ -325,7 +325,7 @@ module.exports = function install(app, ctx) {
 
   ctx.checkInvite = (raw) => {
     if (!INVITE_ONLY) return {};
-    if (db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0) return {}; // 最初の1人
+    if (db.prepare('SELECT COUNT(*) AS n FROM users WHERE id != ?').get(ctx.officialId?.() || 0).n === 0) return {}; // 最初の1人 (公式アカウントは数えない)
     const code = normCode(raw);
     if (!code) return { error: 'IppO は招待制です。招待コードを入力してください' };
     const inv = qInvite.get(code);

@@ -105,9 +105,10 @@ const RATE_UPS = [
 // ---------- ピックアップ (そのキャラ 1 体の確率を決まった % にする。ほかのキャラは元の確率のまま。ふえた分は、ほかのレア度が同じ割合で下がる) ----------
 // テストのときは環境変数 CB_PICKUP_START (ミリ秒の時刻) で上書きできる
 const PICKUPS = [
-  { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: null }, // 疾風剣士ハサミ丸 1 体で 3%
+  { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T10:30:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (11/19 10:30 まで)
 ];
 if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
+if (Number(process.env.CB_PICKUP_END)) PICKUPS[0].end = Number(process.env.CB_PICKUP_END);
 const pickupsNow = (now = Date.now()) => PICKUPS.filter((x) => now >= x.start && (!x.end || now < x.end) && isReleased(x.id, now));
 if (process.env.CB_RATEUP_START) Object.assign(RATE_UPS[0], { start: Number(process.env.CB_RATEUP_START), end: Number(process.env.CB_RATEUP_END) || null });
 const rateUpsNow = (now = Date.now()) => RATE_UPS.filter((x) => now >= x.start && (!x.end || now < x.end));
@@ -711,4 +712,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

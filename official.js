@@ -1,0 +1,166 @@
+// =====================================================================
+// IppO 公式アカウント (アップデート情報を自動で投稿する) と、イベントの告知バナー
+// ・公式アカウントはサーバーが起動時に用意する。パスワードはだれも知らない (ログインできない) ので、乗っ取られない
+// ・認証マーク「公式」つき。似たユーザー名 (ippo_official など) は新しく登録できない
+// ・投稿の予定は、カードゲームの設定 (新キャラの登場・クエスト・ピックアップ・セール) と、下のアップデート情報から自動で作る。
+//   時刻になったら 1 回だけ投稿する (投稿したものは記録に残すので、再起動しても二重に投稿しない)。
+//   期限 (until) を過ぎた予定は投稿しない (あとで起動したときに古いお知らせを出さない)
+// =====================================================================
+const crypto = require('crypto');
+const cards = require('./cards');
+
+const MIGRATION = `
+CREATE TABLE official_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE official_posts (
+  key TEXT PRIMARY KEY,                                   -- 予定の ID (同じ予定は 1 回だけ)
+  post_id INTEGER,                                        -- 投稿 (消されたら NULL のまま記録だけ残る)
+  posted_at INTEGER NOT NULL
+);
+`;
+const NAMES = ['IppO_official', 'IppO_koushiki', 'IppO_info'];           // 公式アカウントのユーザー名 (使えるものを順に)
+const DISPLAY = 'IppO 公式';
+const BIO = 'IppO の公式アカウントです。アップデート情報・新キャラ・イベントのお知らせを自動でお届けします📢';
+const RESERVED = /^ippo_?(official|koushiki|info|unei|kousiki|admin|staff)/i;  // なりすまし防止: 新しく登録できないユーザー名
+const TAG = '#ぶんぼうぐバトラーズ';
+const H = 3600_000, D = 24 * H;
+
+// 手で書くアップデート情報 (key は変えない。at から until までの間に 1 回だけ投稿)
+const UPDATES = [
+  { key: 'update-2026-11-18', at: Date.parse('2026-11-18T07:30:00+09:00'), until: Date.parse('2026-11-20T07:30:00+09:00'),
+    text: `📢【本日のアップデート】
+・8:00〜 期間限定クエスト「星降る夜のクエスト」
+・10:25〜 新キャラ SSR「疾風剣士ハサミ丸」ガチャに登場 (ピックアップ 3%)
+・試合でもらえる「レベルアップ書」でカードのレベル上げ
+・ガチャ限定 SSR は 3 枚で UR に昇格
+ゲーム → ぶんぼうぐバトラーズ ${TAG}` },
+];
+
+const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const hm = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+const jstDay = (t) => new Date(t + 9 * H).toISOString().slice(0, 10);
+
+// カードゲームの設定から、公式の投稿の予定を作る
+function schedule() {
+  const { CARDS, SKILLS, RELEASES, QUESTS, PICKUPS, SALES } = cards;
+  const out = [...UPDATES];
+  for (const [id, at] of Object.entries(RELEASES)) {
+    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity]) continue;        // ガチャに出ないキャラ (クエストの報酬) はクエストの投稿で知らせる
+    const pk = PICKUPS.find((x) => x.id === id);
+    out.push({ key: `release:${id}`, at, until: at + D,
+      text: `🆕【新キャラ登場】${c.rarity}「${c.name}」がガチャに登場しました！
+わざ「${SKILLS[c.skill].name}」${SKILLS[c.skill].desc.replace(/\s*\([^()]*だけのわざ\)/, '')}${pk ? `\n🎯 ピックアップ中は 1 体 ${pk.rate}%！${pk.end ? ` (${fmt(pk.end)} まで)` : ''}` : ''}\n${TAG}` });
+  }
+  for (const pk of PICKUPS) {
+    if (!pk.end) continue;
+    const c = CARDS[pk.id];
+    out.push({ key: `pickup-end-soon:${pk.id}:${pk.end}`, at: pk.end - 3 * H, until: pk.end,
+      text: `⏰「${c.name}」のピックアップ (1 体 ${pk.rate}%) は ${fmt(pk.end)} までです。お見のがしなく！ ${TAG}` });
+    out.push({ key: `pickup-end:${pk.id}:${pk.end}`, at: pk.end, until: pk.end + 3 * H,
+      text: `「${c.name}」のピックアップは終了しました。ご参加ありがとうございました！ ${c.name}はこれからもガチャに登場します (ふつうの確率)。 ${TAG}` });
+  }
+  for (const q of QUESTS) {
+    const r = CARDS[q.reward];
+    out.push({ key: `quest-start:${q.id}`, at: q.start, until: q.start + D,
+      text: `🌠【期間限定クエスト開始】「${q.name}」が始まりました！
+${q.enemy.map(([id, lv]) => `${CARDS[id].name} Lv${lv}`).join('・')} に勝つと、${r.rarity}「${r.name}」が仲間に！
+わざ「${SKILLS[r.skill].name}」は 5 ターンのあいだ流星を降らせる！
+${fmt(q.end)} まで ${TAG}` });
+    out.push({ key: `quest-end-soon:${q.id}`, at: q.end - D, until: q.end,
+      text: `⏰ 期間限定クエスト「${q.name}」は ${fmt(q.end)} までです。クリアすると ${r.rarity}「${r.name}」がもらえます！ ${TAG}` });
+    out.push({ key: `quest-end:${q.id}`, at: q.end, until: q.end + 3 * H,
+      text: `期間限定クエスト「${q.name}」は終了しました。挑戦してくれたみなさん、ありがとうございました！ ${TAG}` });
+  }
+  for (const s of SALES) {
+    out.push({ key: `sale-start:${s.start}`, at: s.start, until: s.start + 6 * H,
+      text: `🔥【${s.name}】ガチャが 1 回 ${s.pull} コイン・10 回 ${s.ten} コインに！ ${fmt(s.end)} まで ${TAG}` });
+    out.push({ key: `sale-end-soon:${s.start}`, at: s.end - 6 * H, until: s.end,
+      text: `⏰ ガチャの「${s.name}」は ${fmt(s.end)} までです！ ${TAG}` });
+  }
+  return out.filter((e) => Number.isFinite(e.at)).sort((a, b) => a.at - b.at);
+}
+
+// ホームとゲームの画面に出す告知バナー (新キャラ・クエスト)。始まる 1 日前から予告、終わったら消える
+function banners(now = Date.now()) {
+  const { CARDS, SKILLS, RELEASES, QUESTS, PICKUPS } = cards;
+  const out = [];
+  for (const q of QUESTS) {
+    if (now < q.start - D || now >= q.end) continue;
+    const live = now >= q.start, r = CARDS[q.reward];
+    out.push({ id: 'quest:' + q.id, kind: 'quest', live, href: '#/games/cards/quest', art: { id: r.id, rarity: r.rarity },
+      tag: live ? '🌠 期間限定クエスト 開催中' : `🌠 ${jstDay(q.start) === jstDay(now) ? '本日' : fmt(q.start).replace(/ .*/, '')} ${hm(q.start)} から 期間限定クエスト`,
+      title: q.name, text: `クリアで ${r.rarity}「${r.name}」が仲間に！`, sub: live ? `${fmt(q.end)} まで` : `${fmt(q.start)} 開始`, start: q.start, end: q.end });
+  }
+  for (const [id, at] of Object.entries(RELEASES)) {
+    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity]) continue;
+    const pk = PICKUPS.find((x) => x.id === id), end = pk?.end || at + 7 * D;
+    if (now < at - D || now >= end) continue;
+    const live = now >= at;
+    out.push({ id: 'char:' + id, kind: 'char', live, href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
+      tag: live ? '🆕 新キャラ登場！' : `🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
+      title: `${c.rarity}「${c.name}」`, text: `わざ「${SKILLS[c.skill].name}」${pk ? ` · ピックアップ 1 体 ${pk.rate}%` : ''}`,
+      sub: live ? (pk?.end ? `ピックアップは ${fmt(pk.end)} まで` : 'ガチャに登場中') : `${fmt(at)} ガチャに登場`, start: at, end });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+module.exports = function install(app, ctx) {
+  const { db, rateLimit } = ctx;
+  db.migrate('2026-11-25-official', MIGRATION);
+  const getState = (k) => db.prepare('SELECT value FROM official_state WHERE key = ?').get(k)?.value;
+  const setState = (k, v) => db.prepare('INSERT INTO official_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(k, String(v));
+
+  // ---------- 公式アカウントを用意する ----------
+  function ensureAccount() {
+    let u = getState('user_id') && db.prepare('SELECT * FROM users WHERE id = ?').get(Number(getState('user_id')));
+    if (!u) {
+      const name = NAMES.find((n) => !db.prepare('SELECT 1 FROM users WHERE username = ?').get(n));
+      if (!name) { console.warn('[official] 公式アカウントのユーザー名が使えません'); return null; }
+      const salt = crypto.randomBytes(16).toString('hex');
+      const r = db.prepare('INSERT INTO users (username, display_name, bio, pass_hash, salt, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(name, DISPLAY, BIO, ctx.hashPw(crypto.randomBytes(32).toString('hex'), salt), salt, Date.now()); // だれも知らないパスワード
+      setState('user_id', r.lastInsertRowid);
+      u = db.prepare('SELECT * FROM users WHERE id = ?').get(r.lastInsertRowid);
+      console.log(`[official] 公式アカウント @${u.username} を作りました`);
+    }
+    db.prepare('UPDATE users SET display_name = ?, bio = ? WHERE id = ?').run(DISPLAY, BIO, u.id);
+    db.prepare(`INSERT INTO user_avatars (user_id, kind, image, emoji, color, updated_at) VALUES (?, 'emoji', NULL, '📢', '#4b55f0', ?)
+      ON CONFLICT(user_id) DO UPDATE SET kind = 'emoji', image = NULL, emoji = '📢', color = '#4b55f0'`).run(u.id, Date.now());
+    db.prepare(`INSERT INTO user_verifications (user_id, label, verified_name, verified_by, verified_at) VALUES (?, '公式', ?, NULL, ?)
+      ON CONFLICT(user_id) DO UPDATE SET label = '公式', verified_name = excluded.verified_name`).run(u.id, DISPLAY, Date.now());
+    return u.id;
+  }
+  // まだだれも登録していない (まっさらな) ときは作らない (最初に登録した人が 1 番 = 管理者になるように)
+  const hasUsers = () => db.prepare('SELECT 1 FROM users LIMIT 1').get();
+  let officialId = hasUsers() ? ensureAccount() : null;
+  ctx.officialId = () => officialId;
+  ctx.isReservedName = (username) => RESERVED.test(String(username || ''));
+
+  // ---------- 時刻になったら投稿する ----------
+  function post(text) {
+    if (!officialId || !db.prepare('SELECT 1 FROM users WHERE id = ?').get(officialId)) officialId = hasUsers() ? ensureAccount() : null;
+    if (!officialId) return null;
+    const r = db.prepare('INSERT INTO posts (user_id, content, created_at) VALUES (?, ?, ?)').run(officialId, text.slice(0, 280), Date.now());
+    ctx.invalidateTrends?.();
+    return Number(r.lastInsertRowid);
+  }
+  const posted = db.prepare('SELECT 1 FROM official_posts WHERE key = ?');
+  function tick(now = Date.now()) {
+    if (!officialId && hasUsers()) officialId = ensureAccount();
+    if (!officialId) return;
+    for (const e of schedule()) {
+      if (now < e.at || now >= e.until || posted.get(e.key)) continue;
+      const id = post(e.text);
+      db.prepare('INSERT OR IGNORE INTO official_posts (key, post_id, posted_at) VALUES (?, ?, ?)').run(e.key, id, now);
+      console.log(`[official] 投稿しました: ${e.key}`);
+    }
+  }
+  setTimeout(tick, 3000).unref();
+  setInterval(tick, Number(process.env.OFFICIAL_TICK_MS) || 30_000).unref();
+
+  // ---------- 告知バナー ----------
+  app.get('/api/events/banners', rateLimit({ windowMs: 60_000, max: 120 }), (req, res) => {
+    const u = officialId && db.prepare('SELECT username FROM users WHERE id = ?').get(officialId);
+    res.json({ banners: banners(), official: u ? u.username : null });
+  });
+};
+Object.assign(module.exports, { schedule, banners, UPDATES });

@@ -1813,3 +1813,33 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-end .cb-qreward-card { width: 150px; }
 
 .cb-pickup { font-weight: 800; color: var(--text); } .cb-pickup em { font-style: normal; font-size: 1.35em; color: #e03131; }
+
+/* ===== 新キャラ・クエストの告知バナー ===== */
+.ev-list:empty { display: none; }
+.ev-list { display: grid; gap: 10px; margin-bottom: 12px; }
+.ev-bn { position: relative; overflow: hidden; border-radius: 18px; border: 2px solid transparent; animation: cb-rim 2.4s linear infinite; }
+.ev-bn.quest { background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, .7) 0 1px, transparent 1.5px) 0 0 / 25px 25px padding-box, linear-gradient(120deg, #1d1450, #4a25a8 55%, #a82d86) padding-box, conic-gradient(from var(--cb-a), #ff6bd6, #ffd43b, #63e6be, #4dabf7, #b197fc, #ff6bd6) border-box; color: #fff; }
+.ev-bn.char { background: linear-gradient(120deg, #fff4e6, #ffe3f1 55%, #e7f5ff) padding-box, conic-gradient(from var(--cb-a), #ff6b6b, #ffd43b, #74c0fc, #ff6b6b) border-box; color: #1f2766; }
+.ev-body { display: grid; grid-template-columns: 76px 1fr; gap: 12px; align-items: center; padding: 10px 40px 10px 12px; color: inherit; text-decoration: none !important; position: relative; z-index: 1; }
+.ev-art { width: 76px; height: 76px; animation: cb-bob 2.2s ease-in-out infinite; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .2)); }
+.ev-art svg { width: 100%; height: 100%; }
+.ev-text { display: grid; gap: 1px; min-width: 0; }
+.ev-tag { font-size: 12px; font-weight: 900; letter-spacing: .03em; }
+.ev-bn.quest .ev-tag { color: #ffe066; } .ev-bn.char .ev-tag { color: #e03131; }
+.ev-text b { font-size: 18px; line-height: 1.3; }
+.ev-bn.quest .ev-text b { text-shadow: 0 0 10px rgba(255, 107, 214, .6); }
+.ev-text span:not(.ev-tag) { font-size: var(--fs-sm); }
+.ev-text small { font-size: 12px; opacity: .8; }
+.ev-bn.quest .ev-text span:not(.ev-tag), .ev-bn.quest .ev-text small { color: #e5dbff; }
+.ev-close { position: absolute; top: 4px; right: 4px; z-index: 2; color: inherit; }
+.ev-bn.quest .ev-close { color: #fff; }
+.ev-sky { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.ev-bn.char .ev-sky { display: none; }
+.ev-sky i { position: absolute; top: -20px; width: 3px; height: 30px; border-radius: 3px; background: linear-gradient(transparent, #fff); transform: rotate(-35deg); animation: cb-rainfall 2.4s linear infinite; opacity: .8; }
+.ev-sky i:nth-child(1) { left: 35%; } .ev-sky i:nth-child(2) { left: 65%; animation-delay: .8s; } .ev-sky i:nth-child(3) { left: 90%; animation-delay: 1.6s; }
+.ev-bn:not(.live) .ev-tag::after { content: ' ⏳'; }
+.ev-official { font-size: 12px; color: var(--text-2); text-align: center; text-decoration: none !important; }
+.ev-official b { color: var(--accent, #4b55f0); }
+:root[data-theme="dark"] .ev-bn.char { background: linear-gradient(120deg, #4a2a10, #4a1d3d 55%, #1d3550) padding-box, conic-gradient(from var(--cb-a), #ff6b6b, #ffd43b, #74c0fc, #ff6b6b) border-box; color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ev-bn.char { background: linear-gradient(120deg, #4a2a10, #4a1d3d 55%, #1d3550) padding-box, conic-gradient(from var(--cb-a), #ff6b6b, #ffd43b, #74c0fc, #ff6b6b) border-box; color: #fff; } }
+@media (prefers-reduced-motion: reduce) { .ev-bn, .ev-art, .ev-sky i { animation: none !important; } }
