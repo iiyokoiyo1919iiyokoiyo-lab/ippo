@@ -293,10 +293,13 @@
     let back = '';
     if (rarity === 'R') back = twinkle(18, 26, 5, '#a5d8ff', 'cb-tw') + twinkle(102, 40, 4, '#a5d8ff', 'cb-tw d2');
     if (rarity === 'SR') back = `<circle cx="60" cy="62" r="56" fill="${rg('au', [[0, '#d0bfff', 0.9], [0.6, '#b197fc', 0.35], [1, '#b197fc', 0]], 0.5, 0.5, 0.5)}"/>` + twinkle(16, 24, 6, '#e5dbff', 'cb-tw') + twinkle(104, 34, 5, '#fff', 'cb-tw d2') + twinkle(100, 98, 4, '#e5dbff', 'cb-tw d3');
-    if (rarity === 'SSR') {
-      const rays = Array.from({ length: 12 }, (_, i) => `<path d="M60,60L${60 + Math.cos((i * 30 - 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 - 6) * Math.PI / 180) * 90}L${60 + Math.cos((i * 30 + 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 + 6) * Math.PI / 180) * 90}Z" fill="${i % 2 ? '#ffe066' : '#ffa8d9'}" opacity=".45"/>`).join('');
+    if (rarity === 'SSR' || rarity === 'UR') {
+      const ur = rarity === 'UR';
+      const rays = Array.from({ length: 12 }, (_, i) => `<path d="M60,60L${60 + Math.cos((i * 30 - 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 - 6) * Math.PI / 180) * 90}L${60 + Math.cos((i * 30 + 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 + 6) * Math.PI / 180) * 90}Z" fill="${ur ? (i % 2 ? '#ffd43b' : '#ff6b6b') : (i % 2 ? '#ffe066' : '#ffa8d9')}" opacity="${ur ? 0.55 : 0.45}"/>`).join('');
       back = `<g class="cb-rays">${rays}</g><circle cx="60" cy="60" r="50" fill="${rg('ss', [[0, '#fff', 0.95], [0.5, '#fff3bf', 0.5], [1, '#fff3bf', 0]], 0.5, 0.5, 0.5)}"/>`
         + twinkle(14, 20, 7, '#fff', 'cb-tw') + twinkle(106, 28, 6, '#ffe066', 'cb-tw d2') + twinkle(104, 100, 5, '#fff', 'cb-tw d3') + twinkle(14, 98, 5, '#ffd8f0', 'cb-tw d2');
+      if (ur) back += `<circle class="cb-halo" cx="60" cy="60" r="54" fill="none" stroke="${lg('hl', [[0, '#fff3bf'], [0.5, '#fab005'], [1, '#e8590c']], 1, 1)}" stroke-width="3" stroke-dasharray="6 5"/>`
+        + twinkle(60, 4, 8, '#fff3bf', 'cb-tw') + twinkle(4, 60, 6, '#ffd43b', 'cb-tw d3') + twinkle(116, 64, 6, '#ffd43b', 'cb-tw d2');
     }
     defs.push(`<filter id="${u}stk" x="-20%" y="-20%" width="140%" height="140%"><feMorphology in="SourceAlpha" operator="dilate" radius="2.6" result="d"/><feFlood flood-color="#fff"/><feComposite in2="d" operator="in" result="o"/><feDropShadow in="o" dx="0" dy="2.2" stdDeviation="1.6" flood-color="#1b1b3a" flood-opacity=".22" result="os"/><feMerge><feMergeNode in="os"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
     return `<defs>${defs.join('')}</defs>${back}<ellipse cx="60" cy="113" rx="30" ry="4.5" fill="#1b1b3a" opacity=".13"/><g class="cb-body" filter="url(#${u}stk)">${body}</g>`;

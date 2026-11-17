@@ -1661,3 +1661,25 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-mini { overflow: visible; }
 .cb-mini.hurt { animation: cb-hurt .42s ease; }
 .cb-float.dmg.bench { top: -6px; font-size: 16px; }
+
+/* ===== UR (連れてきた馬がまれに昇格) ===== */
+.cb-card.r-UR { border: 3px solid transparent; background: linear-gradient(170deg, #fff3bf, #ffd8a8 40%, #ffc9c9) padding-box, conic-gradient(from var(--cb-a), #ffd43b, #e03131, #fab005, #c2255c, #ffd43b) border-box; animation: cb-rim 1.8s linear infinite; box-shadow: 0 0 0 1px #ffe066, 0 10px 28px -8px rgba(224, 49, 49, .7); }
+.cb-card.r-UR::after { content: ''; position: absolute; inset: -40%; z-index: 2; pointer-events: none; background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .85) 50%, transparent 60%); transform: translateX(-60%); animation: cb-sweep 1.8s ease-in-out infinite; }
+.cb-card.r-UR::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; mix-blend-mode: color-dodge; opacity: .3; background: repeating-linear-gradient(120deg, #ffd43b 0 8%, #ff6b6b 8% 16%, #fff3bf 16% 24%, #fab005 24% 32%); background-size: 300% 300%; background-position: var(--mx) 50%; }
+.cb-card.r-UR b { background: linear-gradient(90deg, #c92a2a, #e8590c, #c2255c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.cb-card.r-UR > .cb-rar { background: linear-gradient(90deg, #c92a2a, #f08c00); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 13px; letter-spacing: .04em; }
+:root[data-theme="dark"] .cb-card.r-UR { background: linear-gradient(170deg, #5c3d00, #5c1a1a 50%, #4a1d3d) padding-box, conic-gradient(from var(--cb-a), #ffd43b, #e03131, #fab005, #c2255c, #ffd43b) border-box; }
+:root[data-theme="dark"] .cb-card.r-UR b { background: none; color: #ffd43b; }
+:root[data-theme="dark"] .cb-card.r-UR::before { opacity: .12; mix-blend-mode: screen; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cb-card.r-UR { background: linear-gradient(170deg, #5c3d00, #5c1a1a 50%, #4a1d3d) padding-box, conic-gradient(from var(--cb-a), #ffd43b, #e03131, #fab005, #c2255c, #ffd43b) border-box; }
+  :root:not([data-theme="light"]) .cb-card.r-UR b { background: none; color: #ffd43b; }
+  :root:not([data-theme="light"]) .cb-card.r-UR::before { opacity: .12; mix-blend-mode: screen; }
+}
+.cb-fighter.r-UR { border-color: #e03131; box-shadow: 0 0 0 2px #ffd43b, 0 0 22px -2px #ff6b6b; }
+.cb-halo { transform-box: view-box; transform-origin: 60px 60px; animation: cb-spin 6s linear infinite reverse; }
+.cb-ur-word { background: linear-gradient(90deg, #c92a2a, #f08c00); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900; }
+.cb-horse-reveal.promoted::before { content: ''; position: absolute; inset: -40px; z-index: -1; background: radial-gradient(circle, rgba(255, 212, 59, .55), transparent 65%); animation: cb-throb .6s ease-in-out infinite alternate; }
+.cb-ur-shout { font-size: 26px; font-weight: 900; background: linear-gradient(90deg, #c92a2a, #f08c00, #c2255c); -webkit-background-clip: text; background-clip: text; color: transparent; animation: cb-shout 1.8s cubic-bezier(.2, 1.6, .4, 1) both; }
+.cb-horse-reveal .cb-flip.r-UR { animation: cb-pop .8s ease both; }
+@media (prefers-reduced-motion: reduce) { .cb-card.r-UR, .cb-card.r-UR::after, .cb-halo, .cb-ur-shout, .cb-horse-reveal.promoted::before { animation: none !important; } }

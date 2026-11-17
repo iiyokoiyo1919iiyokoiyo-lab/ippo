@@ -3027,7 +3027,7 @@ function viewMath() {
 // =====================================================================
 let cbCatalogCache = null;
 async function cbCatalog() { if (!cbCatalogCache) cbCatalogCache = await api('/cards/catalog', { noAuthPrompt: true }); return cbCatalogCache; }
-const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400' };
+const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR: '#e03131' };
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
@@ -3080,7 +3080,7 @@ async function viewCards() {
     ${me ? `<section class="card card-pad cb-wallet">
       ${cbCoins(mine.coins)}
       <button class="btn ${mine.dailyReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-daily" ${mine.dailyReady ? '' : 'disabled'}>${mine.dailyReady ? `🎁 今日のボーナス +${cat.dailyCoins}` : '今日のボーナスは受け取り済み'}</button>
-      <span class="text-xs muted">対戦の報酬は今日あと ${Math.max(0, mine.rewardsLeft)} 回</span>
+      <span class="text-xs muted">対戦の報酬は今日あと ${Math.max(0, mine.rewardsLeft)} 回 (CPU 戦は回数制限なし)</span>
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></div>
@@ -3090,14 +3090,14 @@ async function viewCards() {
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
       <div class="cb-modes">
         <a class="btn btn-primary btn-lg" href="#/games/cards/battle?mode=random">${icon('globe')}ランダム対戦<small>レート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
-        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>勝ち +${cat.reward.cpu.win}🪙</small></a>
+        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
     </section>
     <section class="card cb-horse-banner">
       <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('h:x', 'SSR', { coat: '栗毛' })}</span>
-      <span><b>競走馬版から馬を連れてくる</b><span>1日1頭。わざ・相性・能力は SSR くらいの強さでランダム (連れてきた馬 ${mine.horses.length}頭)</span></span>
+      <span><b>競走馬版から馬を連れてくる</b><span>1日1頭。わざ・相性・能力は SSR くらいの強さでランダム。まれに <b class="cb-ur-word">UR</b> に昇格！ (連れてきた馬 ${mine.horses.length}頭)</span></span>
       <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? '🐴 連れてくる' : '今日は連れてきた'}</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
@@ -3141,21 +3141,21 @@ async function cbBringHorse(done) {
   if (!r.horses.length) return openPanel('馬を連れてくる', `<div class="form-stack"><p>連れてこられる馬がいません。IppO にログインしたまま「117万分の1 競走馬版」で生まれた馬が、連れてこられます (同じ馬は 1 回だけ)。</p>
     <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>閉じる</button><a class="btn btn-primary" href="#/horse">馬を生みに行く</a></div></div>`);
   const LC = { UR: '#c2255c', SSR: '#e67700', SR: '#1971c2', R: '#2b8a3e', N: '#868e96' };
-  openPanel('どの馬を連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">1日1頭だけ。<b>わざ・相性・能力は、連れてきたときにランダムで決まります</b> (SSR くらいの強さ)。競走馬版での成績は関係ありません。</p>
+  openPanel('どの馬を連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">1日1頭だけ。<b>わざ・相性・能力は、連れてきたときにランダムで決まります</b> (SSR くらいの強さ)。<br>まれに <b class="cb-ur-word">UR</b> (能力 +${cbCatalogCache?.urBonus ?? 20}%) に昇格します。<b>競走馬版でのランクが高い馬ほど、昇格しやすい</b>です。</p>
       <div class="cb-pick-horse">${r.horses.map((h) => `<button type="button" class="list-item" data-sid="${esc(h.sid)}"><span class="cb-mini-art">${CBArt.svg('h:x', 'N', { coat: h.coat })}</span>
-        <div class="grow"><div class="title">${esc(h.name)}</div><div class="desc">${esc(h.coat || '')} · ${esc(h.headline)}</div></div><span class="rc-badge" style="position:static;--c:${LC[h.label] || '#868e96'}">${esc(h.label)}</span></button>`).join('')}</div>
+        <div class="grow"><div class="title">${esc(h.name)}</div><div class="desc">${esc(h.coat || '')} · ${esc(h.headline)} · UR 昇格 ${Math.round(h.urChance * 100)}%</div></div><span class="rc-badge" style="position:static;--c:${LC[h.label] || '#868e96'}">${esc(h.label)}</span></button>`).join('')}</div>
       <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button></div></div>`, (root, close) => {
     $$('[data-sid]', root).forEach((b) => b.addEventListener('click', async () => {
       $$('[data-sid]', root).forEach((x) => { x.disabled = true; });
       try {
         const res = await api('/cards/horse', { method: 'POST', body: { sid: b.dataset.sid } });
         const c = res.card, T = cbCatalogCache?.types || {};
-        root.innerHTML = `<div class="cb-horse-reveal"><div class="cb-flip open r-SSR">${cbCard(c, { cls: 'tilt' })}</div>
+        root.innerHTML = `<div class="cb-horse-reveal${res.promoted ? ' promoted' : ''}">${res.promoted ? '<p class="cb-ur-shout">✨ UR に昇格！！ ✨</p>' : ''}<div class="cb-flip open r-${esc(c.rarity)}">${cbCard(c, { cls: 'tilt' })}</div>
           <p><b>${esc(c.name)}</b> が仲間になった！</p>
           <p class="text-sm" style="color:var(--text-2)">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · わざ「${esc(c.skillName)}」 (${esc(c.skillDesc)})</p>
           <div class="modal-actions" style="margin-top:0"><a class="btn btn-outline" href="#/games/cards/collection">デッキに入れる</a><button class="btn btn-primary" type="button" data-close>OK</button></div></div>`;
         $$('[data-close]', root).forEach((x) => x.addEventListener('click', () => close()));
-        cbConfetti(root, 50);
+        cbConfetti(root, res.promoted ? 120 : 50, res.promoted ? ['#ffd43b', '#ff6b6b', '#fff3bf', '#fab005', '#e8590c', '#fff'] : undefined);
         done && setTimeout(done, 50);
       } catch (e) { toast(e.message, 'error'); close(); }
     }));
