@@ -420,6 +420,7 @@ module.exports = function install(app, ctx) {
       if (ctx.eraseGames) ctx.eraseGames(u.id); // 暗算ダッシュの記録も消す
       if (ctx.eraseCards) ctx.eraseCards(u.id); // ぶんぼうぐバトラーズのカード・コイン・記録も消す
       if (ctx.erasePoker) ctx.erasePoker(u.id); // ポーカーのレートと記録も消す
+      if (ctx.eraseRace) ctx.eraseRace(u.id); // 競走馬版のレースの記録も消す
       if (mode === 'account') {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(u.id);

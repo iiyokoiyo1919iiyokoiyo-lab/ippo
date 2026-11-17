@@ -2539,6 +2539,7 @@ function route() {
   if ((m = h.match(/^\/news\/(\d+)/))) { setActiveNav('news'); return viewNewsItem(m[1]); }
   if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
   if (h === '/horse') { setActiveNav('games'); return viewHorse(); }
+  if (h === '/horse/race') { setActiveNav('games'); return viewRace(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
   if (h === '/games/cards') { setActiveNav('games'); return viewCards(); }
@@ -2782,7 +2783,7 @@ function horseNote(h) {
   return `<a class="horse-note" href="#/horse"><span aria-hidden="true">🐴</span><span>117万分の1 競走馬版: ${parts.join(' · ')}</span></a>`;
 }
 function viewHorse() {
-  main.innerHTML = pageHead({ title: '117万分の1 競走馬版', sub: 'ミニゲーム · 非公式のファン作品' }) +
+  main.innerHTML = pageHead({ title: '117万分の1 競走馬版', sub: 'ミニゲーム · 非公式のファン作品', actions: '<a class="btn btn-primary btn-sm" href="#/horse/race">🏇 レース</a>' }) +
     `<div class="horse-wrap"><iframe class="horse-frame" id="horse-frame" src="/games/horse/" title="117万分の1 競走馬版"></iframe></div>`;
   const frame = $('#horse-frame');
   // ゲームの中で画面全体の演出 (カットイン・下のボタン) が使えるよう、見えている高さぴったりにする
@@ -2826,8 +2827,8 @@ function viewGames() {
         <span class="chip chip-accent">${icon('globe', 'ic-sm')}オンライン対戦・ガチャ・レート</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card" href="#/horse">
       <span class="game-card-art horse-banner-art" aria-hidden="true">🐴</span>
-      <span class="game-card-body"><b>117万分の1 競走馬版</b><span>今年生まれる馬の一頭になって、その一生をたどる（非公式のファン作品）</span>
-        <span class="chip">${icon('sparkle', 'ic-sm')}みんなの結果・図鑑</span></span>${icon('chevron', 'chev')}</a>
+      <span class="game-card-body"><b>117万分の1 競走馬版</b><span>今年生まれる馬の一頭になって、その一生をたどる（非公式のファン作品）。生まれた馬でオンラインレースも</span>
+        <span class="chip chip-accent">🏇 図鑑の馬でレース・レート</span></span>${icon('chevron', 'chev')}</a>
   </div>`;
 }
 
@@ -3480,4 +3481,158 @@ async function viewPokerTable(params) {
   }
   connect();
   viewCleanup = () => { closed = true; try { ws.close(); } catch {} };
+}
+
+// =====================================================================
+// 117万分の1 競走馬版: 図鑑の馬でレース。レースはサーバーが計算し、端末は同じ映像を再生するだけ
+// =====================================================================
+const RC_LABEL_COL = { UR: '#c2255c', SSR: '#e67700', SR: '#1971c2', R: '#2b8a3e', N: '#868e96', CPU: '#495057' };
+const rcTime = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+async function viewRace() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: 'レース', sub: '117万分の1 競走馬版 · 図鑑の馬で走る', back: '#/horse' }) + `<div class="content stack" id="rc">${loadingBlock()}</div>`;
+  let data, sel = null, style = 'senko', ws = null, closed = false, raf = 0, timer = 0;
+  try { data = await api('/race/horses'); } catch (e) { $('#rc').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const root = () => $('#rc');
+  const D = Object.fromEntries(data.distances.map((d) => [d.m, d.name]));
+  const bar = (label, v) => `<span class="rc-stat"><small>${label}</small><i><b style="width:${Math.max(4, Math.min(100, (v - 40) / 70 * 100))}%"></b></i><em>${v}</em></span>`;
+  const horseCard = (h) => `<button type="button" class="rc-hcard${sel === h.sid ? ' on' : ''}" data-sid="${esc(h.sid)}">
+      <span class="rc-badge" style="--c:${RC_LABEL_COL[h.label]}">${esc(h.label)}</span>
+      <b>${esc(h.name)}</b><small>${esc(h.headline)}${h.breed !== h.headline ? ' · ' + esc(h.breed) : ''}</small>
+      ${bar('スピード', h.stats.speed)}${bar('スタミナ', h.stats.stamina)}${bar('末脚', h.stats.kick)}${bar('根性', h.stats.guts)}
+      <small class="rc-best">得意: ${esc(D[h.stats.best] || '')} (${h.stats.best}m)</small></button>`;
+  viewCleanup = () => { closed = true; cancelAnimationFrame(raf); clearInterval(timer); try { ws?.close(); } catch {} };
+
+  // ---------- 馬と脚質をえらぶ ----------
+  function pick(msg = '') {
+    cancelAnimationFrame(raf); clearInterval(timer);
+    if (!data.horses.length) {
+      root().innerHTML = `<section class="card card-pad">${emptyState({ icon: 'sparkle', title: 'レースに出られる馬がまだいません', text: 'IppO にログインしたまま「117万分の1 競走馬版」で生まれた馬が、レースに出られます。', action: '<a class="btn btn-primary" href="#/horse">馬を生みに行く</a>' })}</section>`;
+      return loadSide();
+    }
+    if (!sel || !data.horses.some((h) => h.sid === sel)) sel = data.horses[0].sid;
+    root().innerHTML = `
+      <section class="card card-pad rc-me"><div><span>あなたのレート</span><b>${data.me.rating}</b><small>${data.me.races}戦 ${data.me.wins}勝</small></div>
+        <p class="text-xs muted">2 人以上が同じレースを走ると、着順でレートが動きます。</p></section>
+      ${msg ? `<p class="md-note md-err">${esc(msg)}</p>` : ''}
+      <section class="card card-pad"><div class="panel-head"><h3>出走する馬 (${data.horses.length}頭)</h3></div>
+        <div class="rc-horses">${data.horses.map(horseCard).join('')}</div>
+        <p class="text-xs muted">強さは、その馬の成績・品種から決まります (図鑑の記録ではなく、サーバーが計算し直した成績を使います)。</p></section>
+      <section class="card card-pad"><div class="panel-head"><h3>脚質 (走り方)</h3></div>
+        <div class="segmented rc-styles">${Object.entries(data.styles).map(([k, v]) => `<button type="button" class="seg${style === k ? ' active' : ''}" data-style="${k}">${esc(v.name)}</button>`).join('')}</div>
+        <p class="text-sm rc-style-desc">${esc(data.styles[style].desc)}</p></section>
+      <div class="rc-go">
+        <button class="btn btn-primary btn-lg" type="button" id="rc-online">🏇 オンラインレースに出る<small>最大8頭 · みんなと同じレース</small></button>
+        <button class="btn btn-outline btn-lg" type="button" id="rc-cpu">🤖 CPU と練習<small>レートは動きません</small></button>
+      </div>
+      <div id="rc-side"></div>`;
+    $$('.rc-hcard', root()).forEach((b) => b.addEventListener('click', () => { sel = b.dataset.sid; $$('.rc-hcard', root()).forEach((x) => x.classList.toggle('on', x === b)); }));
+    $$('[data-style]', root()).forEach((b) => b.addEventListener('click', () => { style = b.dataset.style; $$('[data-style]', root()).forEach((x) => x.classList.toggle('active', x === b)); $('.rc-style-desc').textContent = data.styles[style].desc; }));
+    $('#rc-online').addEventListener('click', () => enter('online'));
+    $('#rc-cpu').addEventListener('click', () => enter('cpu'));
+    loadSide();
+  }
+  async function loadSide() {
+    let rk = null, hist = null;
+    try { [rk, hist] = await Promise.all([api('/race/ranking', { noAuthPrompt: true }), api('/race/history')]); } catch { return; }
+    const el = $('#rc-side') || (root() && root().insertAdjacentHTML('beforeend', '<div id="rc-side"></div>'), $('#rc-side'));
+    if (!el) return;
+    const row = (x, mine) => `<a class="md-row${mine ? ' me' : ''}${x.rank <= 3 ? ' top' + x.rank : ''}" href="#/u/${esc(x.user.username)}"><span class="md-rk">${x.rank}</span>${avatar(x.user, 'sm')}
+      <span class="md-who"><b>${esc(x.user.displayName)}${adminBadge(x.user)}</b><small>@${esc(x.user.username)} · ${Number(x.races)}戦${Number(x.wins)}勝</small></span><span class="md-pts">${Number(x.rating)}</span></a>`;
+    const meIn = rk.me && rk.top.some((x) => x.user.id === rk.me.user.id);
+    el.innerHTML = `<section class="card card-pad"><div class="panel-head"><h3>${icon('trend', 'ic-sm')}レース レート ランキング</h3></div>
+        ${rk.top.length ? `<div class="md-list">${rk.top.map((x) => row(x, x.user.id === me.id)).join('')}</div>${rk.me && !meIn ? `<div class="md-list md-mine">${row(rk.me, true)}</div>` : ''}` : '<p class="muted text-sm md-empty">まだだれもオンラインレースで対戦していません。</p>'}</section>
+      ${hist.results.length ? `<section class="card card-pad"><div class="panel-head"><h3>最近のレース</h3></div><div class="rc-hist">${hist.results.map((r) => `<div><b class="rc-place p${r.place}">${r.place}着</b><span>${esc(r.horse)}<small>${r.distance}m · ${rcTime(r.time)} · ${r.field}頭</small></span>${r.rating_delta ? `<em class="${r.rating_delta > 0 ? 'up' : 'down'}">${r.rating_delta > 0 ? '+' : ''}${r.rating_delta}</em>` : ''}</div>`).join('')}</div></section>` : ''}`;
+  }
+
+  // ---------- 出走 ----------
+  function enter(mode) {
+    root().innerHTML = `<section class="card rc-stage"><div class="cb-wait"><span class="md-spin"></span><p>ゲートに向かっています…</p></div></section>`;
+    window.scrollTo(0, 0);
+    try { ws?.close(); } catch {}
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/rc`);
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'enter', mode, sid: sel, style }));
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (!root()) return;
+      if (m.t === 'error') return pick(m.msg);
+      if (m.t === 'lobby') return lobby(m.lobby, m.serverNow);
+      if (m.t === 'race') return play(m.race, m.you, m.result);
+    };
+    ws.onclose = () => {};
+  }
+  function lobby(l, serverNow) {
+    const end = Date.now() + (l.closesAt - serverNow);
+    const draw = () => {
+      const st = $('.rc-stage'); if (!st) return clearInterval(timer);
+      const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      st.innerHTML = `<div class="rc-lobby"><p class="rc-dist">${l.distance}m <small>${esc(D[l.distance] || '')}</small></p>
+        <p class="rc-count">発走まで <b>${left}</b> 秒</p>
+        <div class="rc-gates">${Array.from({ length: 8 }, (_, i) => { const e = l.entries[i]; return e ? `<div class="rc-gate on">${avatar(e.user, 'sm')}<span><b>${esc(e.horse)}</b><small>${esc(e.user.displayName)} · ${esc(e.style)}</small></span><span class="rc-badge" style="--c:${RC_LABEL_COL[e.label]}">${esc(e.label)}</span></div>` : `<div class="rc-gate">空き (CPU の馬が入ります)</div>`; }).join('')}</div>
+        <p class="text-xs muted">ほかの人がこのページから出走すると、同じレースに入ります。</p>
+        <button class="btn btn-ghost btn-sm" type="button" id="rc-leave">出走をやめる</button></div>`;
+      $('#rc-leave').addEventListener('click', () => { try { ws.send(JSON.stringify({ t: 'leave' })); ws.close(); } catch {} pick(); });
+    };
+    clearInterval(timer); draw(); timer = setInterval(draw, 500);
+  }
+
+  // ---------- レースの再生 ----------
+  function play(race, you, result) {
+    clearInterval(timer);
+    const n = race.horses.length, F = race.frames, perFrame = 210, total = (F.length - 1) * perFrame;
+    const marks = []; for (let m = 200; m < race.distance; m += 200) marks.push(m);
+    $('.rc-stage').outerHTML = `<section class="card rc-stage racing">
+      <div class="rc-head"><b>${race.distance}m ${esc(D[race.distance] || '')}</b><span>${race.practice ? '練習 (CPU)' : race.rated ? 'レート戦' : 'オンライン'}</span><span id="rc-left"></span></div>
+      <div class="rc-call" id="rc-call">ゲートが開きます…</div>
+      <div class="rc-track" id="rc-track">
+        ${marks.map((m) => `<i class="rc-mark" data-f="${m / race.distance}"><span>${race.distance - m}</span></i>`).join('')}<i class="rc-finish"></i>
+        ${race.horses.map((h, i) => `<div class="rc-lane${i === you ? ' you' : ''}"><div class="rc-horse" data-i="${i}"><span class="rc-silk" style="--c:${h.silk}">${h.gate}</span><span class="rc-emoji">🏇</span><span class="rc-name">${esc(h.name)}${i === you ? ' (あなた)' : ''}</span></div></div>`).join('')}
+      </div>
+      <ol class="rc-board" id="rc-board"></ol>
+    </section>`;
+    const track = $('#rc-track'), els = $$('.rc-horse', track), board = $('#rc-board');
+    // 馬の鼻先 (左から 4px + 馬の幅 46px) が、ゴールでちょうどゴール板に着くように目印を置く
+    const NOSE = 50, W0 = () => track.clientWidth - 64;
+    $$('.rc-mark', track).forEach((mk) => { mk.style.left = `${NOSE + Number(mk.dataset.f) * W0()}px`; });
+    $('.rc-finish', track).style.left = `${NOSE + W0()}px`;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let start = performance.now() + 900, lastLeader = -1, saidStraight = false, lastBoard = 0;
+    const call = (t) => { const c = $('#rc-call'); if (c && c.textContent !== t) { c.textContent = t; c.classList.remove('pop'); void c.offsetWidth; c.classList.add('pop'); } };
+    const step = (now) => {
+      if (!$('#rc-track')) return;
+      const t = reduced ? total : Math.max(0, now - start);
+      const k = Math.min(F.length - 1, t / perFrame), a = Math.floor(k), b = Math.min(F.length - 1, a + 1), f = k - a;
+      const W = track.clientWidth - 64;
+      const pos = race.horses.map((_, i) => (F[a][i] + (F[b][i] - F[a][i]) * f) / 1000);
+      els.forEach((el, i) => { el.style.transform = `translateX(${pos[i] * W}px)`; el.classList.toggle('run', t > 0 && pos[i] < 1); });
+      // 同じ位置 (ゴールした馬どうしなど) は、正式な着順で並べる
+      const rankOf = new Map(race.order.map((i, k) => [i, k]));
+      const order = pos.map((p, i) => [p, i]).sort((x, y) => y[0] - x[0] || rankOf.get(x[1]) - rankOf.get(y[1])).map(([, i]) => i);
+      const leader = order[0], fl = pos[leader];
+      if (t === 0) call('スタート！');
+      else if (fl >= 1) call(`${race.horses[race.order[0]].name}、1着でゴール！`);
+      else if (fl > 0.72 && !saidStraight) { saidStraight = true; call(`最後の直線！ 先頭は${race.horses[leader].name}！`); }
+      else if (leader !== lastLeader && fl > 0.08) call(`${fl > 0.72 ? '' : '先頭は'}${race.horses[leader].name}${fl > 0.72 ? 'が先頭に立った！' : ''}`);
+      lastLeader = leader;
+      $('#rc-left').textContent = fl >= 1 ? 'ゴール' : `残り ${Math.max(0, Math.round(race.distance * (1 - fl)))}m`;
+      if (now - lastBoard > 250) { lastBoard = now; board.innerHTML = order.map((i, p) => `<li class="${i === you ? 'you' : ''}"><span class="rc-silk sm" style="--c:${race.horses[i].silk}">${race.horses[i].gate}</span>${p + 1}. ${esc(race.horses[i].name)}</li>`).join(''); }
+      if (t < total + 200) raf = requestAnimationFrame(step); else setTimeout(() => results(race, you, result), 700);
+    };
+    raf = requestAnimationFrame(step);
+  }
+  function results(race, you, result) {
+    const st = $('.rc-stage'); if (!st) return;
+    const win = race.times[race.order[0]];
+    st.insertAdjacentHTML('beforeend', `<div class="rc-result">
+      <div class="rc-mine p${result.place}"><b>${result.place}着</b><span>${result.field}頭中 · ${rcTime(result.time)}</span>
+        ${race.rated ? `<em>レート ${result.rating} (${result.ratingDelta >= 0 ? '+' : ''}${result.ratingDelta})</em>` : '<em>この レースでは レートは動きません</em>'}</div>
+      <ol class="rc-final">${race.order.map((i, p) => { const h = race.horses[i]; return `<li class="${i === you ? 'you' : ''}"><b class="rc-place p${p + 1}">${p + 1}</b><span class="rc-silk sm" style="--c:${h.silk}">${h.gate}</span>
+        <span class="rc-fname"><b>${esc(h.name)}</b><small>${h.user ? esc(h.user.displayName) : 'CPU'} · ${esc(h.style)}</small></span><span class="rc-ftime">${rcTime(race.times[i])}${p ? `<small>+${(race.times[i] - win).toFixed(1)}</small>` : ''}</span></li>`; }).join('')}</ol>
+      <div class="md-actions"><button class="btn btn-primary" type="button" id="rc-again">同じ馬でもう一度</button><button class="btn btn-ghost" type="button" id="rc-back">馬をえらび直す</button></div></div>`);
+    if (result.place === 1) cbConfetti(st, 80);
+    $('#rc-again').addEventListener('click', () => enter(race.practice ? 'cpu' : 'online'));
+    $('#rc-back').addEventListener('click', async () => { try { data = await api('/race/horses'); } catch {} pick(); });
+    st.scrollIntoView({ block: 'nearest' });
+  }
+  pick();
 }

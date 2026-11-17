@@ -242,12 +242,9 @@ module.exports = function install(app, ctx) {
       badgeTotal: BADGE_KEYS.size, births: z?.births || 0 };
   };
 
-  // ---------- 掃除: 載せていない・親にもならない古い種は 30 日で消す ----------
-  setInterval(() => {
-    try {
-      db.prepare(`DELETE FROM horse_seeds WHERE created_at < ? AND can_parent = 0 AND id NOT IN (SELECT seed_id FROM horse_plays)`).run(Date.now() - 30 * 86400_000);
-    } catch {}
-  }, 6 * 3600_000).unref();
+  // 種の記録は消さない (図鑑の馬がレースに出るときの強さの元になるため。1 頭あたり 200 バイトほど)
+  ctx.horseSeedsOf = (userId) => db.prepare('SELECT * FROM horse_seeds WHERE user_id = ?').all(userId);
+  ctx.horseZukanOf = (userId) => loadZ(userId);
 
   ctx.eraseHorse = (userId) => {
     for (const t of ['horse_plays', 'horse_seeds', 'horse_zukan', 'horse_stats']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
