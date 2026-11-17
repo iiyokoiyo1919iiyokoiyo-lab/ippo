@@ -988,9 +988,9 @@ async function viewSearch(q) {
     res.innerHTML = `<a class="card pw-banner" href="#/pixel">
         <span class="pw-banner-art" aria-hidden="true">${Array.from({ length: 36 }, (_, i) => `<i style="background:${['#4b55f0', '#1f2766', '#4CC9F0', '#FFD43B', '#F06EAA', '#94D82D', '#ffffff', '#7B4AE2', '#F4802A'][(i * 7 + (i >> 2)) % 9]}"></i>`).join('')}</span>
         <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、みんなで自由に描こう</span></span>${icon('chevron', 'chev')}</a>
-      <a class="card pw-banner horse-banner" href="#/horse">
-        <span class="horse-banner-art" aria-hidden="true">🐴</span>
-        <span class="pw-banner-text"><b>117万分の1 競走馬版</b><span>ミニゲーム · 今年生まれる馬の一頭になって、その一生をたどる</span></span>${icon('chevron', 'chev')}</a>
+      <a class="card pw-banner horse-banner" href="#/games">
+        <span class="horse-banner-art md-banner-art" aria-hidden="true">🎮</span>
+        <span class="pw-banner-text"><b>ミニゲーム</b><span>暗算ダッシュ (ランキングつき) · 117万分の1 競走馬版</span></span>${icon('chevron', 'chev')}</a>
       <div class="shortcuts">
         <a class="card shortcut" href="#/schedule"><span class="shortcut-icon">${icon('calendar')}</span><b>予定表</b><span>学校の行事</span></a>
         <a class="card shortcut" href="#/q"><span class="shortcut-icon">${icon('sparkle')}</span><b>今日の質問</b><span>みんなの回答</span></a>
@@ -2538,7 +2538,9 @@ function route() {
   if (h === '/news') { setActiveNav('news'); return viewNews(); }
   if ((m = h.match(/^\/news\/(\d+)/))) { setActiveNav('news'); return viewNewsItem(m[1]); }
   if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
-  if (h === '/horse') { setActiveNav('horse'); return viewHorse(); }
+  if (h === '/horse') { setActiveNav('games'); return viewHorse(); }
+  if (h === '/games') { setActiveNav('games'); return viewGames(); }
+  if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
   if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) { setActiveNav(''); return viewInviteLanding(m[1]); }
@@ -2798,3 +2800,186 @@ window.addEventListener('message', (e) => {
     openCompose({ prefill: String(d.text || '').slice(0, 400), presetImages: id ? [{ id, url: '/api/images/' + id }] : [] });
   }
 });
+
+// =====================================================================
+// ミニゲームの一覧
+// =====================================================================
+function viewGames() {
+  main.innerHTML = pageHead({ title: 'ミニゲーム', sub: 'みんなで遊べるゲーム' }) + `<div class="content stack">
+    <a class="card game-card" href="#/games/math">
+      <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
+      <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
+        <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card" href="#/horse">
+      <span class="game-card-art horse-banner-art" aria-hidden="true">🐴</span>
+      <span class="game-card-body"><b>117万分の1 競走馬版</b><span>今年生まれる馬の一頭になって、その一生をたどる（非公式のファン作品）</span>
+        <span class="chip">${icon('sparkle', 'ic-sm')}みんなの結果・図鑑</span></span>${icon('chevron', 'chev')}</a>
+  </div>`;
+}
+
+// =====================================================================
+// 暗算ダッシュ: 60 秒で何問とけるか。点数はサーバーが計算し直す (端末は答えと時刻を送るだけ)
+// =====================================================================
+const MD_PERIODS = [['day', '今日'], ['week', '今週'], ['all', 'これまで']];
+function mdPoints(combo) { return 10 + Math.min(combo - 1, 9) * 2; } // サーバーの計算と同じ
+function viewMath() {
+  let period = 'day', game = null, raf = 0, timers = [];
+  main.innerHTML = pageHead({ title: '暗算ダッシュ', sub: '60秒で何問とける？', back: '#/games' }) + `<div class="content stack">
+    <section class="card md-stage" id="md-stage" aria-live="polite"></section>
+    <section class="card card-pad">
+      <div class="panel-head"><h3>${icon('trend', 'ic-sm')}ランキング</h3></div>
+      <div class="segmented md-periods" role="tablist">${MD_PERIODS.map(([v, l]) => `<button type="button" class="seg${v === period ? ' active' : ''}" data-period="${v}" role="tab">${l}</button>`).join('')}</div>
+      <div id="md-rank" class="md-rank"></div>
+    </section>
+  </div>`;
+  const stage = $('#md-stage');
+  const clearTimers = () => { cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = []; };
+  const onKey = (e) => {
+    if (!game || game.phase !== 'play' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^[0-9]$/.test(e.key)) { e.preventDefault(); press(e.key); }
+    else if (e.key === 'Backspace' || e.key === 'Escape') { e.preventDefault(); press('clear'); }
+  };
+  document.addEventListener('keydown', onKey);
+  viewCleanup = () => { clearTimers(); document.removeEventListener('keydown', onKey); game = null; };
+
+  // ---------- はじめの画面 ----------
+  function intro(msg = '') {
+    game = null;
+    stage.innerHTML = `<div class="md-intro">
+      <div class="md-logo" aria-hidden="true"><i>7</i><i>×</i><i>8</i></div>
+      <h2>暗算ダッシュ</h2>
+      <ul class="md-rules">
+        <li>制限時間は <b>60秒</b>。出てくる計算の答えを入力しよう</li>
+        <li>正解で <b>10点</b>。<b>連続正解</b>するほどボーナスが増える (最大 +18点)</li>
+        <li>まちがえると連続が途切れる。後半ほど難しくなる</li>
+      </ul>
+      ${me ? '' : `<p class="md-note">${icon('lock', 'ic-sm')}いまは<b>練習モード</b>です。ログインするとランキングに載ります。</p>`}
+      ${msg ? `<p class="md-note md-err">${esc(msg)}</p>` : ''}
+      <button class="btn btn-primary btn-lg md-start" type="button" id="md-start">${icon('sparkle')}スタート</button>
+      ${me ? '' : '<button class="btn btn-ghost" type="button" id="md-login">ログインしてランキングに参加</button>'}
+    </div>`;
+    $('#md-start').addEventListener('click', start);
+    $('#md-login')?.addEventListener('click', () => openAuth());
+  }
+
+  // ---------- ゲーム ----------
+  async function start() {
+    const btn = $('#md-start'); btn.disabled = true; btn.classList.add('is-loading');
+    let r;
+    try { r = await api('/games/math/start', { method: 'POST', noAuthPrompt: true }); }
+    catch (e) { return intro(e.message); }
+    game = { phase: 'count', runId: r.runId, problems: r.problems, gameMs: r.gameMs, ranked: r.ranked, i: 0, input: '', inputs: [], score: 0, combo: 0, best: 0, correct: 0, t0: 0, lastT: -1e9 };
+    // 3・2・1
+    let n = Math.round(r.countdownMs / 1000);
+    const tick = () => {
+      if (!game) return;
+      if (n === 0) return play();
+      stage.innerHTML = `<div class="md-count"><b>${n}</b><span>${game.ranked ? 'ランキング対象' : '練習モード'}</span></div>`;
+      n--; timers.push(setTimeout(tick, 1000));
+    };
+    tick();
+  }
+  function play() {
+    game.phase = 'play'; game.t0 = performance.now();
+    window.scrollTo(0, 0); // 時間・点数・ボタンが全部見えるように
+    stage.innerHTML = `<div class="md-play">
+      <div class="md-bar"><i id="md-time"></i></div>
+      <div class="md-hud"><span><b id="md-score">0</b>点</span><span id="md-combo" class="md-combo"></span><span id="md-left">60</span></div>
+      <div class="md-q" id="md-q"></div>
+      <div class="md-input" id="md-input" aria-label="入力中の答え"></div>
+      <div class="md-pad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0'].map((k) => `<button type="button" class="md-key${k === 'clear' ? ' md-key-clear' : ''}" data-k="${k}" aria-label="${k === 'clear' ? '消す' : k}">${k === 'clear' ? '消す' : k}</button>`).join('')}</div>
+    </div>`;
+    // タップは pointerdown で受ける (連打しても取りこぼさない・ダブルタップで拡大しない)
+    $$('.md-key', stage).forEach((b) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); press(b.dataset.k); }));
+    showQ();
+    const loop = () => {
+      if (!game || game.phase !== 'play') return;
+      const left = Math.max(0, game.gameMs - (performance.now() - game.t0));
+      $('#md-time').style.transform = `scaleX(${left / game.gameMs})`;
+      $('#md-left').textContent = Math.ceil(left / 1000) + '秒';
+      $('#md-time').classList.toggle('hurry', left < 10_000);
+      if (left <= 0) return finish();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+  }
+  function showQ() {
+    const p = game.problems[game.i];
+    if (!p) return finish();
+    $('#md-q').textContent = p.q + ' = ?';
+    renderInput();
+  }
+  function renderInput() {
+    const len = String(game.problems[game.i].a).length;
+    $('#md-input').innerHTML = Array.from({ length: len }, (_, k) => `<i class="${k < game.input.length ? 'on' : ''}">${esc(game.input[k] || '')}</i>`).join('');
+  }
+  function press(k) {
+    if (!game || game.phase !== 'play') return;
+    if (k === 'clear') { game.input = ''; return renderInput(); }
+    const p = game.problems[game.i];
+    game.input += k; renderInput();
+    if (game.input.length < String(p.a).length) return;
+    // 答えの桁数がそろったら判定。時刻は、前の答えから 0.3 秒以上あける (サーバーの決まりと同じ)
+    const t = Math.min(game.gameMs, Math.max(Math.round(performance.now() - game.t0), game.lastT + 300));
+    game.lastT = t;
+    const v = Number(game.input), ok = v === p.a;
+    game.inputs.push({ v, t });
+    if (ok) { game.combo++; game.correct++; game.best = Math.max(game.best, game.combo); game.score += mdPoints(game.combo); }
+    else game.combo = 0;
+    $('#md-score').textContent = game.score;
+    const cb = $('#md-combo'); cb.textContent = game.combo >= 2 ? `${game.combo}連続！` : ''; cb.classList.toggle('hot', game.combo >= 10);
+    const q = $('#md-q');
+    q.classList.remove('ok', 'ng'); void q.offsetWidth; q.classList.add(ok ? 'ok' : 'ng');
+    if (!ok) q.textContent = `${p.q} = ${p.a}`;
+    game.input = ''; game.i++;
+    timers.push(setTimeout(() => { if (game && game.phase === 'play') showQ(); }, ok ? 90 : 450));
+  }
+  async function finish() {
+    if (!game || game.phase !== 'play') return;
+    game.phase = 'done'; clearTimers(); window.scrollTo(0, 0);
+    stage.innerHTML = `<div class="md-count"><b class="md-spin"></b><span>集計しています…</span></div>`;
+    let r;
+    try { r = await api('/games/math/finish', { method: 'POST', body: { runId: game.runId, inputs: game.inputs }, noAuthPrompt: true }); }
+    catch (e) { return intro('記録できませんでした: ' + e.message); }
+    const acc = r.answered ? Math.round((r.correct / r.answered) * 100) : 0;
+    const rk = (x, label) => x ? `<div><span>${label}</span><b>${x.rank}位</b><small>ベスト ${x.best}点</small></div>` : '';
+    stage.innerHTML = `<div class="md-result">
+      ${r.newBest ? `<span class="chip chip-accent md-newbest">${icon('sparkle', 'ic-sm')}自己ベスト更新！</span>` : ''}
+      <div class="md-final"><b>${r.score}</b><span>点</span></div>
+      <div class="md-stats"><span>正解 <b>${r.correct}</b>問</span><span>正答率 <b>${acc}</b>%</span><span>最高 <b>${r.bestCombo}</b>連続</span></div>
+      ${r.ranked ? `<div class="md-ranks">${rk(r.day, '今日')}${rk(r.week, '今週')}${rk(r.all, 'これまで')}</div>` : `<p class="md-note">${icon('lock', 'ic-sm')}練習モードの記録はランキングに載りません。<a href="#" id="md-login2">ログイン</a>して挑戦しよう。</p>`}
+      <div class="md-actions">
+        <button class="btn btn-primary btn-lg" type="button" id="md-again">${icon('repeat')}もう一度</button>
+        ${r.ranked ? `<button class="btn btn-outline" type="button" id="md-share">${icon('send')}IppO でシェア</button>` : ''}
+      </div>
+    </div>`;
+    $('#md-again').addEventListener('click', () => { intro(); start(); });
+    $('#md-login2')?.addEventListener('click', (e) => { e.preventDefault(); openAuth(); });
+    $('#md-share')?.addEventListener('click', () => openCompose({ prefill:
+      `暗算ダッシュで ${r.score}点！ (正解${r.correct}問・最高${r.bestCombo}連続)\n今日のランキング ${r.day.rank}位\n#暗算ダッシュ` }));
+    loadRank();
+  }
+
+  // ---------- ランキング ----------
+  async function loadRank() {
+    const el = $('#md-rank'); if (!el) return;
+    let r;
+    try { r = await api('/games/math/ranking?period=' + period, { noAuthPrompt: true }); }
+    catch { el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; return; }
+    if (!$('#md-rank')) return;
+    const row = (x, mine) => `<a class="md-row${mine ? ' me' : ''}${x.rank <= 3 ? ' top' + x.rank : ''}" href="#/u/${esc(x.user.username)}">
+        <span class="md-rk">${x.rank}</span>${avatar(x.user, 'sm')}
+        <span class="md-who"><b>${esc(x.user.displayName)}${adminBadge(x.user)}</b><small>@${esc(x.user.username)} · 正解${Number(x.correct)} · 最高${Number(x.bestCombo)}連続</small></span>
+        <span class="md-pts">${Number(x.score)}<small>点</small></span></a>`;
+    const meIn = r.me && r.top.some((x) => x.user.id === r.me.user.id);
+    el.innerHTML = r.top.length
+      ? `<p class="md-players">${r.players}人が挑戦中</p><div class="md-list">${r.top.map((x) => row(x, me && x.user.id === me.id)).join('')}</div>${r.me && !meIn ? `<div class="md-list md-mine">${row(r.me, true)}</div>` : ''}`
+      : `<p class="muted text-sm md-empty">${period === 'day' ? '今日' : period === 'week' ? '今週' : 'まだ'}だれも記録を出していません。一番乗りしよう！</p>`;
+  }
+  $$('[data-period]').forEach((b) => b.addEventListener('click', () => {
+    period = b.dataset.period;
+    $$('[data-period]').forEach((x) => x.classList.toggle('active', x === b));
+    loadRank();
+  }));
+  intro(); loadRank();
+}

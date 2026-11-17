@@ -338,6 +338,7 @@ require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真
 require('./verify')(app, ctx); // 認証マーク
 require('./horse')(app, ctx); // ミニゲーム「117万分の1 競走馬版」
+require('./games')(app, ctx); // ミニゲーム「暗算ダッシュ」(ランキングつき)
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
