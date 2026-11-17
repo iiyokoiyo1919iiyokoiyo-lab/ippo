@@ -990,7 +990,7 @@ async function viewSearch(q) {
         <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、みんなで自由に描こう</span></span>${icon('chevron', 'chev')}</a>
       <a class="card pw-banner horse-banner" href="#/games">
         <span class="horse-banner-art md-banner-art" aria-hidden="true">🎮</span>
-        <span class="pw-banner-text"><b>ミニゲーム</b><span>ぶんぼうぐバトラーズ (対戦・ガチャ) · 暗算ダッシュ · 117万分の1 競走馬版</span></span>${icon('chevron', 'chev')}</a>
+        <span class="pw-banner-text"><b>ミニゲーム</b><span>ぶんぼうぐバトラーズ · レート戦ポーカー · 暗算ダッシュ · 117万分の1 競走馬版</span></span>${icon('chevron', 'chev')}</a>
       <div class="shortcuts">
         <a class="card shortcut" href="#/schedule"><span class="shortcut-icon">${icon('calendar')}</span><b>予定表</b><span>学校の行事</span></a>
         <a class="card shortcut" href="#/q"><span class="shortcut-icon">${icon('sparkle')}</span><b>今日の質問</b><span>みんなの回答</span></a>
@@ -2542,6 +2542,8 @@ function route() {
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
   if (h === '/games/cards') { setActiveNav('games'); return viewCards(); }
+  if (h === '/games/poker') { setActiveNav('games'); return viewPoker(); }
+  if (h.startsWith('/games/poker/table')) { setActiveNav('games'); return viewPokerTable(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/games/cards/gacha') { setActiveNav('games'); return viewGacha(); }
   if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
@@ -2810,6 +2812,10 @@ window.addEventListener('message', (e) => {
 // =====================================================================
 function viewGames() {
   main.innerHTML = pageHead({ title: 'ミニゲーム', sub: 'みんなで遊べるゲーム' }) + `<div class="content stack">
+    <a class="card game-card" href="#/games/poker">
+      <span class="game-card-art pk-art" aria-hidden="true">${pkCard('As')}${pkCard('Ah')}</span>
+      <span class="game-card-body"><b>レート戦ポーカー</b><span>1対1のテキサスホールデム。相手のチップを全部とったら勝ち (お金やコインは賭けません)</span>
+        <span class="chip chip-accent">${icon('trend', 'ic-sm')}レート戦・オンライン対戦</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card" href="#/games/math">
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
@@ -3307,4 +3313,171 @@ async function viewBattle(params) {
   }
   connect();
   viewCleanup = () => { closedByUs = true; clearInterval(tick); try { ws.close(); } catch {} };
+}
+
+// =====================================================================
+// レート戦ポーカー (1 対 1 のテキサスホールデム)。お金・コインは賭けない。動くのはレートだけ
+// カードを配る・勝ち負けを決めるのはサーバー。端末は「選んだ行動」を送るだけ
+// =====================================================================
+const PK_SUIT = { s: ['♠', 'blk'], h: ['♥', 'red'], d: ['♦', 'red'], c: ['♣', 'blk'] };
+function pkCard(c, cls = '') {
+  if (!c) return `<span class="pk-card back ${cls}"><span></span></span>`;
+  const [sym, col] = PK_SUIT[c[1]] || ['?', 'blk'], r = c[0] === 'T' ? '10' : c[0];
+  return `<span class="pk-card ${col} ${cls}" aria-label="${esc(sym + r)}"><b>${esc(r)}</b><i>${sym}</i><em>${sym}</em></span>`;
+}
+const PK_HANDS = ['ロイヤルフラッシュ', 'ストレートフラッシュ', 'フォーカード', 'フルハウス', 'フラッシュ', 'ストレート', 'スリーカード', 'ツーペア', 'ワンペア', 'ハイカード'];
+
+async function viewPoker() {
+  main.innerHTML = pageHead({ title: 'レート戦ポーカー', sub: '1対1のテキサスホールデム', back: '#/games' }) + `<div class="content stack" id="pk">${loadingBlock()}</div>`;
+  let mine = null;
+  try { if (me) mine = await api('/poker/me'); } catch {}
+  const root = $('#pk'); if (!root) return;
+  root.innerHTML = `
+    <section class="card pk-hero">
+      <div class="pk-hero-cards" aria-hidden="true">${pkCard('As', 'tilt1')}${pkCard('Kh', 'tilt2')}</div>
+      <div><b>レート戦ポーカー</b><p>おたがい 1000 チップから。相手のチップを全部とったら勝ち。<br><b>お金やコインは賭けません</b>。勝ち負けで動くのはレートだけです。</p>
+        ${mine ? `<div class="pk-rate"><span>あなたのレート</span><b>${mine.rating}</b><small>${mine.wins}勝 ${mine.losses}敗</small></div>` : ''}</div>
+    </section>
+    ${me ? `<section class="card card-pad"><div class="cb-modes">
+        <a class="btn btn-primary btn-lg" href="#/games/poker/table?mode=random">${icon('globe')}ランダム対戦<small>レート戦</small></a>
+        <a class="btn btn-outline" href="#/games/poker/table?mode=cpu">🤖 CPU と練習<small>レートは動きません</small></a>
+        <a class="btn btn-outline" href="#/games/poker/table?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>レートは動きません</small></a>
+        <form class="cb-join" id="pk-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
+      </div></section>`
+    : `<section class="card card-pad"><p style="margin:0 0 12px">ログインすると、オンライン対戦とレートのランキングに参加できます。</p><button class="btn btn-primary" type="button" id="pk-login">ログインして遊ぶ</button></section>`}
+    <section class="card card-pad"><div class="panel-head"><h3>${icon('trend', 'ic-sm')}レート ランキング</h3><span class="text-xs muted">ランダム対戦の成績</span></div><div id="pk-rank">${loadingBlock()}</div></section>
+    <section class="card card-pad cb-rules"><details><summary>${icon('sparkle', 'ic-sm')}ルールと役の強さ</summary><ul>
+      <li>手札 2 枚と、場の 5 枚のうち、いちばん強い 5 枚の組み合わせで勝負します</li>
+      <li>行動: <b>フォールド</b> (おりる) / <b>チェック</b> (賭けずに回す) / <b>コール</b> (同じだけ出す) / <b>ベット・レイズ</b> (上乗せ) / <b>オールイン</b> (全部)</li>
+      <li>ブラインド (強制で出すチップ) は 5 ハンドごとに上がります。1 回の行動は 30 秒まで (過ぎるとチェック、できなければフォールド)</li>
+      <li>役の強さ (強い順): ${PK_HANDS.join(' > ')}</li></ul></details></section>`;
+  $('#pk-login')?.addEventListener('click', () => openAuth());
+  $('#pk-join')?.addEventListener('submit', (e) => { e.preventDefault(); location.hash = '#/games/poker/table?mode=room-join&code=' + encodeURIComponent(e.target.code.value.trim()); });
+  try {
+    const r = await api('/poker/ranking', { noAuthPrompt: true });
+    const row = (x, mine2) => `<a class="md-row${mine2 ? ' me' : ''}${x.rank <= 3 ? ' top' + x.rank : ''}" href="#/u/${esc(x.user.username)}"><span class="md-rk">${x.rank}</span>${avatar(x.user, 'sm')}
+      <span class="md-who"><b>${esc(x.user.displayName)}${adminBadge(x.user)}</b><small>@${esc(x.user.username)} · ${Number(x.wins)}勝${Number(x.losses)}敗</small></span><span class="md-pts">${Number(x.rating)}</span></a>`;
+    const meIn = r.me && r.top.some((x) => x.user.id === r.me.user.id);
+    const el = $('#pk-rank'); if (!el) return;
+    el.innerHTML = r.top.length ? `<div class="md-list">${r.top.map((x) => row(x, me && x.user.id === me.id)).join('')}</div>${r.me && !meIn ? `<div class="md-list md-mine">${row(r.me, true)}</div>` : ''}`
+      : '<p class="muted text-sm md-empty">まだだれもランダム対戦をしていません。</p>';
+  } catch { const el = $('#pk-rank'); if (el) el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; }
+}
+
+async function viewPokerTable(params) {
+  if (!requireLogin()) return;
+  const mode = params.get('mode'), code = params.get('code') || '';
+  const titles = { cpu: 'CPU と練習', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
+  main.innerHTML = pageHead({ title: titles[mode] || 'ポーカー', sub: 'レート戦ポーカー', back: '#/games/poker' }) + `<div class="content"><section class="pk-table" id="pkt">${loadingBlock()}</section></div>`;
+  const box = () => $('#pkt');
+  let ws = null, players = [], st = null, deadline = 0, closed = false, ended = false, shownBoard = 0, raiseTo = 0, lastPot = 0, banner = null;
+  const wsSend = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+  const seat = (who) => {
+    const i = who === 'me' ? 0 : 1, u = players[i];
+    const cards = who === 'me' ? st.myCards : (st.oppCards || (st.myCards.length ? [null, null] : []));
+    const turn = st.turn === who;
+    const left = turn && deadline ? Math.max(0, deadline - Date.now()) : 0;
+    return `<div class="pk-seat ${who}${turn ? ' turn' : ''}${st.result && st.result.win === who ? ' won' : ''}">
+      <div class="pk-who">${avatar(u, 'sm')}<span><b>${who === 'me' ? 'あなた' : esc(u.displayName)}</b><small>🪙 ${st.stacks[i].toLocaleString()}</small></span>
+        ${st.button === who ? '<span class="pk-dealer" title="ディーラー (スモールブラインド)">D</span>' : ''}
+        ${st.last[i] ? `<span class="pk-bubble">${esc(st.last[i])}</span>` : ''}</div>
+      <div class="pk-hole">${cards.map((c, k) => pkCard(c, `${who === 'opp' && st.oppCards ? 'flip' : ''} d${k}`)).join('')}</div>
+      ${who === 'me' && st.myHand ? `<span class="pk-hand">いまの役: <b>${esc(st.myHand)}</b></span>` : ''}
+      ${st.bets[i] ? `<span class="pk-bet">${st.bets[i].toLocaleString()}</span>` : ''}
+      ${turn ? `<span class="pk-timer"><i style="animation-duration:${left}ms"></i></span>` : ''}
+    </div>`;
+  };
+  function actions() {
+    const L = st.legal;
+    if (!L || st.turn !== 'me') return `<div class="pk-actions wait">${st.result ? '' : st.turn === 'opp' ? '<span class="md-spin sm"></span>相手が考えています…' : ''}</div>`;
+    const R = L.raise, potNow = st.pot;
+    if (R) raiseTo = Math.min(R.max, Math.max(R.min, raiseTo || R.min));
+    const preset = (f) => R ? Math.min(R.max, Math.max(R.min, st.bets[1] + Math.round((potNow + (L.call || 0)) * f))) : 0;
+    return `<div class="pk-actions">
+      <div class="pk-main">
+        ${L.fold ? '<button class="btn btn-ghost btn-lg pk-fold" type="button" data-a="fold">フォールド</button>' : ''}
+        ${L.check ? '<button class="btn btn-outline btn-lg" type="button" data-a="check">チェック</button>' : `<button class="btn btn-outline btn-lg" type="button" data-a="call">${L.call >= st.stacks[0] ? 'オールインでコール' : 'コール'} <small>${L.call.toLocaleString()}</small></button>`}
+        ${R ? `<button class="btn btn-primary btn-lg pk-raise" type="button" data-a="raise">${raiseTo >= R.max ? 'オールイン' : R.isBet ? 'ベット' : 'レイズ'} <small id="pk-to">${raiseTo.toLocaleString()}</small></button>` : ''}
+      </div>
+      ${R ? `<div class="pk-sizer">
+        <input type="range" id="pk-range" min="${R.min}" max="${R.max}" step="${Math.max(1, Math.floor(st.bb / 2))}" value="${raiseTo}" aria-label="賭ける額">
+        <div class="pk-presets"><button type="button" data-to="${R.min}">最小</button><button type="button" data-to="${preset(0.5)}">½ポット</button><button type="button" data-to="${preset(1)}">ポット</button><button type="button" data-to="${R.max}">オールイン</button></div>
+      </div>` : ''}
+    </div>`;
+  }
+  function render() {
+    if (!box() || !st) return;
+    const newCards = st.board.length > shownBoard ? shownBoard : st.board.length;
+    const potUp = st.pot > lastPot;
+    box().innerHTML = `<div class="pk-info"><span>ハンド ${st.hand} · ブラインド ${st.sb}/${st.bb} (レベル${st.level})</span>${ended ? '' : '<button class="btn btn-ghost btn-sm" type="button" id="pk-surrender">こうさん</button>'}</div>
+      ${seat('opp')}
+      <div class="pk-felt">
+        <div class="pk-pot${potUp ? ' up' : ''}">ポット <b>${st.pot.toLocaleString()}</b></div>
+        <div class="pk-board">${[0, 1, 2, 3, 4].map((k) => st.board[k] ? pkCard(st.board[k], k >= newCards ? `deal d${k - newCards}` : '') : '<span class="pk-slot"></span>').join('')}</div>
+        ${banner || ''}
+      </div>
+      ${seat('me')}
+      ${ended ? '' : actions()}`;
+    shownBoard = st.board.length; lastPot = st.pot;
+    $$('[data-a]', box()).forEach((b) => b.addEventListener('click', () => {
+      const a = b.dataset.a;
+      wsSend(a === 'raise' ? { t: 'act', a, to: raiseTo } : { t: 'act', a });
+      $$('.pk-actions button', box()).forEach((x) => { x.disabled = true; });
+    }));
+    const range = $('#pk-range');
+    const setTo = (v) => { const R = st.legal.raise; raiseTo = Math.min(R.max, Math.max(R.min, Math.round(Number(v)))); if (range) range.value = raiseTo; const t = $('#pk-to'); if (t) t.textContent = raiseTo.toLocaleString(); const btn = $('.pk-raise'); if (btn) btn.firstChild.textContent = (raiseTo >= R.max ? 'オールイン' : R.isBet ? 'ベット' : 'レイズ') + ' '; };
+    range?.addEventListener('input', () => setTo(range.value));
+    $$('[data-to]', box()).forEach((b) => b.addEventListener('click', () => setTo(b.dataset.to)));
+    $('#pk-surrender')?.addEventListener('click', async () => { if (await confirmDialog({ title: 'こうさんしますか？', body: 'この試合は負けになります。', ok: 'こうさんする', danger: true })) wsSend({ t: 'surrender' }); });
+  }
+  function onState(s, dl) {
+    const before = st;
+    st = s; deadline = dl ? Date.now() + Math.max(0, dl - Date.now()) : 0;
+    if (!before || before.hand !== s.hand) { shownBoard = 0; raiseTo = 0; banner = null; }
+    if (s.result && !(before && before.result && before.hand === s.hand)) {
+      const r = s.result;
+      const txt = r.win === 'me' ? `あなたの勝ち！ +${r.pot.toLocaleString()}` : r.win === 'opp' ? '相手の勝ち' : '引き分け';
+      const why = r.showdown ? `${r.myHandName ? 'あなた: ' + r.myHandName : ''}${r.oppHandName ? ' / 相手: ' + r.oppHandName : ''}` : r.folded === 'me' ? 'フォールドしました' : '相手がフォールドしました';
+      banner = `<div class="pk-banner ${r.win}"><b>${esc(txt)}</b><small>${esc(why)}</small></div>`;
+      if (r.win === 'me' && r.showdown && ['フルハウス', 'フォーカード', 'ストレートフラッシュ', 'ロイヤルフラッシュ', 'フラッシュ'].includes(r.myHandName)) setTimeout(() => box() && cbConfetti(box(), 50), 200);
+    }
+    render();
+  }
+  function end(m) {
+    ended = true; render();
+    const word = m.result === 'win' ? '勝ち！' : '負け…';
+    const why = m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : `${m.hands}ハンドで決着`;
+    box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b><p>${esc(why)}</p>
+      <p class="cb-gain">${m.rating ? `レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : 'この対戦ではレートは動きません'}</p>
+      <div class="md-actions"><a class="btn btn-primary" href="#/games/poker/table?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="#/games/poker">もどる</a></div></div>`);
+    if (m.result === 'win') cbConfetti(box(), 70);
+  }
+  function waiting(msg, extra = '') {
+    if (!box()) return;
+    box().innerHTML = `<div class="cb-wait"><span class="md-spin"></span><p>${msg}</p>${extra}<button class="btn btn-ghost" type="button" id="pk-cancel">やめる</button></div>`;
+    $('#pk-cancel').addEventListener('click', () => { wsSend({ t: 'cancel' }); location.hash = '#/games/poker'; });
+  }
+  function connect() {
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/pk`);
+    ws.onopen = () => { if (!st) wsSend({ t: 'find', mode, code }); };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (!box()) return;
+      if (m.t === 'waiting') return m.mode === 'room' ? waiting('友だちを待っています', `<div class="cb-code">${esc(m.code)}</div><p class="text-sm muted">この部屋コードを友だちに教えてください</p>`) : waiting('対戦相手を探しています…');
+      if (m.t === 'error') { box().innerHTML = emptyState({ icon: 'alert', title: m.msg, action: '<a class="btn btn-primary" href="#/games/poker">もどる</a>' }); closed = true; ws.close(); return; }
+      if (m.t === 'start') {
+        players = m.players; ended = false;
+        const top = box().getBoundingClientRect().top + window.scrollY - ($('.topbar')?.offsetHeight || 0) - ($('.page-head')?.offsetHeight || 0) - 6;
+        window.scrollTo({ top: Math.max(0, top) });
+        return;
+      }
+      if (m.t === 'state') return onState(m.state, m.deadline);
+      if (m.t === 'opponentLeft') { toast(`相手の接続が切れました。${Math.round(m.ms / 1000)}秒もどらなければ、あなたの勝ちです`); return; }
+      if (m.t === 'opponentBack') { toast('相手がもどってきました'); return; }
+      if (m.t === 'end') return end(m);
+    };
+    ws.onclose = () => { if (!closed && !ended && box()) setTimeout(() => { if (box() && !ended) connect(); }, 1500); };
+  }
+  connect();
+  viewCleanup = () => { closed = true; try { ws.close(); } catch {} };
 }
