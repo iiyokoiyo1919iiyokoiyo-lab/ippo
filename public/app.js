@@ -1070,8 +1070,7 @@ async function loadEventBanners() {
   const closed = store.get('ippo_ev_closed', []);
   const list = r.banners.filter((b) => !closed.includes(`${b.id}:${b.live ? 1 : 0}`));
   el.innerHTML = list.map((b) => b.image ? `<div class="ev-bn ev-img ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
-      <a class="ev-pic" href="${esc(b.href)}"><img src="${esc(b.image)}" alt="${esc(b.title)} ${esc(b.text)}" width="1200" height="675" loading="lazy"><span class="ev-shine" aria-hidden="true"></span>
-        <span class="ev-cap"><span class="ev-tag">${esc(b.tag)}</span><small>${esc(b.sub)}</small></span></a>
+      <a class="ev-pic" href="${esc(b.href)}"><img src="${esc(b.image)}" alt="${esc(b.title)} ${esc(b.text)}" width="1200" height="675" loading="lazy"><span class="ev-shine" aria-hidden="true"></span></a>
       <button class="icon-btn ev-close" type="button" aria-label="このお知らせを閉じる">${icon('x')}</button></div>`
     : `<div class="ev-bn ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
       <span class="ev-sky" aria-hidden="true"><i></i><i></i><i></i></span>
