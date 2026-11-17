@@ -57,6 +57,34 @@ const adminBadge = (u, withLabel = false) => !u?.isAdmin ? ''
   : withLabel ? `<span class="admin-badge-label" title="IppO の管理者">${icon('badge')}管理者</span>`
   : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`;
 
+// ---------- リアルタイム接続 (DM の新着・入力中・既読・オンライン) ----------
+const RT = (() => {
+  let ws = null, want = false, tries = 0, watching = null;
+  const handlers = new Set();
+  const emit = (m) => handlers.forEach((h) => { try { h(m); } catch {} });
+  function connect() {
+    if (!want || ws) return;
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/rt`);
+    ws.onopen = () => { tries = 0; if (watching) ws.send(JSON.stringify({ t: 'watch', user: watching })); emit({ t: 'open' }); };
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } emit(m); };
+    ws.onclose = () => { ws = null; emit({ t: 'close' }); if (want) { tries++; setTimeout(connect, Math.min(15000, 800 * 2 ** Math.min(tries, 5))); } };
+  }
+  return {
+    start() { want = true; connect(); },
+    stop() { want = false; try { ws?.close(); } catch {} ws = null; },
+    send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); },
+    watch(user) { watching = user; if (user) this.send({ t: 'watch', user }); },
+    on(fn) { handlers.add(fn); return () => handlers.delete(fn); },
+    get connected() { return !!ws && ws.readyState === 1; },
+  };
+})();
+// 新しい DM が届いたら、その会話を見ていない時はバッジを更新してお知らせ
+RT.on((m) => {
+  if (m.t !== 'dm' || !m.from) return;
+  refreshBadges(true);
+  if (location.hash !== '#/dm/' + m.from && location.hash !== '#/dm') toast(`@${m.from} さんからメッセージ: ${m.message.content.slice(0, 30)}`);
+});
+
 // ---------- トースト ----------
 function toast(msg, type = '') {
   const el = document.createElement('div');
@@ -492,8 +520,10 @@ function renderMe() {
     ]));
     $('#topbar-avatar').innerHTML = avatar(me);
     $('#nav-admin').classList.toggle('hidden', !me.isAdmin);
+    RT.start();
   } else {
     $('#nav-admin').classList.add('hidden');
+    RT.stop();
     box.innerHTML = `<button class="btn btn-secondary btn-block" type="button" id="login-btn">${icon('user')}<span class="account-text" style="flex:none">ログイン</span></button>`;
     $('#login-btn').addEventListener('click', () => openAuth());
     $('#topbar-avatar').innerHTML = icon('user');
@@ -897,6 +927,14 @@ function viewSettings() {
     </section>
     ${me.isAdmin ? `<section class="settings-group"><h2>管理者</h2><div class="list-card">
         <a class="list-item" href="#/admin">${icon('shield')}<div class="grow"><div class="title">管理者画面</div><div class="desc">ユーザー管理・利用状況</div></div>${icon('chevron', 'chev')}</a></div></section>` : ''}
+    <section class="settings-group"><h2>プライバシー</h2>
+      <div class="list-card" id="privacy">
+        <label class="list-item switch-row"><div class="grow"><div class="title">オンライン状態と「入力中」を表示</div><div class="desc">オフにすると相手に見えなくなり、あなたも相手のものを見られなくなります</div></div>
+          <input type="checkbox" class="switch" data-priv="showPresence" disabled></label>
+        <label class="list-item switch-row"><div class="grow"><div class="title">「既読」を表示</div><div class="desc">オフにすると相手に既読が付かなくなり、あなたも相手の既読を見られなくなります</div></div>
+          <input type="checkbox" class="switch" data-priv="showRead" disabled></label>
+      </div>
+    </section>
     <section class="settings-group"><h2>表示</h2>
       <div class="card card-pad">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap"><div><div class="title" style="font-weight:650">テーマ</div><div class="text-sm muted">「自動」は端末の設定に合わせます</div></div>
@@ -932,6 +970,15 @@ function viewSettings() {
       </div>
     </section></div>`;
   loadInvites();
+  api('/me/privacy').then((pv) => {
+    $$('[data-priv]', main).forEach((el) => {
+      el.checked = !!pv[el.dataset.priv]; el.disabled = false;
+      el.addEventListener('change', async () => {
+        try { await api('/me/privacy', { method: 'PATCH', body: { [el.dataset.priv]: el.checked } }); toast('プライバシー設定を保存しました', 'success'); }
+        catch (e) { el.checked = !el.checked; toast(e.message, 'error'); }
+      });
+    });
+  }).catch(() => {});
   $('#settings-edit').addEventListener('click', () => editProfile(me));
   $('#settings-logout').addEventListener('click', logout);
   $$('[data-theme-opt]', main).forEach((b) => b.addEventListener('click', () => {
@@ -1809,18 +1856,38 @@ async function viewDmList() {
   const load = async () => {
     const { conversations } = await api('/dm');
     $('#dm-list').innerHTML = conversations.length ? `<div class="list-card">${conversations.map((c) => `
-      <a class="dm-row${c.unread ? ' unread' : ''}" href="#/dm/${esc(c.user.username)}">
-        ${avatar(c.user)}
+      <a class="dm-row${c.unread ? ' unread' : ''}" href="#/dm/${esc(c.user.username)}" data-peer="${esc(c.user.username)}">
+        <span class="avatar-wrap">${avatar(c.user)}${c.online ? '<i class="online-dot" title="オンライン"></i>' : ''}</span>
         <div class="dm-row-body">
           <div class="dm-row-top"><b>${esc(c.user.displayName)}${adminBadge(c.user)}</b><span class="text-sm muted">@${esc(c.user.username)}</span><time>${timeAgo(c.last.createdAt)}</time></div>
-          <div class="dm-preview">${c.last.mine ? 'あなた: ' : ''}${esc(c.last.content)}</div>
+          <div class="dm-preview" data-text="${esc((c.last.mine ? 'あなた: ' : '') + c.last.content)}">${c.last.mine ? 'あなた: ' : ''}${esc(c.last.content)}</div>
         </div>
         ${c.unread ? `<b class="count-badge" style="margin-left:0">${c.unread}</b>` : ''}
       </a>`).join('')}</div>` : emptyState({ icon: 'mail', title: 'まだメッセージはありません', text: '相手のプロフィールの ' + icon('mail', 'ic-sm') + ' から、または上の欄にユーザー名を入れて始められます。' });
+    applyTyping(); // 一覧を描き直しても「入力中…」を保つ
   };
+  // 相手ごとの「入力中」の期限。一覧を描き直した時もここから表示を戻す
+  const typingUntil = new Map();
+  const typingTimers = new Map();
+  function applyTyping() {
+    $$('.dm-row[data-peer]', main).forEach((row) => {
+      const el = $('.dm-preview', row), on = (typingUntil.get(row.dataset.peer) || 0) > Date.now();
+      el.textContent = on ? '入力中…' : el.dataset.text;
+      el.classList.toggle('typing', on);
+    });
+  }
   await load().catch((e) => { $('#dm-list').innerHTML = emptyState({ icon: 'alert', title: e.message }); });
   const t = setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 10_000);
-  viewCleanup = () => clearInterval(t);
+  const off = RT.on((m) => {
+    if (m.t === 'dm') { if (m.from) typingUntil.delete(m.from); load().catch(() => {}); }
+    else if (m.t === 'typing') {
+      typingUntil.set(m.from, Date.now() + 4500);
+      applyTyping();
+      clearTimeout(typingTimers.get(m.from));
+      typingTimers.set(m.from, setTimeout(applyTyping, 4600));
+    }
+  });
+  viewCleanup = () => { clearInterval(t); off(); typingTimers.forEach(clearTimeout); };
 }
 function dmBubble(m) {
   const d = new Date(m.createdAt);
@@ -1833,12 +1900,16 @@ function dmBubble(m) {
 async function viewDmThread(username) {
   main.innerHTML = pageHead({ title: '@' + esc(username), back: '#/dm' }) + `
     <div class="dm-thread" id="dm-thread">${'<div class="sk" style="height:38px;width:55%;border-radius:20px"></div>'.repeat(2)}</div>
+    <div class="dm-typing hidden" id="dm-typing" aria-live="polite"><span class="dm-typing-bubble"><i></i><i></i><i></i></span><span class="dm-typing-text"></span></div>
     <form class="dm-composer" id="dm-form">
       <textarea class="textarea" name="c" rows="1" placeholder="メッセージを入力" maxlength="1000" aria-label="メッセージ"></textarea>
       <button class="btn btn-primary send" type="submit" disabled aria-label="送信">${icon('send')}</button>
     </form>`;
-  const thread = $('#dm-thread'), form = $('#dm-form'), ta = form.c, btn = $('button', form);
-  let lastId = 0, firstId = 0, stopped = false;
+  const thread = $('#dm-thread'), form = $('#dm-form'), ta = form.c, btn = $('button', form), typingEl = $('#dm-typing');
+  let lastId = 0, firstId = 0, stopped = false, peerUser = null;
+  // 相手の状態: online (true/false/null=非公開), lastSeenAt, typing, readUpTo (既読の位置。null=非公開)
+  const peer = { online: null, lastSeenAt: null, typing: false, readUpTo: null };
+  let typingTimer = null, statusTimer = null;
   const atBottom = () => window.innerHeight + window.scrollY >= document.body.scrollHeight - 120;
   const scrollBottom = () => window.scrollTo(0, document.body.scrollHeight);
   const append = (msgs) => {
@@ -1847,10 +1918,46 @@ async function viewDmThread(username) {
     $('.empty', thread)?.remove();
     thread.insertAdjacentHTML('beforeend', fresh.map(dmBubble).join(''));
     lastId = Math.max(lastId, ...fresh.map((m) => m.id));
+    renderRead();
   };
+  // 見出しの下: 入力中 / オンライン / 最終オンライン / @ユーザー名
+  function renderStatus() {
+    const sub = $('#dm-status');
+    if (!sub || !peerUser) return;
+    let html, cls = '';
+    if (peer.typing) { html = '入力中…'; cls = 'typing'; }
+    else if (peer.online) { html = '<i class="dm-dot"></i>オンライン'; cls = 'online'; }
+    else if (peer.lastSeenAt) html = `最終オンライン ${timeAgo(peer.lastSeenAt)}`;
+    else html = `@${esc(peerUser.username)}`;
+    sub.className = `sub dm-status ${cls}`;
+    sub.innerHTML = html;
+  }
+  // 「既読」: 相手が読んだ自分のメッセージのうち、いちばん新しいものの下に表示
+  function renderRead() {
+    $$('.dm-read', thread).forEach((el) => el.remove());
+    if (peer.readUpTo == null) return;
+    const mine = $$('.dm-msg.mine', thread).filter((el) => Number(el.dataset.id) <= peer.readUpTo);
+    const last = mine[mine.length - 1];
+    if (last) $('.dm-time', last).insertAdjacentHTML('afterbegin', '<span class="dm-read">既読</span>');
+  }
+  function showTyping() {
+    peer.typing = true;
+    $('.dm-typing-text', typingEl).textContent = `${peerUser?.displayName || ''}さんが入力中`;
+    const stick = atBottom();
+    typingEl.classList.remove('hidden');
+    if (stick) scrollBottom();
+    renderStatus();
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(hideTyping, 4500);
+  }
+  function hideTyping() { peer.typing = false; typingEl.classList.add('hidden'); clearTimeout(typingTimer); renderStatus(); }
+
   try {
-    const { user, messages, hasMore } = await api('/dm/' + encodeURIComponent(username));
-    $('.page-head h1', main).innerHTML = `${esc(user.displayName)}${adminBadge(user)}<span class="sub"><a href="#/u/${esc(user.username)}" style="color:inherit">@${esc(user.username)}</a></span>`;
+    const { user, messages, hasMore, peer: p } = await api('/dm/' + encodeURIComponent(username));
+    peerUser = user;
+    Object.assign(peer, { online: p?.online ?? null, lastSeenAt: p?.lastSeenAt ?? null, readUpTo: p?.readUpTo ?? null });
+    $('.page-head h1', main).innerHTML = `<a href="#/u/${esc(user.username)}" style="color:inherit">${esc(user.displayName)}</a>${adminBadge(user)}<span class="sub dm-status" id="dm-status"></span>`;
+    renderStatus();
     thread.innerHTML = messages.length ? '' : emptyState({ icon: 'mail', title: `${user.displayName}さんにメッセージを送ってみましょう` });
     append(messages);
     firstId = messages[0]?.id || 0;
@@ -1862,6 +1969,7 @@ async function viewDmThread(username) {
         moreBtn.insertAdjacentHTML('afterend', r.messages.map(dmBubble).join(''));
         firstId = r.messages[0]?.id || firstId;
         if (!r.hasMore) moreBtn.remove();
+        renderRead();
       });
     }
     scrollBottom();
@@ -1872,7 +1980,12 @@ async function viewDmThread(username) {
     return;
   }
   // 入力欄: 内容に合わせて高さを伸ばす。PC は Enter で送信 (Shift+Enter で改行)。日本語変換中の Enter では送信しない
-  ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; btn.disabled = !ta.value.trim(); });
+  let typingSent = 0;
+  ta.addEventListener('input', () => {
+    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; btn.disabled = !ta.value.trim();
+    // 入力中の合図 (2.5 秒に 1 回まで)
+    if (ta.value.trim() && Date.now() - typingSent > 2500) { typingSent = Date.now(); RT.send({ t: 'typing', to: username }); }
+  });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia('(pointer: fine)').matches) { e.preventDefault(); form.requestSubmit(); }
   });
@@ -1883,12 +1996,12 @@ async function viewDmThread(username) {
     btn.disabled = true;
     try {
       const { message } = await api('/dm/' + encodeURIComponent(username), { method: 'POST', body: { content } });
-      ta.value = ''; ta.dispatchEvent(new Event('input'));
+      ta.value = ''; ta.dispatchEvent(new Event('input')); typingSent = 0;
       append([message]); scrollBottom();
     } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
     ta.focus();
   });
-  // 新着を定期的に取得 (画面を離れたら止める)
+  // 新着の取得 (読んだことも相手に伝わる)。リアルタイム接続中は通知で即時、切れている時は 4 秒ごと
   const poll = async () => {
     if (stopped || document.hidden) return;
     try {
@@ -1896,8 +2009,24 @@ async function viewDmThread(username) {
       if (messages.length) { const stick = atBottom(); append(messages); if (stick) scrollBottom(); }
     } catch {}
   };
-  const t = setInterval(poll, 4000);
-  viewCleanup = () => { stopped = true; clearInterval(t); };
+  const off = RT.on((m) => {
+    if (m.t === 'dm' && m.from === username) { hideTyping(); poll(); }
+    else if (m.t === 'dm' && m.to === username) { append([m.message]); scrollBottom(); } // 自分の別の端末から送った分
+    else if (m.t === 'typing' && m.from === username) showTyping();
+    else if (m.t === 'read' && m.by === username) { peer.readUpTo = Math.max(peer.readUpTo || 0, m.lastReadId); renderRead(); }
+    else if (m.t === 'presence' && m.user === username) { peer.online = m.online; peer.lastSeenAt = m.lastSeenAt; renderStatus(); }
+    else if (m.t === 'open') { RT.watch(username); poll(); }
+  });
+  RT.watch(username);
+  const t = setInterval(() => { if (!RT.connected) poll(); }, 4000);
+  statusTimer = setInterval(renderStatus, 30_000); // 「最終オンライン ○分前」を更新
+  const onVisible = () => { if (!document.hidden) poll(); };
+  document.addEventListener('visibilitychange', onVisible);
+  viewCleanup = () => {
+    stopped = true; clearInterval(t); clearInterval(statusTimer); clearTimeout(typingTimer);
+    off(); RT.watch(null);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
 }
 
 // =====================================================================

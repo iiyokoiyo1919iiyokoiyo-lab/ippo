@@ -406,6 +406,7 @@ module.exports = function install(app, ctx) {
       db.prepare('UPDATE pw_placements SET user_id = NULL WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM pw_cooldowns WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM pw_votes WHERE user_id = ?').run(u.id);
+      db.prepare('DELETE FROM user_privacy WHERE user_id = ?').run(u.id);
       if (mode === 'account') {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(u.id);

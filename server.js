@@ -300,6 +300,7 @@ app.delete('/api/users/:username/follow', requireAuth, writeLimit, follow(false)
 const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, beforeId, hashPw, vb, isAdmin };
 require('./features')(app, ctx);
 require('./pixel')(app, ctx); // PIXEL WORLD
+require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
@@ -325,7 +326,8 @@ app.get('/api/dm', requireAuth, (req, res) => {
   const conversations = rows.map((r) => {
     const peer = qUser.get(r.peer);
     if (!peer) return null;
-    return { user: publicUser(peer), last: dmOut(db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.last_id), me), unread: unreadFrom(me, peer.id) };
+    return { user: publicUser(peer), last: dmOut(db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.last_id), me), unread: unreadFrom(me, peer.id),
+      online: ctx.rt.presenceOf(me.id, peer.id).online };
   }).filter(Boolean);
   res.json({ conversations });
 });
@@ -354,8 +356,15 @@ app.get('/api/dm/:username', requireAuth, (req, res) => {
   const rows = after
     ? db.prepare(`SELECT * FROM dm_messages WHERE ${pair} AND id > $after ORDER BY id ASC LIMIT 100`).all({ $me: me.id, $peer: peer.id, $after: after })
     : db.prepare(`SELECT * FROM (SELECT * FROM dm_messages WHERE ${pair} AND id < $before ORDER BY id DESC LIMIT 50) ORDER BY id ASC`).all({ $me: me.id, $peer: peer.id, $before: before });
-  if (rows.length) qMarkRead.run(me.id, peer.id, rows[rows.length - 1].id);
-  res.json({ user: profile(peer, me), messages: rows.map((m) => dmOut(m, me)), hasMore: !after && rows.length === 50 });
+  if (rows.length) {
+    const lastId = rows[rows.length - 1].id;
+    const prev = qLastRead.get(me.id, peer.id)?.last_read_id || 0;
+    qMarkRead.run(me.id, peer.id, lastId);
+    // 相手から届いたメッセージを新しく読んだ時だけ「既読」を知らせる
+    if (lastId > prev && rows.some((m) => m.sender_id === peer.id && m.id > prev)) ctx.rt.read(me, peer, lastId);
+  }
+  res.json({ user: profile(peer, me), messages: rows.map((m) => dmOut(m, me)), hasMore: !after && rows.length === 50,
+    peer: { ...ctx.rt.presenceOf(me.id, peer.id), readUpTo: ctx.rt.readByPeer(me.id, peer.id) } });
 });
 
 app.post('/api/dm/:username', requireAuth, dmLimit, (req, res) => {
@@ -366,7 +375,9 @@ app.post('/api/dm/:username', requireAuth, dmLimit, (req, res) => {
   if ([...content].length > 1000) return res.status(400).json({ error: '1000文字以内で送信してください' });
   const r = db.prepare('INSERT INTO dm_messages (sender_id, recipient_id, content, created_at) VALUES (?, ?, ?, ?)').run(me.id, peer.id, content, Date.now());
   qMarkRead.run(me.id, peer.id, Number(r.lastInsertRowid));
-  res.json({ message: dmOut(db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.lastInsertRowid), me) });
+  const row = db.prepare('SELECT * FROM dm_messages WHERE id = ?').get(r.lastInsertRowid);
+  ctx.rt.dmSent(me, peer, row, dmOut);
+  res.json({ message: dmOut(row, me) });
 });
 
 app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
@@ -376,12 +387,18 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname !== '/vb' && u.pathname !== '/pw') return socket.destroy();
+  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt') return socket.destroy();
   // CSRF 的な他サイトからの接続を拒否
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
   // PIXEL WORLD のリアルタイム配信 (閲覧は誰でも可。書き込みは受け付けない)
   if (u.pathname === '/pw') return ctx.pixelUpgrade(req, socket, head);
+  // DM のリアルタイム (オンライン・入力中・既読・新着)。本人確認が必要
+  if (u.pathname === '/rt') {
+    const rtUser = userFromReq(req);
+    if (!rtUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
+    return ctx.realtimeUpgrade(req, socket, head, rtUser);
+  }
   const user = userFromReq(req);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
   wss.handleUpgrade(req, socket, head, (ws) => vb.handleConnection(ws, u.searchParams.get('url'), user.id, {
