@@ -163,6 +163,7 @@ function hydrate(row, me) {
     counts: { likes: c.likes, reposts: c.reposts, replies: c.replies },
     liked: !!c.liked, reposted: !!c.reposted,
     community, question: !!row.question_day,
+    images: ctx.imagesOf ? ctx.imagesOf(row.id) : [],
   };
 }
 const qCommunity = db.prepare('SELECT slug, name FROM communities WHERE id = ?');
@@ -192,7 +193,9 @@ app.get('/api/search', (req, res) => {
 app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const content = String(req.body?.content || '').trim();
   const replyTo = req.body?.replyTo ? Number(req.body.replyTo) : null;
-  if (!content) return res.status(400).json({ error: '本文を入力してください' });
+  const imgs = ctx.checkImages(req.user, req.body?.imageIds);
+  if (imgs.error) return res.status(400).json({ error: imgs.error });
+  if (!content && !imgs.ids.length) return res.status(400).json({ error: '本文を入力するか、写真を選んでください' });
   if ([...content].length > 280) return res.status(400).json({ error: '280文字以内で投稿してください' });
   const parent = replyTo ? qPost.get(replyTo) : null;
   if (replyTo && !parent) return res.status(404).json({ error: '返信先が見つかりません' });
@@ -207,6 +210,7 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const questionDay = !parent && req.body?.question ? ctx.todayJst() : null;
   const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .run(req.user.id, content, replyTo, communityId, questionDay, Date.now());
+  if (imgs.ids.length) ctx.attachImages(Number(r.lastInsertRowid), req.user, imgs.ids);
   ctx.invalidateTrends();
   res.json({ post: hydrate(qPost.get(r.lastInsertRowid), req.user) });
 });
@@ -304,6 +308,7 @@ require('./pixel')(app, ctx); // PIXEL WORLD
 require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
 require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
+require('./images')(app, ctx); // 投稿の写真
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)

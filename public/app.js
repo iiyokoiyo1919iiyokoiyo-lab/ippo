@@ -275,6 +275,56 @@ function skeletonPosts(n = 3) {
 }
 const loadingBlock = () => `<div class="content">${skeletonPosts(2)}</div>`;
 
+// ---------- 投稿の写真 ----------
+// 端末で長辺 1280px の JPEG に縮める (撮影場所などの情報もここで消える。サーバーでも再度消す)
+async function shrinkPhoto(file) {
+  if (file.size > 30 * 1024 * 1024) throw new Error('ファイルが大きすぎます (30MB まで)');
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch { throw new Error('この画像は読み込めませんでした。JPEG か PNG の写真を選んでください'); }
+  const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(16, Math.round(bmp.width * k)); c.height = Math.max(16, Math.round(bmp.height * k));
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); // 透明部分は白に
+  g.drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
+  return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
+}
+function photoGrid(p) {
+  const n = p.images.length;
+  // 1 枚の時は写真の縦横比を活かす (極端な縦長・横長はほどほどに切り取る)
+  const ratio = n === 1 ? Math.min(1.9, Math.max(0.75, p.images[0].w / p.images[0].h)) : null;
+  return `<div class="photo-grid n${n}" ${ratio ? `style="aspect-ratio:${ratio.toFixed(3)}"` : ''}>${p.images.map((im, i) =>
+    `<button type="button" class="photo" data-photos="${p.images.map((x) => x.id).join(',')}" data-i="${i}" aria-label="写真 ${i + 1}/${n} を拡大"><img src="/api/images/${im.id}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>`;
+}
+// 拡大表示 (左右の矢印・スワイプ・キーボードで移動)
+const Lightbox = (() => {
+  const dlg = $('#lightbox'), img = $('.lb-img', dlg), count = $('.lb-count', dlg);
+  let ids = [], i = 0, sx = null;
+  const show = () => {
+    img.src = '/api/images/' + ids[i]; img.alt = `写真 ${i + 1}/${ids.length}`;
+    count.textContent = ids.length > 1 ? `${i + 1} / ${ids.length}` : '';
+    dlg.classList.toggle('single', ids.length < 2);
+  };
+  const go = (d) => { if (ids.length < 2) return; i = (i + d + ids.length) % ids.length; show(); };
+  dlg.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lb]');
+    if (b) { if (b.dataset.lb === 'close') closeModal(dlg); else go(b.dataset.lb === 'next' ? 1 : -1); return; }
+    if (e.target === dlg) closeModal(dlg);
+  });
+  dlg.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1); });
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); closeModal(dlg); });
+  img.addEventListener('pointerdown', (e) => { sx = e.clientX; });
+  img.addEventListener('pointerup', (e) => { if (sx !== null && Math.abs(e.clientX - sx) > 40) go(e.clientX < sx ? 1 : -1); sx = null; });
+  return { open(list, start) { ids = list; i = start; show(); openModal(dlg); } };
+})();
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.photo[data-photos]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  Lightbox.open(b.dataset.photos.split(',').map(Number), Number(b.dataset.i));
+}, true);
+
 // ---------- 投稿カード ----------
 function renderPost(item, { focus = false, fresh = false } = {}) {
   const p = item.type === 'repost' ? item.post : item;
@@ -307,7 +357,8 @@ function renderPost(item, { focus = false, fresh = false } = {}) {
       <button class="icon-btn post-more" type="button" data-menu aria-label="その他">${icon('more')}</button>
     </header>
     ${p.replyToUser ? `<div class="post-reply-to">返信先: <a href="#/u/${esc(p.replyToUser)}">@${esc(p.replyToUser)}</a></div>` : ''}
-    <div class="post-text">${richText(p.content)}</div>
+    ${p.content ? `<div class="post-text">${richText(p.content)}</div>` : ''}
+    ${p.images?.length ? photoGrid(p) : ''}
     ${media ? `<div class="post-media">${media}</div>` : ''}
     <footer class="post-actions">
       <button class="act like${p.liked ? ' on' : ''}" type="button" aria-label="いいね" aria-pressed="${p.liked}">${icon('heart')}<span>${n(p.counts.likes)}</span></button>
@@ -404,7 +455,9 @@ function composeHtml({ placeholder = 'いまどうしてる？', context = '', s
     <div class="composer-main">
       ${context}
       <textarea placeholder="${esc(placeholder)}" maxlength="400" rows="2" aria-label="本文"></textarea>
+      <div class="composer-images"></div>
       <div class="composer-foot">
+        <label class="icon-btn composer-photo" title="写真を追加 (4枚まで)" aria-label="写真を追加">${icon('image')}<input type="file" accept="image/*" multiple hidden></label>
         <span class="hint">${icon('shield', 'ic-sm')}リンクは仮想ブラウザで開かれます</span>
         <span class="ring-wrap"><svg class="ring" viewBox="0 0 26 26"><circle class="track" cx="13" cy="13" r="10"/><circle class="bar" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg><span class="ring-num"></span></span>
         <button class="btn btn-primary" type="button" disabled>${esc(submit)}</button>
@@ -415,12 +468,48 @@ function composeHtml({ placeholder = 'いまどうしてる？', context = '', s
 function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
   const ta = $('textarea', root), btn = $('.composer-foot .btn', root), bar = $('.ring .bar', root), ring = $('.ring', root), num = $('.ring-num', root), wrap = $('.ring-wrap', root);
   const C = 2 * Math.PI * 10;
+  // 添付する写真 (端末で縮めてから先にアップロードしておく)
+  const imgBox = $('.composer-images', root), fileInput = $('.composer-photo input', root);
+  let images = []; // { key, id, url, uploading }
+  const renderImages = () => {
+    imgBox.innerHTML = images.map((im) => `<div class="composer-img${im.uploading ? ' uploading' : ''}" data-key="${im.key}">
+      <img src="${im.url}" alt="">${im.uploading ? '<span class="composer-img-spin"></span>' : ''}
+      <button type="button" class="composer-img-x" aria-label="写真を外す">${icon('x')}</button></div>`).join('');
+    $$('.composer-img-x', imgBox).forEach((b) => b.addEventListener('click', () => {
+      const key = b.closest('[data-key]').dataset.key, im = images.find((x) => x.key === key);
+      images = images.filter((x) => x.key !== key);
+      if (im?.id) api('/uploads/' + im.id, { method: 'DELETE' }).catch(() => {});
+      URL.revokeObjectURL(im?.url); renderImages(); update();
+    }));
+    $('.composer-photo', root).classList.toggle('hidden', images.length >= 4);
+  };
+  fileInput.addEventListener('change', async () => {
+    const all = [...fileInput.files], files = all.slice(0, 4 - images.length);
+    fileInput.value = '';
+    if (all.length > files.length) toast('写真は1つの投稿に4枚までです');
+    for (const file of files) {
+      const im = { key: Math.random().toString(36).slice(2), url: '', uploading: true };
+      try {
+        const blob = await shrinkPhoto(file);
+        im.url = URL.createObjectURL(blob);
+        images.push(im); renderImages(); update();
+        const res = await fetch('/api/uploads', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '写真をアップロードできませんでした');
+        im.id = data.image.id; im.uploading = false;
+      } catch (e) {
+        images = images.filter((x) => x !== im);
+        toast(e.message || 'この写真は使えません', 'error');
+      }
+      renderImages(); update();
+    }
+  });
   const update = () => {
     const len = [...ta.value].length, left = MAX_LEN - len;
     bar.style.strokeDashoffset = C * (1 - Math.min(1, len / MAX_LEN));
     ring.classList.toggle('warn', left <= 20 && left >= 0); ring.classList.toggle('over', left < 0); wrap.classList.toggle('over', left < 0);
     num.textContent = left <= 20 ? left : '';
-    btn.disabled = !ta.value.trim() || left < 0;
+    btn.disabled = (!ta.value.trim() && !images.length) || left < 0 || images.some((im) => im.uploading);
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.5) + 'px';
   };
   ta.addEventListener('input', update);
@@ -428,8 +517,8 @@ function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
   btn.addEventListener('click', async () => {
     btn.disabled = true; btn.classList.add('is-loading');
     try {
-      const { post } = await api('/posts', { method: 'POST', body: { ...extra, content: ta.value, replyTo } });
-      ta.value = ''; update();
+      const { post } = await api('/posts', { method: 'POST', body: { ...extra, content: ta.value, replyTo, imageIds: images.map((im) => im.id) } });
+      ta.value = ''; images.forEach((im) => URL.revokeObjectURL(im.url)); images = []; renderImages(); update();
       onDone && onDone(post);
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
     btn.classList.remove('is-loading');
@@ -882,7 +971,7 @@ async function viewNotifications() {
   refreshBadges(true);
   const label = { reply: 'があなたの投稿にコメントしました', mention: 'があなたをメンションしました', repost: 'があなたの投稿をリポストしました' };
   const ic = { reply: 'comment', mention: 'at', repost: 'repeat' };
-  const quote = (p) => esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content);
+  const quote = (p) => p.content ? esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content) : `📷 写真${p.images?.length || ''}枚`;
   const activity = data.activity.map((a) => `<a class="notif${a.at > seen.at ? ' unread' : ''}" href="#/p/${a.type === 'repost' ? a.post.id : a.post.id}">
       <span class="notif-icon ${a.type}">${icon(ic[a.type])}</span>
       <div class="notif-body"><div class="notif-text"><b>${esc(a.user.displayName)}${adminBadge(a.user)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>
