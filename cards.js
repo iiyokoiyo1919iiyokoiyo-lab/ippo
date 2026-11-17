@@ -280,6 +280,41 @@ function cpuAct(state, p, rnd) {
   }
   return { a: rnd() < 0.8 ? 'attack' : 'guard' };
 }
+// 強い CPU: 行動の候補 (こうげき・ガード・わざ・交代) ごとに、この先の試合を何回もシミュレーションして、いちばん勝ちやすいものを選ぶ。
+// 相手が選んだ行動は見ない (ターンの初めに決める)。見るのは画面にも出ている情報 (HP・わざの待ち時間・毒・流星) だけ
+const CPU_ROLLOUTS = Number(process.env.CB_CPU_ROLLOUTS) || 48, CPU_DEPTH = 12;
+function score(state, p) { // 0 (負け) 〜 1 (勝ち)。決着していなければ、残りの HP の割合で見積もる
+  if (state.winner !== null) return state.winner === p ? 1 : state.winner === -1 ? 0.5 : 0;
+  const hp = (s) => s.cards.reduce((x, c) => x + Math.max(0, c.hp) / c.maxHp, 0) + s.cards.filter((c) => c.hp > 0).length * 0.35;
+  const a = hp(state.sides[p]), b = hp(state.sides[1 - p]);
+  return 0.5 + 0.5 * (a - b) / Math.max(1, a + b);
+}
+function candidates(state, p) {
+  const s = state.sides[p], me = s.cards[s.active], out = [{ a: 'attack' }, { a: 'guard' }];
+  if (me.cd === 0) out.push({ a: 'skill' });
+  s.cards.forEach((c, i) => { if (i !== s.active && c.hp > 0) out.push({ a: 'switch', i }); });
+  return out;
+}
+function smartAct(state, p, rnd, rollouts = CPU_ROLLOUTS) {
+  const opts = candidates(state, p);
+  if (opts.length === 1) return opts[0];
+  let best = opts[0], bestV = -1;
+  for (const opt of opts) {
+    let v = 0;
+    for (let r = 0; r < rollouts; r++) {
+      const st = structuredClone(state); st.winner = null;
+      // 相手の行動は「ふつうの CPU」が選びそうなものと、ときどきでたらめなもので見積もる
+      const o = 1 - p, oc = candidates(st, o), oa = rnd() < 0.25 ? oc[Math.floor(rnd() * oc.length)] : cpuAct(st, o, rnd);
+      const acts = []; acts[p] = opt; acts[o] = oa;
+      resolveTurn(st, acts, rnd);
+      for (let d = 0; d < CPU_DEPTH && st.winner === null; d++) resolveTurn(st, [cpuAct(st, 0, rnd), cpuAct(st, 1, rnd)], rnd);
+      v += score(st, p);
+    }
+    v /= rollouts;
+    if (v > bestV + 1e-9) { bestV = v; best = opt; }
+  }
+  return best;
+}
 
 const MIGRATION = `
 CREATE TABLE card_players (
@@ -608,7 +643,7 @@ function install(app, ctx) {
   function nextTurn(b) {
     if (b.ended) return;
     b.acts = [null, null];
-    if (!b.uids[1]) b.acts[1] = cpuAct(b.state, 1, rnd);
+    if (!b.uids[1]) b.acts[1] = b.mode === 'quest' ? cpuAct(b.state, 1, rnd) : smartAct(b.state, 1, rnd); // CPU 戦は強い CPU (クエストの敵はいつもの CPU)
     b.deadline = Date.now() + TURN_MS;
     b.uids.forEach((u) => u && send(u, { t: 'turn', turn: b.state.turn + 1, deadline: b.deadline, ms: TURN_MS, state: publicState(b) }));
     clearTimeout(b.timer);
@@ -740,4 +775,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

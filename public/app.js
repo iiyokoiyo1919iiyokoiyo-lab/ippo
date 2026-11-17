@@ -3151,7 +3151,7 @@ async function viewCards() {
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
       <div class="cb-modes">
         <a class="btn btn-primary btn-lg" href="#/games/cards/battle?mode=random">${icon('globe')}ランダム対戦<small>レート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
-        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
+        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>先を読む強い CPU · 勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
