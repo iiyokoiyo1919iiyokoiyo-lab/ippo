@@ -3305,7 +3305,9 @@ async function viewBattle(params) {
   const box = () => $('#cbb');
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'hit' ? (e.bench ? `${1 - e.p === you ? '' : '相手の'}控えの${e.target}に ${e.dmg} ダメージ` : `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`)
+  const evText = (e) => e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
+    : e.k === 'poison' ? `${e.p === you ? '' : '相手の'}${e.bench ? '控えの' : ''}${e.card}は毒で ${e.dmg} ダメージ${e.left ? ` (あと${e.left}ターン)` : ' (毒が消えた)'}`
+    : e.k === 'hit' ? (e.bench ? `${1 - e.p === you ? '' : '相手の'}控えの${e.target}に ${e.dmg} ダメージ` : `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`)
     : e.k === 'skill' ? `${name(e.p, e.card)}の「${e.skill}」！` : e.k === 'heal' ? `${name(e.p, e.card)}は ${e.amount} 回復した`
     : e.k === 'guard' ? `${name(e.p, e.card)}はガードした` : e.k === 'switch' ? `${e.p === you ? 'あなた' : '相手'}は ${e.card} を出した`
     : e.k === 'ko' ? (e.bench ? `${e.p === you ? '' : '相手の'}控えの${e.card}はたおれた！` : `${name(e.p, e.card)}はたおれた！`) : e.k === 'timeup' ? '30ターンたったので、残りの HP で決まります' : '';
@@ -3313,8 +3315,8 @@ async function viewBattle(params) {
   const hpBar = (c, key) => { const now = Math.max(0, (c.hp / c.maxHp) * 100), from = prevPct[key] ?? now; return `<span class="cb-hp"><i data-to="${now}" style="width:${from}%" class="${c.hp / c.maxHp < 0.3 ? 'low' : ''}"></i></span><span class="cb-hpn">${c.hp}/${c.maxHp}</span>`; };
   const fighter = (c, mineSide, key) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}</span>${hpBar(c, key)}</div></div>`;
-  const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+  const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
     const mineS = state.sides[you], foeS = state.sides[1 - you], my = mineS.cards[mineS.active], skill = my.skillName ? my : cat?.cards.find((c) => c.id === my.id);
@@ -3373,6 +3375,17 @@ async function viewBattle(params) {
       else if (e.k === 'skill') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill'); }, t); t += 320; }
       else if (e.k === 'guard') { setTimeout(() => replay(el(e.p), 'guarding'), t); }
       else if (e.k === 'ko') { setTimeout(() => pop(e.p, 'KO!', 'ko'), t); t += 300; }
+      else if (e.k === 'poisoned') { setTimeout(() => pop(e.p, '☠️ 毒！', 'skill psn'), t); t += 250; }
+      else if (e.k === 'poison') {
+        setTimeout(() => {
+          if (e.bench) {
+            const side = box()?.querySelectorAll('.cb-top')[e.p === you ? 1 : 0];
+            const mini = [...(side?.querySelectorAll('.cb-mini') || [])].find((m) => (m.getAttribute('aria-label') || '').startsWith(e.card + ' '));
+            if (mini) { const n = document.createElement('span'); n.className = 'cb-float dmg bench psn'; n.textContent = `-${e.dmg}`; mini.append(n); setTimeout(() => n.remove(), 1100); }
+          } else pop(e.p, `☠️-${e.dmg}`, 'dmg psn');
+        }, t);
+        t += 120;
+      }
     });
   }
   function choose(a) { if (chosen || ended) return; chosen = true; wsSend({ t: 'act', ...a }); render(); }

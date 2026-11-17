@@ -20,7 +20,7 @@ const SKILLS = {
   drain: { name: 'すいとる', desc: '1.2 倍のダメージ。与えたダメージの半分回復' },
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
-  sweep: { name: 'しっぷうぎり', desc: '控えもふくめた相手の全員に、0.8 倍の無属性こうげき (疾風剣士ハサミ丸だけのわざ)' },
+  sweep: { name: 'しっぷうぎり', desc: '控えもふくめた相手の全員に 0.8 倍の無属性こうげき + 毒 (毎ターン最大 HP の 8%・3 ターン) (疾風剣士ハサミ丸だけのわざ)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -53,7 +53,7 @@ const CARD_LIST = [
   ['gold', '黄金えんぴつ王', '👑', 'SSR', 'cut', 52, 16, 9, 14, 'power'],
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
-  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 50, 15, 8, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 39, 12, 6, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
 ];
 const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, hp, atk, def, spd, skill]) => [id, { id, name, emoji, rarity, type, hp, atk, def, spd, skill }]));
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
@@ -136,7 +136,8 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
-function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0 })), active: 0 }; }
+const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
+function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0 }; }
 const alive = (side) => side.cards.filter((c) => c.hp > 0).length;
 function typeMult(a, d) { return BEATS[a] === d ? 1.5 : BEATS[d] === a ? 0.7 : 1; }
 // 1 ターンを進める。acts[i] = { a: 'attack' | 'guard' | 'skill' | 'switch', i?: 番号 }
@@ -189,10 +190,24 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'heal') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * 0.45)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'barrier') hit(p, 0.8);
-      else if (me.skill === 'sweep') { const o = 1 - p; sides[o].cards.forEach((c, i) => { if (c.hp > 0) hit(p, 0.8, { target: i, typeless: true }); }); } // 控えもふくめた全員に
+      else if (me.skill === 'sweep') { // 控えもふくめた全員に 0.8 倍の無属性こうげき + 毒
+        const o = 1 - p, got = [];
+        sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, 0.8, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
+        if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
+      }
     }
   }
-  // 4. わざの待ち時間を減らし、倒れたカードは次のカードに交代
+  // 4. 毒 (ターンの終わりに、毒のあるカードは最大 HP の 8% のダメージ。控えのカードも)
+  [0, 1].forEach((p) => {
+    sides[p].cards.forEach((c, i) => {
+      if (!(c.poison > 0) || c.hp <= 0) return;
+      const dmg = Math.min(c.hp, Math.max(1, Math.round(c.maxHp * POISON_RATE)));
+      c.hp -= dmg; c.poison--;
+      ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active });
+      if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
+    });
+  });
+  // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
   [0, 1].forEach((p) => {
     const s = sides[p];
     s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; });

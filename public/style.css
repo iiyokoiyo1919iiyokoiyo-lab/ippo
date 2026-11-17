@@ -1706,3 +1706,10 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-rateup b { font-size: 15px; }
 .cb-rateup-text { font-size: var(--fs-sm); color: var(--text-2); }
 .cb-rateup em { font-style: normal; font-weight: 900; font-size: 20px; color: #e03131; }
+
+/* 毒 (しっぷうぎり) */
+.cb-psn { color: #9c36b5; font-weight: 800; }
+:root[data-theme="dark"] .cb-psn { color: #e599f7; }
+.cb-mini.poisoned { box-shadow: 0 0 0 2px #be4bdb, 0 0 10px -2px #be4bdb; }
+.cb-mini.poisoned::after { content: '☠️'; position: absolute; right: -6px; top: -8px; font-size: 13px; }
+.cb-float.psn, .cb-float.dmg.psn { color: #9c36b5; }
