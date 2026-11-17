@@ -2,7 +2,7 @@
 """ミニゲーム「117万分の1 競走馬版」を IppO 用に組み立てる。
 
 元のゲーム (iiyokoiyo1919iiyokoiyo-lab/- の docs/index.html) から、次の 3 つを作る。
-  public/games/horse/index.html … HTML と CSS (元のまま。Google Fonts と X のボタンだけ外す)
+  public/games/horse/index.html … HTML と CSS (元のまま。Google Fonts・X のボタン・OFUSE のリンクだけ外す)
   public/games/horse/logic.js   … 生まれる処理 (確率・文章・統計)。元のコードをそのまま切り出す。サーバーも同じものを使う
   public/games/horse/game.js    … 画面・演出・カード・図鑑。保存先とシェアのところだけ IppO 用に書き換える
 IppO とつなぐ処理は public/games/horse/ippo.js (手で書いたもの) にある。
@@ -68,6 +68,9 @@ def main(src_path):
     game = once(game, '''<a class="btn btn-x" id="btnX" href="https://x.com/intent/post" target="_blank" rel="noopener noreferrer"><span class="xlogo" aria-hidden="true">𝕏</span>でポストする</a>''',
                 '''<button class="btn btn-ippo" id="btnX" type="button">IppOでシェア</button>''', '結果の X ボタン')
 
+    # 応援 (OFUSE) のリンクは IppO では出さない
+    game = once(game, '''      <a class="btn btn-support" id="btnSupport" href="https://ofuse.me/640dc097" target="_blank" rel="noopener noreferrer">🐴 この作者を応援する(OFUSE)</a>\n''', '', '結果の OFUSE リンク')
+
     # みんなの結果: Supabase → IppO の API とアカウント
     before, _old_net, after = cut(game, '/* ---------- みんなの結果(GitHub Pages 版: Supabase) ---------- */', '// 結果画面にも「みんなの結果」を出す', 'みんなの結果')
     game = before + open(os.path.join(ROOT, 'tools', 'horse_board.js'), encoding='utf-8').read().rstrip() + '\n\n' + after
@@ -105,6 +108,9 @@ def main(src_path):
                 '''<button class="btn btn-ippo" id="btnTenX" type="button">IppOで10連の結果をシェア</button>''', '10連の X ボタン')
     html = once(html, '''<a class="btn btn-x" id="btnAlbumX" href="https://x.com/intent/post" target="_blank" rel="noopener noreferrer"><span class="xlogo" aria-hidden="true">𝕏</span>で図鑑の記録をポスト</a>''',
                 '''<button class="btn btn-ippo" id="btnAlbumX" type="button">IppOで図鑑の記録をシェア</button>''', '図鑑の X ボタン')
+    html = once(html, '''  <a class="support-link small" href="https://ofuse.me/640dc097" target="_blank" rel="noopener noreferrer">🐴 このゲームを応援する(OFUSE)</a>\n''', '', 'はじめの画面の OFUSE リンク')
+    if 'ofuse' in html.lower() or 'ofuse' in game.lower():
+        sys.exit('[build_horse] OFUSE へのリンクが残っています')
     if 'x.com' in html or 'x.com' in game:
         sys.exit('[build_horse] X へのリンクが残っています')
     if '非公式' not in html:

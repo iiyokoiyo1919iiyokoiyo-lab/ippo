@@ -573,7 +573,6 @@ function showResult(){
       <button class="btn btn-primary hidden" id="btnChild" type="button">この馬の仔として生まれる</button>
       <button class="btn btn-ippo" id="btnX" type="button">IppOでシェア</button>
       <button class="btn btn-ghost" id="btnShare" type="button">結果の文章をコピー・共有</button>
-      <a class="btn btn-support" id="btnSupport" href="https://ofuse.me/640dc097" target="_blank" rel="noopener noreferrer">🐴 この作者を応援する(OFUSE)</a>
       <button class="btn btn-ghost" id="btnAgain" type="button">もう一度生まれる</button>
       <button class="btn btn-ghost" id="btnAgainTB" type="button">サラブレッドに生まれる</button>
       <button class="btn btn-ghost" id="btnAgainTen" type="button">10連馬生</button>
