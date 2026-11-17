@@ -21,7 +21,7 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ通常こうげきの 30% のダメージ (無属性・ガード無視。かけ直すと 5 ターンにもどる) (星キャンディーだけのわざ)' },
-  sweep: { name: 'しっぷうぎり', desc: '控えもふくめた相手の全員に 0.8 倍の無属性こうげき + 毒 (毎ターン最大 HP の 8%・3 ターン) (疾風剣士ハサミ丸だけのわざ)' },
+  sweep: { name: 'しっぷうぎり', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン) (疾風剣士ハサミ丸だけのわざ)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -161,6 +161,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
+const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // しっぷうぎり: 場のカードに 1.4 倍、控えに 0.8 倍
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
 const METEOR_TURNS = 5, METEOR_RATE = 0.3; // 流星: 5 ターン、ターンの終わりに相手の場のカードへ通常こうげきの 30% (無属性・ガード無視)
 function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0, meteor: null }; }
@@ -216,9 +217,9 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'heal') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * 0.45)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'barrier') hit(p, 0.8);
-      else if (me.skill === 'sweep') { // 控えもふくめた全員に 0.8 倍の無属性こうげき + 毒
-        const o = 1 - p, got = [];
-        sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, 0.8, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
+      else if (me.skill === 'sweep') { // 場のカードに 1.4 倍・控えに 0.8 倍の無属性こうげき + 全員に毒
+        const o = 1 - p, got = [], act0 = sides[o].active;
+        sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
       } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
         const o = 1 - p;
