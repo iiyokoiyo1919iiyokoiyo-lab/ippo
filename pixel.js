@@ -1,14 +1,16 @@
 // =====================================================================
 // PIXEL WORLD — 全校で 1 枚のキャンバスを共有して描く共同ピクセルアート
 //
-// ・配置ルール: 1 ユーザーにつき 60 秒に 1 ピクセル (サーバー側で最終配置時刻を記録して判定)
+// ・配置ルール: 待ち時間 (クールタイム) なし。何マスでも続けて置ける
+//   (環境変数 PW_COOLDOWN_MS をミリ秒で設定すると、また待ち時間を付けられる。例: 60000 = 60 秒に 1 マス)
+//   いたずらのプログラムで連打されないよう、1 人 1 分に 300 回までの上限だけは残す
 // ・リアルタイム同期: WebSocket (/pw) で配置を全員に配信。サーバーのデータを正とする
 // ・個人の配置履歴は公開しない (管理者の調査・復元のためにだけ記録する)
 // =====================================================================
 const { WebSocketServer } = require('ws');
 
 const W = 100, H = 100;
-const COOLDOWN_MS = Number(process.env.PW_COOLDOWN_MS || 60_000);
+const COOLDOWN_MS = Math.max(0, Number(process.env.PW_COOLDOWN_MS ?? 0) || 0);
 // 16 色の固定パレット (番号・名前つき。色の区別が難しい人も番号と名前で確認できる)
 const PALETTE = [
   ['#FFFFFF', '白'], ['#C2C7D0', '明るいグレー'], ['#6B7280', 'グレー'], ['#1A1C24', '黒'],
@@ -182,9 +184,10 @@ module.exports = function install(app, ctx) {
   });
 
   // ---------- ピクセルの配置 ----------
-  // 認証確認 → 休止確認 → 60 秒ルール確認 → 保存 → 最終配置時刻の記録 を 1 つのトランザクションで行う。
-  // node:sqlite は同期処理なので、同時に来たリクエストも 1 件ずつ順番に処理され、2 件目は必ず 60 秒ルールで拒否される。
-  const placeLimit = rateLimit({ windowMs: 60_000, max: 20, key: (req) => 'pw' + req.user.id });
+  // 認証確認 → 休止確認 → 待ち時間の確認 (設定したときだけ) → 保存 → 最終配置時刻の記録 を 1 つのトランザクションで行う。
+  // node:sqlite は同期処理なので、同時に来たリクエストも 1 件ずつ順番に処理される。
+  // 連打のプログラム対策として、1 人 1 分に 300 回 (1 秒に 5 回) までは受け付ける
+  const placeLimit = rateLimit({ windowMs: 60_000, max: COOLDOWN_MS ? 20 : 300, key: (req) => 'pw' + req.user.id });
   app.post('/api/pw/pixels', requireAuth, placeLimit, (req, res) => {
     const { x, y, color } = req.body || {};
     if (![x, y, color].every(Number.isInteger) || x < 0 || x >= W || y < 0 || y >= H || color < 0 || color >= PALETTE.length) {

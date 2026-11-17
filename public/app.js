@@ -987,7 +987,7 @@ async function viewSearch(q) {
   if (!q) {
     res.innerHTML = `<a class="card pw-banner" href="#/pixel">
         <span class="pw-banner-art" aria-hidden="true">${Array.from({ length: 36 }, (_, i) => `<i style="background:${['#4b55f0', '#1f2766', '#4CC9F0', '#FFD43B', '#F06EAA', '#94D82D', '#ffffff', '#7B4AE2', '#F4802A'][(i * 7 + (i >> 2)) % 9]}"></i>`).join('')}</span>
-        <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、60秒に1マスずつ描こう</span></span>${icon('chevron', 'chev')}</a>
+        <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、みんなで自由に描こう</span></span>${icon('chevron', 'chev')}</a>
       <a class="card pw-banner horse-banner" href="#/horse">
         <span class="horse-banner-art" aria-hidden="true">🐴</span>
         <span class="pw-banner-text"><b>117万分の1 競走馬版</b><span>ミニゲーム · 今年生まれる馬の一頭になって、その一生をたどる</span></span>${icon('chevron', 'chev')}</a>
@@ -1542,7 +1542,7 @@ async function loadAdminUsers(q) {
 
 // =====================================================================
 // PIXEL WORLD (全校で 1 枚のキャンバスを共有して描く)
-// ・配置は 60 秒に 1 ピクセル。判定はサーバー側で行い、ここでは残り時間を表示するだけ
+// ・待ち時間 (クールタイム) はなし。サーバーで PW_COOLDOWN_MS を設定したときだけ、残り時間を表示する (判定はサーバー側)
 // ・他の人の配置は WebSocket (/pw) で届く。順番の番号 (seq) が飛んだら全体を取り直す
 // =====================================================================
 const PW_SIZE = 100;
@@ -1594,7 +1594,7 @@ async function viewPixel() {
           <li><b>マスを選ぶ</b>: タップ（クリック）すると、置く色でマスが光ります。「ここに置く」で配置します。</li>
           <li><b>拡大・縮小</b>: 2本指でピンチ、マウスホイール、または右上の ＋ − ボタン。</li>
           <li><b>移動</b>: ドラッグでキャンバスを動かせます。</li>
-          <li><b>ルール</b>: 1人につき <b>60秒に1マス</b>。待ち時間は持ち越せません。</li>
+          <li id="pw-rule"><b>ルール</b>: 待ち時間なし。<b>何マスでも続けて</b>置けます。</li>
           <li>キーボード: 矢印キーでマスを移動、Enter で配置。</li>
         </ul>
       </details>
@@ -1787,6 +1787,8 @@ async function viewPixel() {
         const st = await api('/pw/state', { noAuthPrompt: true });
         S.offset = st.serverNow - Date.now();
         S.pal = st.palette; S.cooldownMs = st.cooldownMs;
+        const rule = $('#pw-rule');
+        if (rule) rule.innerHTML = S.cooldownMs > 0 ? `<b>ルール</b>: 1人につき <b>${Math.round(S.cooldownMs / 1000)}秒に1マス</b>。待ち時間は持ち越せません。` : '<b>ルール</b>: 待ち時間なし。<b>何マスでも続けて</b>置けます。';
         S.canvasId = st.canvas.id; S.seq = st.canvas.seq; S.title = st.canvas.title; S.theme = st.canvas.theme;
         S.pixels = pwDecode(st.canvas.pixels);
         pwDraw(cv, S.pixels, S.pal);
@@ -1813,7 +1815,7 @@ async function viewPixel() {
     const el = $('#pw-timer');
     if (!el) return;
     const wait = Math.max(0, S.nextAt - now()), ready = !!me && !S.paused && wait === 0;
-    const C = 2 * Math.PI * 17, frac = me && !S.paused ? 1 - wait / S.cooldownMs : 0;
+    const C = 2 * Math.PI * 17, frac = me && !S.paused ? (S.cooldownMs > 0 ? 1 - wait / S.cooldownMs : 1) : 0;
     el.className = `pw-timer${ready ? ' ready' : ''}${S.paused ? ' paused' : ''}`;
     el.innerHTML = `<svg class="pw-ring" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" class="track"/><circle cx="20" cy="20" r="17" class="bar" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - frac)}"/></svg>
       <div class="pw-timer-text">${!me ? '<b>閲覧中</b><span>ログインで参加</span>'
