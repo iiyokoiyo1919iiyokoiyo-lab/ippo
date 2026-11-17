@@ -3036,7 +3036,7 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
-    <span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span><b>${esc(c.name)}</b>
+    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
@@ -3063,7 +3063,7 @@ async function viewCards() {
   main.innerHTML = pageHead({ title: 'ぶんぼうぐバトラーズ', sub: 'カードを集めて、3枚のデッキで対戦', back: '#/games' }) + `<div class="content stack" id="cb">${loadingBlock()}</div>`;
   let cat, mine = null;
   try { cat = await cbCatalog(); if (me) mine = await api('/cards/me'); } catch (e) { $('#cb').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
-  const C = Object.fromEntries(cat.cards.map((c) => [c.id, c]));
+  const C = Object.fromEntries([...cat.cards, ...(mine?.horses || [])].map((c) => [c.id, c]));
   const root = $('#cb'); if (!root) return;
   root.innerHTML = `
     ${me ? `<section class="card card-pad cb-wallet">
@@ -3073,7 +3073,7 @@ async function viewCards() {
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></div>
-      <div class="cb-deck">${mine.deck.map((id) => cbCard(C[id], { level: Math.min(mine.owned[id] || 1, cat.maxLevel) })).join('')}</div>
+      <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse ? 0 : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
@@ -3083,6 +3083,11 @@ async function viewCards() {
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
+    </section>
+    <section class="card cb-horse-banner">
+      <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('h:x', 'SSR', { coat: '栗毛' })}</span>
+      <span><b>競走馬版から馬を連れてくる</b><span>1日1頭。わざ・相性・能力は SSR くらいの強さでランダム (連れてきた馬 ${mine.horses.length}頭)</span></span>
+      <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? '🐴 連れてくる' : '今日は連れてきた'}</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
       <span><b>ガチャを引く</b><span>1回 ${cat.pullCost}🪙 · 10回 ${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
@@ -3100,6 +3105,7 @@ async function viewCards() {
       <li>レア度が高いほど、レベルが上がるほど強くなります (R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}%、レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%)。相性と作戦しだいで逆転もできます</li>
       <li>コインはお金では買えません。毎日のボーナスと対戦でもらえます</li></ul></details></section>`;
   $('#cb-login')?.addEventListener('click', () => openAuth());
+  $('#cb-horse')?.addEventListener('click', () => cbBringHorse(() => viewCards()));
   $('#cb-daily')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     try { const r = await api('/cards/daily', { method: 'POST' }); toast(`🎁 ${r.got} コインを受け取りました`, 'success'); viewCards(); } catch (err) { toast(err.message, 'error'); }
@@ -3114,6 +3120,35 @@ async function viewCards() {
     el.innerHTML = r.top.length ? `<div class="md-list">${r.top.map((x) => row(x, me && x.user.id === me.id)).join('')}</div>${r.me && !meIn ? `<div class="md-list md-mine">${row(r.me, true)}</div>` : ''}`
       : '<p class="muted text-sm md-empty">まだだれもランダム対戦をしていません。</p>';
   } catch { const el = $('#cb-rank'); if (el) el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; }
+}
+
+// ---------- 競走馬版から馬を連れてくる (1 日 1 頭) ----------
+async function cbBringHorse(done) {
+  let r;
+  try { r = await api('/cards/horse-candidates'); } catch (e) { return toast(e.message, 'error'); }
+  if (!r.ready) return toast('今日はもう馬を連れてきました。また明日！');
+  if (!r.horses.length) return openPanel('馬を連れてくる', `<div class="form-stack"><p>連れてこられる馬がいません。IppO にログインしたまま「117万分の1 競走馬版」で生まれた馬が、連れてこられます (同じ馬は 1 回だけ)。</p>
+    <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>閉じる</button><a class="btn btn-primary" href="#/horse">馬を生みに行く</a></div></div>`);
+  const LC = { UR: '#c2255c', SSR: '#e67700', SR: '#1971c2', R: '#2b8a3e', N: '#868e96' };
+  openPanel('どの馬を連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">1日1頭だけ。<b>わざ・相性・能力は、連れてきたときにランダムで決まります</b> (SSR くらいの強さ)。競走馬版での成績は関係ありません。</p>
+      <div class="cb-pick-horse">${r.horses.map((h) => `<button type="button" class="list-item" data-sid="${esc(h.sid)}"><span class="cb-mini-art">${CBArt.svg('h:x', 'N', { coat: h.coat })}</span>
+        <div class="grow"><div class="title">${esc(h.name)}</div><div class="desc">${esc(h.coat || '')} · ${esc(h.headline)}</div></div><span class="rc-badge" style="position:static;--c:${LC[h.label] || '#868e96'}">${esc(h.label)}</span></button>`).join('')}</div>
+      <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button></div></div>`, (root, close) => {
+    $$('[data-sid]', root).forEach((b) => b.addEventListener('click', async () => {
+      $$('[data-sid]', root).forEach((x) => { x.disabled = true; });
+      try {
+        const res = await api('/cards/horse', { method: 'POST', body: { sid: b.dataset.sid } });
+        const c = res.card, T = cbCatalogCache?.types || {};
+        root.innerHTML = `<div class="cb-horse-reveal"><div class="cb-flip open r-SSR">${cbCard(c, { cls: 'tilt' })}</div>
+          <p><b>${esc(c.name)}</b> が仲間になった！</p>
+          <p class="text-sm" style="color:var(--text-2)">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · わざ「${esc(c.skillName)}」 (${esc(c.skillDesc)})</p>
+          <div class="modal-actions" style="margin-top:0"><a class="btn btn-outline" href="#/games/cards/collection">デッキに入れる</a><button class="btn btn-primary" type="button" data-close>OK</button></div></div>`;
+        $$('[data-close]', root).forEach((x) => x.addEventListener('click', () => close()));
+        cbConfetti(root, 50);
+        done && setTimeout(done, 50);
+      } catch (e) { toast(e.message, 'error'); close(); }
+    }));
+  });
 }
 
 // ---------- ガチャ ----------
@@ -3199,15 +3234,18 @@ async function viewCollection() {
   let cat, mine;
   try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbc').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   let deck = [...mine.deck];
-  const C = Object.fromEntries(cat.cards.map((c) => [c.id, c]));
+  const C = Object.fromEntries([...cat.cards, ...mine.horses].map((c) => [c.id, c]));
   const render = () => {
     const root = $('#cbc'); if (!root) return;
     const have = cat.cards.filter((c) => mine.owned[c.id]).length;
     root.innerHTML = `<section class="card card-pad cb-deckedit">
         <div class="panel-head"><h3>デッキ (${deck.length}/3)</h3><button class="btn btn-primary btn-sm" type="button" id="cb-save" ${deck.length === 3 && deck.join() !== mine.deck.join() ? '' : 'disabled'}>保存</button></div>
         <p class="text-xs muted">下のカードをタップして、3枚えらんでください (タップした順に先に出ます)。</p>
-        <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] ? cbCard(C[deck[i]], { small: true, level: Math.min(mine.owned[deck[i]], cat.maxLevel), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
+        <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] && C[deck[i]] ? cbCard(C[deck[i]], { small: true, level: C[deck[i]].horse ? 0 : Math.min(mine.owned[deck[i]], cat.maxLevel), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
       </section>
+      <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
+        ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { cls: 'pick' + (deck.includes(c.id) ? ' chosen' : ''), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
+          : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日1頭だけ連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
           ? cbCard(c, { level: Math.min(mine.owned[c.id], cat.maxLevel), cls: 'pick' + (deck.includes(c.id) ? ' chosen' : ''), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
@@ -3243,12 +3281,12 @@ async function viewBattle(params) {
   let prevPct = {}; // HP バーを前のターンの長さから動かすため
   const hpBar = (c, key) => { const now = Math.max(0, (c.hp / c.maxHp) * 100), from = prevPct[key] ?? now; return `<span class="cb-hp"><i data-to="${now}" style="width:${from}%" class="${c.hp / c.maxHp < 0.3 ? 'low' : ''}"></i></span><span class="cb-hpn">${c.hp}/${c.maxHp}</span>`; };
   const fighter = (c, mineSide, key) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
-      <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span>
+      <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
       <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}</span>${hpBar(c, key)}</div></div>`;
-  const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N')}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
+  const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
-    const mineS = state.sides[you], foeS = state.sides[1 - you], my = mineS.cards[mineS.active], skill = cat?.cards.find((c) => c.id === my.id);
+    const mineS = state.sides[you], foeS = state.sides[1 - you], my = mineS.cards[mineS.active], skill = my.skillName ? my : cat?.cards.find((c) => c.id === my.id);
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     const canSwitch = mineS.cards.some((c, i) => i !== mineS.active && c.hp > 0);
     box().innerHTML = `<div class="cb-top">${avatar(players[1 - you], 'sm')}<b>${esc(players[1 - you].displayName)}</b>${bench(foeS, false)}</div>

@@ -1623,3 +1623,17 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 /* FF の投稿の通知 */
 .notif-icon.ff { background: color-mix(in srgb, #0f9d8a 14%, transparent); color: #0f9d8a; }
 .ff-chip { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 6px; background: #0f9d8a; color: #fff; font-size: 10px; font-weight: 900; vertical-align: 1px; }
+
+/* 競走馬版から連れてきた馬のカード */
+.cb-horse { position: absolute; z-index: 5; bottom: 6px; right: 6px; font-size: 14px; }
+.cb-horse-banner { display: flex; align-items: center; gap: var(--s4); padding: var(--s4); background: linear-gradient(120deg, var(--surface) 50%, color-mix(in srgb, #e67700 16%, transparent)); }
+.cb-horse-banner > span:nth-child(2) { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.cb-horse-banner > span:nth-child(2) span { font-size: var(--fs-sm); color: var(--text-2); }
+.cb-pick-horse { display: grid; max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-lg); }
+.cb-pick-horse .list-item + .list-item { border-top: 1px solid var(--border); }
+.cb-mini-art { width: 44px; height: 44px; flex: none; }
+.cb-mini-art .cb-svg { width: 100%; height: 100%; }
+.cb-horse-reveal { position: relative; display: grid; justify-items: center; gap: 8px; text-align: center; }
+.cb-horse-reveal .cb-flip { width: 170px; }
+.cb-horse-reveal p { margin: 0; }
+@media (max-width: 520px) { .cb-horse-banner { flex-wrap: wrap; } .cb-horse-banner .btn { width: 100%; } }

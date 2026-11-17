@@ -10,7 +10,7 @@
   const twinkle = (x, y, r, fill, cls = '') => `<path class="${cls}" d="M${x},${y - r}Q${x},${y} ${x + r},${y}Q${x},${y} ${x},${y + r}Q${x},${y} ${x - r},${y}Q${x},${y} ${x},${y - r}Z" fill="${fill}"/>`;
   const heart = (x, y, s, fill) => `<path d="M${x},${y + 3 * s}C${x - 6 * s},${y - 1 * s} ${x - 3 * s},${y - 6 * s} ${x},${y - 3 * s}C${x + 3 * s},${y - 6 * s} ${x + 6 * s},${y - 1 * s} ${x},${y + 3 * s}Z" fill="${fill}"/>`;
 
-  function draw(id, rarity) {
+  function draw(id, rarity, coat = '') {
     const u = 'cba' + (++seq);
     const defs = [];
     const lg = (name, stops, x2 = 0, y2 = 1) => { defs.push(`<linearGradient id="${u}${name}" x1="0" y1="0" x2="${x2}" y2="${y2}">${stops.map(([o, c, op = 1]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${op}"/>`).join('')}</linearGradient>`); return `url(#${u}${name})`; };
@@ -242,7 +242,32 @@
         <circle cx="60" cy="26" r="3.5" fill="#f06595"/><circle cx="49" cy="33" r="2.2" fill="#74c0fc"/><circle cx="71" cy="33" r="2.2" fill="#74c0fc"/>
         ${gloss(30, 58, 8, 4)}${face(60, 72, { eyes: 'star', mouth: 'smile' })}`,
     };
-    const body = (C[id] || C.pencil)();
+    // 競走馬版から連れてきた馬 (毛色で色が変わる)
+    const COAT = {
+      '鹿毛': ['#c9783a', '#7a3e17', '#2b1a12', '#f0d3b4'], '黒鹿毛': ['#7a4526', '#3b1f10', '#1a110c', '#d1a888'],
+      '栗毛': ['#ec9a5a', '#b85a22', '#f2c27a', '#f8dcc0'], '芦毛': ['#ffffff', '#c3c9d1', '#9aa3ad', '#eef0f3'], '青鹿毛': ['#4a4a58', '#1c1c24', '#0e0e14', '#7d7d8c'],
+    };
+    C.horse = () => {
+      const [c1, c2, mane, muz] = COAT[coat] || COAT['鹿毛'];
+      const dark = coat === '青鹿毛' || coat === '黒鹿毛';
+      return `
+        <path d="M44,104V114M54,106V115M66,106V115M76,104V114" stroke="${c2}" stroke-width="7" stroke-linecap="round"/>
+        <path d="M44,113H44.1M54,114H54.1M66,114H66.1M76,113H76.1" stroke="#3b2a20" stroke-width="7" stroke-linecap="round"/>
+        <ellipse cx="60" cy="94" rx="30" ry="17" fill="${lg('hb', [[0, c1], [1, c2]])}"/>
+        <path d="M88,86Q104,84 100,104Q96,96 90,96Z" fill="${mane}"/>
+        <path d="M38,30L44,8L54,26Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M42,26L45,14L50,25Z" fill="#ffb3c7"/>
+        <path d="M82,30L76,8L66,26Z" fill="${c1}" stroke="${c2}" stroke-width="2"/><path d="M78,26L75,14L70,25Z" fill="#ffb3c7"/>
+        <ellipse cx="60" cy="56" rx="29" ry="31" fill="${rg('hh', [[0, c1], [1, c2]])}"/>
+        <path d="M46,30Q52,14 60,22Q66,12 74,28Q66,24 62,34Q56,26 46,30Z" fill="${mane}"/>
+        ${dark ? '' : `<path d="M57,32Q60,30 63,32L62,62Q60,64 58,62Z" fill="#fff" opacity=".9"/>`}
+        <ellipse cx="60" cy="74" rx="19" ry="13" fill="${muz}"/>
+        <ellipse cx="53" cy="74" rx="2.4" ry="3" fill="#3b2a20" opacity=".7"/><ellipse cx="67" cy="74" rx="2.4" ry="3" fill="#3b2a20" opacity=".7"/>
+        <path d="M54,81Q60,85 66,81" stroke="#3b2a20" stroke-width="2" fill="none" stroke-linecap="round"/>
+        ${gloss(46, 40, 6, 3.5)}
+        <path d="M66,20L74,14L76,24ZM82,18L74,14L76,24Z" fill="#ff6b9d"/><circle cx="75" cy="19" r="3" fill="#f06595"/>
+        ${face(60, 52, { mouth: 'none', iris: dark ? '#0b0806' : '#2b2140' })}`;
+    };
+    const body = (String(id).startsWith('h:') ? C.horse : (C[id] || C.pencil))();
 
     // ---------- レア度の演出 (キャラの後ろ) ----------
     let back = '';
@@ -258,8 +283,8 @@
   }
 
   window.CBArt = {
-    svg(id, rarity = 'N', { label = '', cls = '' } = {}) {
-      return `<svg class="cb-svg ${cls}" viewBox="-4 -6 128 128" ${label ? `role="img" aria-label="${String(label).replace(/[<>&"]/g, '')}"` : 'aria-hidden="true"'}>${draw(id, rarity)}</svg>`;
+    svg(id, rarity = 'N', { label = '', cls = '', coat = '' } = {}) {
+      return `<svg class="cb-svg ${cls}" viewBox="-4 -6 128 128" ${label ? `role="img" aria-label="${String(label).replace(/[<>&"]/g, '')}"` : 'aria-hidden="true"'}>${draw(id, rarity, coat)}</svg>`;
     },
   };
 })();

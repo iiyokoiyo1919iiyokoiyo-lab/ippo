@@ -114,6 +114,7 @@ function install(app, ctx) {
     out.sort((a, b) => rank[a.rarity] - rank[b.rarity] || (b.stats.speed + b.stats.stamina + b.stats.kick + b.stats.guts) - (a.stats.speed + a.stats.stamina + a.stats.kick + a.stats.guts));
     return out.slice(0, 200);
   }
+  ctx.raceHorsesOf = horsesOf; // ぶんぼうぐバトラーズに馬を連れていくときにも使う
   app.get('/api/race/horses', requireAuth, (req, res) => {
     const p = rp(req.user.id);
     res.json({ horses: horsesOf(req.user.id), styles: Object.fromEntries(Object.entries(STYLES).map(([k, v]) => [k, { name: v.name, desc: v.desc }])), distances: DISTANCES,

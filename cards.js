@@ -202,6 +202,29 @@ CREATE TABLE card_battles (
 );
 `;
 
+// 競走馬版から連れてきた馬のカード (1 日 1 頭まで・同じ馬は 1 回だけ)。能力・わざ・相性は連れてきたときにサーバーが決めて保存する
+const HORSE_MIGRATION = `
+CREATE TABLE card_horses (
+  id TEXT PRIMARY KEY,                                   -- カードの ID は 'h:' + この値
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  seed_id TEXT NOT NULL,                                 -- 競走馬版の馬 (サーバーの種の記録)
+  name TEXT NOT NULL, coat TEXT NOT NULL DEFAULT '', origin TEXT NOT NULL DEFAULT '',   -- 馬の名前・毛色・成績 (表示用)
+  type TEXT NOT NULL, skill TEXT NOT NULL,
+  hp INTEGER NOT NULL, atk INTEGER NOT NULL, def INTEGER NOT NULL, spd INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE (user_id, seed_id)
+);
+CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
+`;
+// SSR の文房具の平均を基準に、それぞれ ±12% でランダム (SSR と同じ +12% もつく)
+function rollHorse(rnd) {
+  const ssr = BY_RARITY.SSR.map((id) => CARDS[id]);
+  const avg = (k) => ssr.reduce((a, c) => a + c[k], 0) / ssr.length;
+  const r = (k) => avg(k) * (0.88 + rnd() * 0.24);
+  const types = Object.keys(TYPES), skills = Object.keys(SKILLS);
+  return { type: types[Math.floor(rnd() * types.length)], skill: skills[Math.floor(rnd() * skills.length)],
+    hp: Math.round(r('hp')), atk: Math.round(r('atk')), def: Math.round(r('def')), spd: Math.max(3, Math.round(avg('spd') * (0.7 + rnd() * 0.6))) };
+}
 const START_COINS = 1000, DAILY_COINS = 300;
 const REWARD = { cpu: { win: 30, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
 const REWARDS_PER_DAY = 15;
@@ -212,6 +235,18 @@ const jstDay = (t = Date.now()) => new Date(t + 9 * 3600_000).toISOString().slic
 function install(app, ctx) {
   const { db, requireAuth, rateLimit, publicUser } = ctx;
   db.migrate('2026-11-20-card-battlers', MIGRATION);
+  db.migrate('2026-11-22-card-horses', HORSE_MIGRATION);
+  const qHorse = db.prepare('SELECT * FROM card_horses WHERE id = ?');
+  const horsesOwned = (uid) => db.prepare('SELECT * FROM card_horses WHERE user_id = ? ORDER BY created_at DESC').all(uid);
+  // 馬のカードの能力 (文房具の statsOf と同じ形)
+  const horseStats = (h) => { const m = RARITY.SSR.mult; return { id: 'h:' + h.id, name: h.name, emoji: '🐴', rarity: 'SSR', type: h.type, skill: h.skill, level: 1, horse: true, coat: h.coat, origin: h.origin,
+    maxHp: Math.round(h.hp * m), atk: Math.round(h.atk * m), def: Math.round(h.def * m), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
+  const cardStats = (uid, id, o) => {
+    if (id.startsWith('h:')) { const h = qHorse.get(id.slice(2)); return h && h.user_id === uid ? horseStats(h) : null; }
+    return CARDS[id] ? statsOf(id, Math.min(o[id] || 1, MAX_LEVEL)) : null;
+  };
+  const dayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return d.getTime() - 9 * 3600_000; };
+  const horseToday = (uid) => db.prepare('SELECT COUNT(*) AS n FROM card_horses WHERE user_id = ? AND created_at >= ?').get(uid, dayStart()).n > 0;
   const userView = (id) => { const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, isAdmin: u.isAdmin, verified: u.verified }; };
 
   // はじめて遊ぶ人には、コインとはじめの 3 枚を渡す
@@ -226,10 +261,11 @@ function install(app, ctx) {
     return p;
   }
   const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, r.count]));
-  const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => statsOf(id, Math.min(o[id] || 1, MAX_LEVEL))); };
+  const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
-    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws,
+    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
+      rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws,
       dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
@@ -276,10 +312,33 @@ function install(app, ctx) {
     res.json({ results, ...me(req.user.id) });
   });
 
+  // ---------- 競走馬版から馬を連れてくる (1 日 1 頭) ----------
+  app.get('/api/cards/horse-candidates', requireAuth, (req, res) => {
+    const have = new Set(horsesOwned(req.user.id).map((h) => h.seed_id));
+    const list = (ctx.raceHorsesOf ? ctx.raceHorsesOf(req.user.id) : []).filter((h) => !have.has(h.sid))
+      .map((h) => ({ sid: h.sid, name: h.name, label: h.label, headline: h.headline, breed: h.breed, coat: h.coat }));
+    res.json({ ready: !horseToday(req.user.id), horses: list });
+  });
+  app.post('/api/cards/horse', requireAuth, writeLimit, (req, res) => {
+    const sid = String(req.body?.sid || '');
+    player(req.user.id);
+    if (horseToday(req.user.id)) return res.status(429).json({ error: '今日はもう馬を連れてきました。また明日！' });
+    const h = (ctx.raceHorsesOf ? ctx.raceHorsesOf(req.user.id) : []).find((x) => x.sid === sid);
+    if (!h) return res.status(404).json({ error: 'その馬は連れてこられません' });
+    const r = rollHorse(() => crypto.randomInt(0, 2 ** 32) / 2 ** 32);
+    const id = crypto.randomBytes(9).toString('base64url');
+    try {
+      db.prepare(`INSERT INTO card_horses (id, user_id, seed_id, name, coat, origin, type, skill, hp, atk, def, spd, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id, req.user.id, sid, h.name, h.coat || '', `${h.label} ${h.headline}`, r.type, r.skill, r.hp, r.atk, r.def, r.spd, Date.now());
+    } catch { return res.status(409).json({ error: 'この馬はもう連れてきています' }); }
+    console.log(`[cards] @${req.user.username} が馬「${h.name}」を連れてきた`);
+    res.json({ card: horseStats(qHorse.get(id)), ...me(req.user.id) });
+  });
+
   // デッキ (持っているカード 3 枚。同じカードは 1 枚まで)
   app.put('/api/cards/deck', requireAuth, writeLimit, (req, res) => {
     const d = req.body?.deck, o = owned(req.user.id);
-    if (!Array.isArray(d) || d.length !== 3 || new Set(d).size !== 3 || !d.every((id) => typeof id === 'string' && o[id])) return res.status(400).json({ error: '持っているカードを、ちがうもの 3 枚えらんでください' });
+    if (!Array.isArray(d) || d.length !== 3 || new Set(d).size !== 3 || !d.every((id) => typeof id === 'string' && (id.startsWith('h:') ? !!cardStats(req.user.id, id, o) : o[id]))) return res.status(400).json({ error: '持っているカードを、ちがうもの 3 枚えらんでください' });
     db.prepare('UPDATE card_players SET deck = ? WHERE user_id = ?').run(JSON.stringify(d), req.user.id);
     res.json(me(req.user.id));
   });
@@ -434,7 +493,7 @@ function install(app, ctx) {
   ctx.eraseCards = (uid) => {
     leave(uid);
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
-    for (const t of ['card_players', 'card_owned', 'card_pulls']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
+    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
     db.prepare('UPDATE card_battles SET p1 = NULL WHERE p1 = ?').run(uid);
     db.prepare('UPDATE card_battles SET p2 = NULL WHERE p2 = ?').run(uid);
   };
