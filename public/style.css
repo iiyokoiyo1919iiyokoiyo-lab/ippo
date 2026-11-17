@@ -1811,3 +1811,5 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-card.r-MR > .cb-rar { text-shadow: none; filter: drop-shadow(0 1px 1px rgba(20, 11, 58, .8)); }
 .cb-end:has(.cb-qreward) { place-content: start center; overflow-y: auto; padding-top: 10px; }
 .cb-end .cb-qreward-card { width: 150px; }
+
+.cb-pickup { font-weight: 800; color: var(--text); } .cb-pickup em { font-style: normal; font-size: 1.35em; color: #e03131; }

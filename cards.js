@@ -100,21 +100,36 @@ function pricesNow(now = Date.now()) {
 // 1 体あたりの確率 = (そのレア度の本来の確率 ÷ そのレア度の種類数) × 倍率。上がった分だけ、ほかのレア度の確率が同じ割合で下がる
 // テストのときは環境変数 CB_RATEUP_START / CB_RATEUP_END (ミリ秒の時刻、END は 0 で終わりなし) で上書きできる
 const RATE_UPS = [
-  { name: '恒常SSR 確率2倍', ids: ['gold', 'chalk', 'case'], mult: 2, start: Date.parse('2026-11-17T16:50:00+09:00'), end: null }, // 終わりなし
+  { name: '恒常SSR 確率2倍', ids: ['gold', 'chalk', 'case'], mult: 2, start: Date.parse('2026-11-17T16:50:00+09:00'), end: Date.parse('2026-11-18T10:25:00+09:00') }, // 新キャラ (ハサミ丸) の登場で終わり、元の確率にもどる
 ];
+// ---------- ピックアップ (そのキャラ 1 体の確率を決まった % にする。ほかのキャラは元の確率のまま。ふえた分は、ほかのレア度が同じ割合で下がる) ----------
+// テストのときは環境変数 CB_PICKUP_START (ミリ秒の時刻) で上書きできる
+const PICKUPS = [
+  { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: null }, // 疾風剣士ハサミ丸 1 体で 3%
+];
+if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
+const pickupsNow = (now = Date.now()) => PICKUPS.filter((x) => now >= x.start && (!x.end || now < x.end) && isReleased(x.id, now));
 if (process.env.CB_RATEUP_START) Object.assign(RATE_UPS[0], { start: Number(process.env.CB_RATEUP_START), end: Number(process.env.CB_RATEUP_END) || null });
 const rateUpsNow = (now = Date.now()) => RATE_UPS.filter((x) => now >= x.start && (!x.end || now < x.end));
 const weightOf = (id, now = Date.now()) => rateUpsNow(now).reduce((w, x) => (x.ids.includes(id) ? w * x.mult : w), 1);
 // いまの確率 (%): レア度ごとと、1 体ごと
 function ratesNow(now = Date.now()) {
-  const raw = {};
-  for (const [r, v] of Object.entries(RARITY)) { const pool = poolOf(r, now); raw[r] = pool.length ? v.rate * pool.reduce((a, id) => a + weightOf(id, now), 0) / pool.length : 0; }
-  const boosted = Object.keys(RARITY).filter((r) => raw[r] !== RARITY[r].rate);
+  const raw = {}, fixed1 = Object.fromEntries(pickupsNow(now).map((x) => [x.id, x.rate])), fixedIn = {};
+  for (const [r, v] of Object.entries(RARITY)) {
+    const pool = poolOf(r, now).filter((id) => !(id in fixed1));               // ピックアップのキャラは別に数える
+    fixedIn[r] = poolOf(r, now).filter((id) => id in fixed1).reduce((a, id) => a + fixed1[id], 0);
+    raw[r] = (pool.length ? v.rate * pool.reduce((a, id) => a + weightOf(id, now), 0) / pool.length : 0) + fixedIn[r];
+  }
+  const boosted = Object.keys(RARITY).filter((r) => raw[r] !== RARITY[r].rate || fixedIn[r]);
   const fixed = boosted.reduce((a, r) => a + raw[r], 0), restBase = Object.keys(RARITY).filter((r) => !boosted.includes(r)).reduce((a, r) => a + RARITY[r].rate, 0);
   const rates = {};
   for (const r of Object.keys(RARITY)) rates[r] = boosted.includes(r) ? raw[r] : RARITY[r].rate * (100 - fixed) / restBase;
   const perCard = {};
-  for (const r of Object.keys(RARITY)) { const pool = poolOf(r, now), tw = pool.reduce((a, id) => a + weightOf(id, now), 0); for (const id of pool) perCard[id] = rates[r] * weightOf(id, now) / tw; }
+  for (const r of Object.keys(RARITY)) {
+    const pool = poolOf(r, now).filter((id) => !(id in fixed1)), tw = pool.reduce((a, id) => a + weightOf(id, now), 0);
+    for (const id of pool) perCard[id] = (rates[r] - fixedIn[r]) * weightOf(id, now) / tw;
+    for (const id of poolOf(r, now)) if (id in fixed1) perCard[id] = fixed1[id];
+  }
   return { rates, perCard };
 }
 function rollRarity(rnd, now = Date.now()) {
@@ -125,7 +140,7 @@ function rollRarity(rnd, now = Date.now()) {
 }
 // そのレア度の中から 1 体えらぶ (確率アップのキャラは重みが大きい)
 function pickIn(r, rnd, now) {
-  const list = poolOf(r, now), w = list.map((id) => weightOf(id, now));
+  const pc = ratesNow(now).perCard, list = poolOf(r, now), w = list.map((id) => pc[id] || 0);
   let u = rnd() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < list.length; i++) { u -= w[i]; if (u < 0) return list[i]; }
   return list[list.length - 1];
@@ -412,6 +427,7 @@ function install(app, ctx) {
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}) })),
     newCards: releasedIds().filter((id) => RELEASES[id] && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
+    pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
     urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
@@ -695,4 +711,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

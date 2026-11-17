@@ -3069,6 +3069,7 @@ function cbNewBanner(cat, link = true) {
   return list.map((c) => `<${link ? 'a href="#/games/cards/gacha"' : 'div'} class="card cb-newchar">
       <span class="cb-newchar-art">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span>
       <span class="cb-newchar-text"><span class="cb-newchar-tag">🆕 新キャラ登場！</span><b>${esc(c.name)}</b>
+        ${(cat.pickups || []).some((x) => x.id === c.id) ? `<span class="cb-pickup">🎯 ピックアップ中！ 出る確率 <em>${Number((cat.pickups.find((x) => x.id === c.id).rate).toFixed(2))}%</em></span>` : ''}
         <span>${esc(c.rarity)} · ${esc(cat.types[c.type]?.icon || '')}${esc(cat.types[c.type]?.name || '')} · わざ「${esc(c.skillName)}」${esc(c.skillDesc)}</span></span>
     </${link ? 'a' : 'div'}>`).join('');
 }
@@ -3236,12 +3237,14 @@ async function viewGacha() {
         ${mine.coins < price.pull ? `<p class="text-sm muted" style="text-align:center">コインが足りません。毎日のボーナスや対戦でもらえます。</p>` : ''}
       </section>
       <section class="card card-pad"><div class="panel-head"><h3>提供割合</h3></div>
-        <div class="cb-rates">${Object.entries(cat.rates).reverse().map(([r, v]) => { const list = cat.cards.filter((c) => c.rarity === r), up = list.filter((c) => (cat.rateUps || []).some((x) => x.ids.includes(c.id))), normal = list.filter((c) => !up.includes(c));
-          return `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${Number(v.toFixed(2))}%</b><small>${list.length}種類 · ${up.length ? `確率アップ 1体 ${cat.perCard[up[0].id].toFixed(2)}%${normal.length ? ` / ほか 1体 ${cat.perCard[normal[0].id].toFixed(2)}%` : ''}` : `1種類あたり ${(v / list.length).toFixed(2)}%`}</small></div>`; }).join('')}</div>
+        <div class="cb-rates">${Object.entries(cat.rates).reverse().map(([r, v]) => { const list = cat.cards.filter((c) => c.rarity === r), pick = list.filter((c) => (cat.pickups || []).some((x) => x.id === c.id)), up = list.filter((c) => !pick.includes(c) && (cat.rateUps || []).some((x) => x.ids.includes(c.id))), normal = list.filter((c) => !up.includes(c) && !pick.includes(c));
+          const parts = [...pick.map((c) => `ピックアップ ${esc(c.name)} ${cat.perCard[c.id].toFixed(2)}%`), up.length ? `確率アップ 1体 ${cat.perCard[up[0].id].toFixed(2)}%` : '', normal.length && (pick.length || up.length) ? `ほか 1体 ${cat.perCard[normal[0].id].toFixed(2)}%` : ''].filter(Boolean);
+          return `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${Number(v.toFixed(2))}%</b><small>${list.length}種類 · ${parts.length ? parts.join(' / ') : `1種類あたり ${(v / list.length).toFixed(2)}%`}</small></div>`; }).join('')}</div>
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
           <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、最大 Lv${cat.maxLevel})</li>
           <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
           <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
+          ${(cat.pickups || []).map((x) => `<li>${esc(x.name)}: ${esc(cat.cards.find((c) => c.id === x.id)?.name || '')} 1体の出る確率が ${x.rate}%。ほかのキャラは元の確率のままで、ふえた分だけ ほかのレア度の確率が少し下がります</li>`).join('')}
           ${(cat.rateUps || []).map((x) => `<li>${esc(x.name)}: ${x.ids.map((id) => esc(cat.cards.find((c) => c.id === id)?.name || '')).join('・')} の出る確率が ${x.mult} 倍。上がった分、ほかのレア度の確率が少し下がります</li>`).join('')}
           <li>コインはお金では買えません</li></ul></section>`;
     $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
