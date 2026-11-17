@@ -3031,7 +3031,7 @@ const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR:
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
-  const lvMul = level > 1 && cbCatalogCache && c.skillName ? 1 + cbCatalogCache.levelBonus * (Math.min(level, cbCatalogCache.maxLevel) - 1) : 1; // 図鑑のカードはレベル 1 の能力なので、レベルの分を足す
+  const lvMul = level > 1 && cbCatalogCache && c.skillName && !c.horse ? 1 + cbCatalogCache.levelBonus * (Math.min(level, cbCatalogCache.maxLevel) - 1) : 1; // 図鑑のカードはレベル 1 の能力なので、レベルの分を足す
   const sv = (v) => Math.round(v * lvMul);
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
@@ -3095,11 +3095,12 @@ async function viewCards() {
     ${me ? `<section class="card card-pad cb-wallet">
       ${cbCoins(mine.coins)}
       <button class="btn ${mine.dailyReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-daily" ${mine.dailyReady ? '' : 'disabled'}>${mine.dailyReady ? `🎁 今日のボーナス +${cat.dailyCoins}` : '今日のボーナスは受け取り済み'}</button>
+      <a class="cb-scrolls" href="#/games/cards/collection" title="レベルアップ書 (タップでレベル上げへ)">📜 <b>${Number(mine.scrolls || 0)}</b></a>
       <span class="text-xs muted">対戦の報酬は今日あと ${Math.max(0, mine.rewardsLeft)} 回 (CPU 戦は回数制限なし)</span>
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></div>
-      <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse ? 0 : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
+      <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse ? C[id].level : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
@@ -3262,35 +3263,77 @@ async function viewGacha() {
 async function viewCollection() {
   if (!requireLogin()) return;
   main.innerHTML = pageHead({ title: 'カード図鑑・デッキ', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbc">${loadingBlock()}</div>`;
-  let cat, mine;
+  let cat, mine, mode = 'deck';
   try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbc').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   let deck = [...mine.deck];
-  const C = Object.fromEntries([...cat.cards, ...mine.horses].map((c) => [c.id, c]));
+  const lvOf = (c) => (c.horse ? c.level : Math.min(mine.owned[c.id] || 1, cat.maxLevel));
   const render = () => {
+    const C = Object.fromEntries([...cat.cards, ...mine.horses].map((c) => [c.id, c]));
     const root = $('#cbc'); if (!root) return;
     const have = cat.cards.filter((c) => mine.owned[c.id]).length;
-    root.innerHTML = `<section class="card card-pad cb-deckedit">
+    const pickCls = (c) => 'pick' + (mode === 'deck' && deck.includes(c.id) ? ' chosen' : '') + (mode === 'level' ? (lvOf(c) >= cat.maxLevel ? ' maxed' : lvOf(c) <= mine.scrolls ? ' can-lv' : '') : '');
+    root.innerHTML = `<div class="segmented cb-mode" role="tablist">
+        <button type="button" class="seg${mode === 'deck' ? ' active' : ''}" data-mode="deck">デッキ編成</button>
+        <button type="button" class="seg${mode === 'level' ? ' active' : ''}" data-mode="level">📜 レベル上げ</button></div>
+      ${mode === 'deck' ? `<section class="card card-pad cb-deckedit">
         <div class="panel-head"><h3>デッキ (${deck.length}/3)</h3><button class="btn btn-primary btn-sm" type="button" id="cb-save" ${deck.length === 3 && deck.join() !== mine.deck.join() ? '' : 'disabled'}>保存</button></div>
         <p class="text-xs muted">下のカードをタップして、3枚えらんでください (タップした順に先に出ます)。</p>
-        <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] && C[deck[i]] ? cbCard(C[deck[i]], { small: true, level: C[deck[i]].horse ? 0 : Math.min(mine.owned[deck[i]], cat.maxLevel), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
-      </section>
+        <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] && C[deck[i]] ? cbCard(C[deck[i]], { small: true, level: lvOf(C[deck[i]]), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
+      </section>`
+      : `<section class="card card-pad cb-scrollbox"><div class="cb-scroll-have">📜 レベルアップ書 <b>${mine.scrolls}</b> 枚</div>
+        <p class="text-xs muted">レベルを上げたいカードをタップ。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。最大 Lv${cat.maxLevel}。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
       <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
-        ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { cls: 'pick' + (deck.includes(c.id) ? ' chosen' : ''), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
+        ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日1頭だけ連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
-          ? cbCard(c, { level: Math.min(mine.owned[c.id], cat.maxLevel), cls: 'pick' + (deck.includes(c.id) ? ' chosen' : ''), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
+          ? cbCard(c, { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
           : cbCard(c, { locked: true })).join('')}</div></section>`;
+    $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
     $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
       const id = el.dataset.card;
+      if (mode === 'level') return levelUp(C[id]);
       if (deck.includes(id)) deck = deck.filter((x) => x !== id); else if (deck.length < 3) deck.push(id); else toast('デッキは3枚までです。上のカードをタップして外してください');
       render();
     }));
     $$('[data-slot]', root).forEach((el) => el.addEventListener('click', () => { deck.splice(Number(el.dataset.slot), 1); render(); }));
-    $('#cb-save').addEventListener('click', async () => {
+    $('#cb-save')?.addEventListener('click', async () => {
       try { mine = await api('/cards/deck', { method: 'PUT', body: { deck } }); deck = [...mine.deck]; toast('デッキを保存しました', 'success'); render(); } catch (e) { toast(e.message, 'error'); }
     });
   };
+  // レベルアップ書を使う (確認してから)
+  function levelUp(c) {
+    const lv = lvOf(c);
+    if (lv >= cat.maxLevel) return toast(`${c.name} はもう最大のレベル (Lv${cat.maxLevel}) です`);
+    const cost = lv, enough = mine.scrolls >= cost;
+    const r = (1 + cat.levelBonus * lv) / (1 + cat.levelBonus * (lv - 1)); // 次のレベルでの能力の倍率
+    const cur = c.horse ? c : { ...c, maxHp: Math.round(c.maxHp * (1 + cat.levelBonus * (lv - 1))), atk: Math.round(c.atk * (1 + cat.levelBonus * (lv - 1))), def: Math.round(c.def * (1 + cat.levelBonus * (lv - 1))) };
+    const nx = (v) => Math.round(v * r);
+    openPanel('レベルを上げる', `<div class="cb-lvup">
+        <div class="cb-lvup-card">${cbCard(c, { level: lv })}</div>
+        <p class="cb-lvup-lv">Lv${lv} → <b>Lv${lv + 1}</b></p>
+        <div class="cb-lvup-stats"><span>HP ${cur.maxHp} → <b>${nx(cur.maxHp)}</b></span><span>攻 ${cur.atk} → <b>${nx(cur.atk)}</b></span><span>防 ${cur.def} → <b>${nx(cur.def)}</b></span></div>
+        <p class="text-sm">📜 レベルアップ書を <b>${cost}</b> 枚使います (持っている: ${mine.scrolls} 枚)</p>
+        <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button>
+          <button class="btn btn-primary" type="button" id="cb-lvgo" ${enough ? '' : 'disabled'}>${enough ? 'レベルアップ！' : `あと ${cost - mine.scrolls} 枚たりません`}</button></div></div>`, (root, close) => {
+      let done = false;
+      $('#cb-lvgo', root)?.addEventListener('click', async (e) => {
+        if (done) return close(); // 2 回目のタップは「OK」(とじるだけ)
+        e.target.disabled = true;
+        try {
+          const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id } });
+          mine = res;
+          $('.cb-lvup-card', root).innerHTML = cbCard(res.card.horse ? res.card : C2(res.card.id), { level: res.to, cls: 'lv-flash' });
+          $('.cb-lvup-lv', root).innerHTML = `<span class="cb-lvup-shout">Lv${res.to} にレベルアップ！</span>`;
+          $$('.cb-lvup-stats, .cb-lvup > p.text-sm', root).forEach((x) => x.remove());
+          done = true; e.target.textContent = 'OK'; e.target.disabled = false;
+          cbConfetti(root, 40, ['#ffd43b', '#74c0fc', '#8ce99a', '#fff']);
+          render();
+        } catch (err) { toast(err.message, 'error'); close(); }
+      });
+    });
+  }
+  const C2 = (id) => cat.cards.find((x) => x.id === id) || mine.horses.find((x) => x.id === id);
   render();
 }
 
@@ -3399,7 +3442,7 @@ async function viewBattle(params) {
     const word = m.result === 'win' ? '勝ち！' : m.result === 'lose' ? '負け…' : '引き分け';
     box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
       <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
-      <p class="cb-gain">${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
+      <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
       <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="#/games/cards">もどる</a></div></div>`);
   }
   function connect() {

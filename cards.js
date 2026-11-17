@@ -296,6 +296,14 @@ function rollHorse(rnd) {
 const HORSE_UR_CHANCE = { UR: 0.15, SSR: 0.08, SR: 0.04, R: 0.02, N: 0.01 };
 const UR_MULT = 1.2;
 const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT NULL DEFAULT 'SSR';`; // 'SSR' か 'UR'
+// レベルアップ書: 試合をこなすともらえる (3 ターン以上戦った試合だけ。勝ち 2 枚・負けと引き分け 1 枚、こうさんした側は 0)。
+// レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv5
+const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
+const SCROLL_MIGRATION = `
+ALTER TABLE card_players ADD COLUMN scrolls INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE card_owned ADD COLUMN lv_bonus INTEGER NOT NULL DEFAULT 0;   -- レベルアップ書で上げた分
+ALTER TABLE card_horses ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
+`;
 const START_COINS = 1000, DAILY_COINS = 300;
 const REWARD = { cpu: { win: 30, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
 const REWARDS_PER_DAY = 15;
@@ -308,10 +316,11 @@ function install(app, ctx) {
   db.migrate('2026-11-20-card-battlers', MIGRATION);
   db.migrate('2026-11-22-card-horses', HORSE_MIGRATION);
   db.migrate('2026-11-23-card-horses-ur', HORSE_UR_MIGRATION);
+  db.migrate('2026-11-23-card-scrolls', SCROLL_MIGRATION);
   const qHorse = db.prepare('SELECT * FROM card_horses WHERE id = ?');
   const horsesOwned = (uid) => db.prepare('SELECT * FROM card_horses WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // 馬のカードの能力 (文房具の statsOf と同じ形)
-  const horseStats = (h) => { const ur = h.rarity === 'UR', m = ur ? UR_MULT : RARITY.SSR.mult; return { id: 'h:' + h.id, name: h.name, emoji: '🐴', rarity: ur ? 'UR' : 'SSR', type: h.type, skill: h.skill, level: 1, horse: true, coat: h.coat, origin: h.origin,
+  const horseStats = (h) => { const ur = h.rarity === 'UR', lv = Math.min(h.level || 1, MAX_LEVEL), m = (ur ? UR_MULT : RARITY.SSR.mult) * (1 + LEVEL_BONUS * (lv - 1)); return { id: 'h:' + h.id, name: h.name, emoji: '🐴', rarity: ur ? 'UR' : 'SSR', type: h.type, skill: h.skill, level: lv, horse: true, coat: h.coat, origin: h.origin,
     maxHp: Math.round(h.hp * m), atk: Math.round(h.atk * m), def: Math.round(h.def * m), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
   const cardStats = (uid, id, o) => {
     if (id.startsWith('h:')) { const h = qHorse.get(id.slice(2)); return h && h.user_id === uid ? horseStats(h) : null; }
@@ -332,12 +341,12 @@ function install(app, ctx) {
     }
     return p;
   }
-  const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, r.count]));
+  const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count, lv_bonus FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, Math.min(MAX_LEVEL, r.count + r.lv_bonus)]));
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
     return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
-      rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws,
+      rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
@@ -347,7 +356,7 @@ function install(app, ctx) {
     newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
 
@@ -381,7 +390,7 @@ function install(app, ctx) {
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); return res.status(400).json({ error: 'コインが足りません' }); }
     const seen = { ...before };
-    const results = r.cards.map((c) => { const prev = seen[c.id] || 0; seen[c.id] = prev + 1; return { ...statsOf(c.id, Math.min(prev + 1, MAX_LEVEL)), isNew: prev === 0, levelUp: prev > 0 && prev < MAX_LEVEL }; });
+    const results = r.cards.map((c) => { const prev = seen[c.id] || 0; seen[c.id] = prev + 1; return { ...statsOf(c.id, Math.min(prev + 1, MAX_LEVEL)), level: Math.min(prev + 1, MAX_LEVEL), isNew: prev === 0, levelUp: prev > 0 && prev < MAX_LEVEL }; });
     console.log(`[cards] @${req.user.username} ガチャ ${n} 回: ${r.cards.map((c) => c.rarity).join(',')}`);
     res.json({ results, ...me(req.user.id) });
   });
@@ -410,6 +419,33 @@ function install(app, ctx) {
     } catch { return res.status(409).json({ error: 'この馬はもう連れてきています' }); }
     console.log(`[cards] @${req.user.username} が馬「${h.name}」を連れてきた${promoted ? ' (UR に昇格)' : ''}`);
     res.json({ card: horseStats(qHorse.get(id)), promoted, ...me(req.user.id) });
+  });
+
+  // ---------- レベルアップ書でレベルを上げる (Lv n → n+1 に n 枚) ----------
+  app.post('/api/cards/levelup', requireAuth, writeLimit, (req, res) => {
+    const id = String(req.body?.id || ''), uid = req.user.id, p = player(uid);
+    let level, apply;
+    if (id.startsWith('h:')) {
+      const h = qHorse.get(id.slice(2));
+      if (!h || h.user_id !== uid) return res.status(404).json({ error: 'そのカードは持っていません' });
+      level = Math.min(h.level || 1, MAX_LEVEL);
+      apply = () => db.prepare('UPDATE card_horses SET level = level + 1 WHERE id = ? AND user_id = ?').run(h.id, uid);
+    } else {
+      level = owned(uid)[id];
+      if (!level) return res.status(404).json({ error: 'そのカードは持っていません' });
+      apply = () => db.prepare('UPDATE card_owned SET lv_bonus = lv_bonus + 1 WHERE user_id = ? AND card_id = ?').run(uid, id);
+    }
+    if (level >= MAX_LEVEL) return res.status(400).json({ error: `もう最大のレベル (Lv${MAX_LEVEL}) です` });
+    const cost = level;
+    if (p.scrolls < cost) return res.status(400).json({ error: `レベルアップ書が足りません (あと ${cost - p.scrolls} 枚)` });
+    db.exec('BEGIN');
+    try {
+      if (!db.prepare('UPDATE card_players SET scrolls = scrolls - ? WHERE user_id = ? AND scrolls >= ?').run(cost, uid, cost).changes) throw new Error('scrolls');
+      apply();
+      db.exec('COMMIT');
+    } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: 'レベルアップ書が足りません' }); }
+    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, level + 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
+    res.json({ card, from: level, to: level + 1, used: cost, ...me(uid) });
   });
 
   // デッキ (持っているカード 3 枚。同じカードは 1 枚まで)
@@ -500,11 +536,13 @@ function install(app, ctx) {
       const count = p.reward_day === today ? p.reward_count : 0;
       const capped = b.mode !== 'cpu'; // CPU 戦 (AI 戦) の報酬は回数制限なし
       const coins = !capped || count < REWARDS_PER_DAY ? REWARD[b.mode][res === 'win' ? 'win' : 'lose'] : 0;
+      const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : SCROLL_REWARD[res];
+      if (scrolls) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(scrolls, u);
       db.prepare(`UPDATE card_players SET coins = coins + ?, rating = rating + ?, reward_day = ?, reward_count = ?,
         wins = wins + ?, losses = losses + ?, draws = draws + ? WHERE user_id = ?`).run(coins, delta[i], today, count + (capped && coins ? 1 : 0),
         b.mode === 'random' && res === 'win' ? 1 : 0, b.mode === 'random' && res === 'lose' ? 1 : 0, b.mode === 'random' && res === 'draw' ? 1 : 0, u);
       battleOf.delete(u);
-      send(u, { t: 'end', result: res, reason, coins, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
+      send(u, { t: 'end', result: res, reason, coins, scrolls, scrollMinTurns: SCROLL_MIN_TURNS, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
     });
   }
   function leave(uid) {

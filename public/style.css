@@ -1713,3 +1713,19 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-mini.poisoned { box-shadow: 0 0 0 2px #be4bdb, 0 0 10px -2px #be4bdb; }
 .cb-mini.poisoned::after { content: '☠️'; position: absolute; right: -6px; top: -8px; font-size: 13px; }
 .cb-float.psn, .cb-float.dmg.psn { color: #9c36b5; }
+
+/* レベルアップ書 */
+.cb-scrolls { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 99px; background: color-mix(in srgb, #e67700 12%, transparent); color: var(--text); text-decoration: none !important; font-size: 16px; }
+.cb-mode { margin-bottom: 2px; }
+.cb-scrollbox p { margin: 6px 0 0; }
+.cb-scroll-have { font-size: 18px; } .cb-scroll-have b { font-size: 26px; color: #e67700; }
+.cb-card.can-lv { box-shadow: 0 0 0 3px #fab005, 0 0 16px -2px #fab005; }
+.cb-card.maxed { opacity: .75; }
+.cb-lvup { display: grid; justify-items: center; gap: 8px; text-align: center; position: relative; }
+.cb-lvup-card { width: 160px; }
+.cb-lvup-lv { margin: 0; font-size: 18px; } .cb-lvup-lv b { color: #e67700; font-size: 24px; }
+.cb-lvup-stats { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: var(--fs-sm); color: var(--text-2); }
+.cb-lvup-stats b { color: #2f9e44; }
+.cb-lvup p { margin: 0; }
+.cb-lvup-shout { font-size: 24px; font-weight: 900; background: linear-gradient(90deg, #e67700, #d6336c); -webkit-background-clip: text; background-clip: text; color: transparent; animation: cb-shout 1.6s cubic-bezier(.2, 1.6, .4, 1) both; display: inline-block; }
+.cb-card.lv-flash { animation: cb-pop .7s ease both; box-shadow: 0 0 0 3px #fab005, 0 0 26px #fab005; }
