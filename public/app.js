@@ -3230,7 +3230,7 @@ async function viewGacha() {
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
           <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、最大 Lv${cat.maxLevel})</li>
           <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
-          <li>ガチャ限定の SR は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
+          <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
           ${(cat.rateUps || []).map((x) => `<li>${esc(x.name)}: ${x.ids.map((id) => esc(cat.cards.find((c) => c.id === id)?.name || '')).join('・')} の出る確率が ${x.mult} 倍。上がった分、ほかのレア度の確率が少し下がります</li>`).join('')}
           <li>コインはお金では買えません</li></ul></section>`;
     $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
@@ -3293,7 +3293,7 @@ async function viewCollection() {
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日1頭だけ連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
-        <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>SR</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
+        <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
           ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
           : cbCard(c, { locked: true })).join('')}</div></section>`;

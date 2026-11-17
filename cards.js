@@ -69,8 +69,8 @@ const poolOf = (r, now = Date.now()) => BY_RARITY[r].filter((id) => isReleased(i
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
 const MAX_LEVEL = 5;
 
-// ガチャ限定の SR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
-const UR_PROMOTE = { from: 'SR', copies: 3 };
+// ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
+const UR_PROMOTE = { from: 'SSR', copies: 3 };
 const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from && copies >= UR_PROMOTE.copies;
 // レベル (同じカードを引くと上がる) とレア度で強さが決まる。ur: UR に昇格したカード
 function statsOf(cardId, level = 1, ur = false) {
