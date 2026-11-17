@@ -3158,8 +3158,8 @@ async function viewCards() {
     </section>
     <section class="card cb-horse-banner">
       <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('h:x', 'SSR', { coat: '栗毛' })}</span>
-      <span><b>競走馬版から馬を連れてくる</b><span>1日1頭。わざ・相性・能力は SSR くらいの強さでランダム。まれに <b class="cb-ur-word">UR</b> に昇格！ (連れてきた馬 ${mine.horses.length}頭)</span></span>
-      <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? '🐴 連れてくる' : '今日は連れてきた'}</button>
+      <span><b>競走馬版から馬を連れてくる</b><span>1日${mine.horsesPerDay || 3}頭まで (今日はあと <b>${mine.horseLeft ?? 0}</b> 頭)。わざ・相性・能力は SSR くらいの強さでランダム。まれに <b class="cb-ur-word">UR</b> に昇格！ (連れてきた馬 ${mine.horses.length}頭)</span></span>
+      <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? `🐴 連れてくる (あと${mine.horseLeft})` : '今日はもう連れてきた'}</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
       <span><b>ガチャを引く</b>${cat.sale ? `<span class="cb-sale-tag">🔥 ${esc(cat.sale.name)}</span>` : ''}<span>1回 ${cat.sale ? `<s>${cat.sale.pull}</s> ` : ''}${cat.pullCost}🪙 · 10回 ${cat.sale ? `<s>${cat.sale.ten}</s> ` : ''}${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
@@ -3194,15 +3194,15 @@ async function viewCards() {
   } catch { const el = $('#cb-rank'); if (el) el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; }
 }
 
-// ---------- 競走馬版から馬を連れてくる (1 日 1 頭) ----------
+// ---------- 競走馬版から馬を連れてくる (1 日 3 頭) ----------
 async function cbBringHorse(done) {
   let r;
   try { r = await api('/cards/horse-candidates'); } catch (e) { return toast(e.message, 'error'); }
-  if (!r.ready) return toast('今日はもう馬を連れてきました。また明日！');
+  if (!r.ready) return toast(`今日はもう ${r.perDay || 3} 頭連れてきました。また明日！`);
   if (!r.horses.length) return openPanel('馬を連れてくる', `<div class="form-stack"><p>連れてこられる馬がいません。IppO にログインしたまま「117万分の1 競走馬版」で生まれた馬が、連れてこられます (同じ馬は 1 回だけ)。</p>
     <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>閉じる</button><a class="btn btn-primary" href="#/horse">馬を生みに行く</a></div></div>`);
   const LC = { UR: '#c2255c', SSR: '#e67700', SR: '#1971c2', R: '#2b8a3e', N: '#868e96' };
-  openPanel('どの馬を連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">1日1頭だけ。<b>わざ・相性・能力は、連れてきたときにランダムで決まります</b> (SSR くらいの強さ)。<br>まれに <b class="cb-ur-word">UR</b> (能力 +${cbCatalogCache?.urBonus ?? 20}%) に昇格します。<b>競走馬版でのランクが高い馬ほど、昇格しやすい</b>です。</p>
+  openPanel('どの馬を連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">1日${r.perDay || 3}頭まで (今日はあと <b>${r.left}</b> 頭)。<b>わざ・相性・能力は、連れてきたときにランダムで決まります</b> (SSR くらいの強さ)。<br>まれに <b class="cb-ur-word">UR</b> (能力 +${cbCatalogCache?.urBonus ?? 20}%) に昇格します。<b>競走馬版でのランクが高い馬ほど、昇格しやすい</b>です。</p>
       <div class="cb-pick-horse">${r.horses.map((h) => `<button type="button" class="list-item" data-sid="${esc(h.sid)}"><span class="cb-mini-art">${CBArt.svg('h:x', 'N', { coat: h.coat })}</span>
         <div class="grow"><div class="title">${esc(h.name)}</div><div class="desc">${esc(h.coat || '')} · ${esc(h.headline)} · UR 昇格 ${Math.round(h.urChance * 100)}%</div></div><span class="rc-badge" style="position:static;--c:${LC[h.label] || '#868e96'}">${esc(h.label)}</span></button>`).join('')}</div>
       <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button></div></div>`, (root, close) => {
@@ -3334,7 +3334,7 @@ async function viewCollection() {
         <p class="text-xs muted">レベルを上げたいカードをタップ。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。最大 Lv${cat.maxLevel}。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
       <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
-          : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日1頭だけ連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
+          : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]

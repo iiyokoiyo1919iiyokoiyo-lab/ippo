@@ -315,7 +315,7 @@ CREATE TABLE card_battles (
 );
 `;
 
-// 競走馬版から連れてきた馬のカード (1 日 1 頭まで・同じ馬は 1 回だけ)。能力・わざ・相性は連れてきたときにサーバーが決めて保存する
+// 競走馬版から連れてきた馬のカード (1 日 3 頭まで・同じ馬は 1 回だけ)。能力・わざ・相性は連れてきたときにサーバーが決めて保存する
 const HORSE_MIGRATION = `
 CREATE TABLE card_horses (
   id TEXT PRIMARY KEY,                                   -- カードの ID は 'h:' + この値
@@ -397,7 +397,8 @@ function install(app, ctx) {
     return CARDS[id] ? statsOf(id, Math.min(o[id] || 1, MAX_LEVEL), urOf(uid).includes(id)) : null;
   };
   const dayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return d.getTime() - 9 * 3600_000; };
-  const horseToday = (uid) => db.prepare('SELECT COUNT(*) AS n FROM card_horses WHERE user_id = ? AND created_at >= ?').get(uid, dayStart()).n > 0;
+  const HORSES_PER_DAY = 3; // 1 日に連れてこられる馬の数 (日本時間の 0 時に回復)
+  const horsesLeft = (uid) => Math.max(0, HORSES_PER_DAY - db.prepare('SELECT COUNT(*) AS n FROM card_horses WHERE user_id = ? AND created_at >= ?').get(uid, dayStart()).n);
   const userView = (id) => { const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, isAdmin: u.isAdmin, verified: u.verified }; };
 
   // はじめて遊ぶ人には、コインとはじめの 3 枚を渡す
@@ -417,7 +418,7 @@ function install(app, ctx) {
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
-    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
+    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
       quests: questsNow().map((q) => ({ id: q.id, name: q.name, end: q.end, reward: q.reward, cleared: clearedOf(uid).has(q.id) })),
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
@@ -477,17 +478,17 @@ function install(app, ctx) {
     res.json({ results, ...me(req.user.id) });
   });
 
-  // ---------- 競走馬版から馬を連れてくる (1 日 1 頭) ----------
+  // ---------- 競走馬版から馬を連れてくる (1 日 3 頭) ----------
   app.get('/api/cards/horse-candidates', requireAuth, (req, res) => {
     const have = new Set(horsesOwned(req.user.id).map((h) => h.seed_id));
     const list = (ctx.raceHorsesOf ? ctx.raceHorsesOf(req.user.id) : []).filter((h) => !have.has(h.sid))
       .map((h) => ({ sid: h.sid, name: h.name, label: h.label, headline: h.headline, breed: h.breed, coat: h.coat, urChance: HORSE_UR_CHANCE[h.label] ?? 0.01 }));
-    res.json({ ready: !horseToday(req.user.id), horses: list });
+    res.json({ ready: horsesLeft(req.user.id) > 0, left: horsesLeft(req.user.id), perDay: HORSES_PER_DAY, horses: list });
   });
   app.post('/api/cards/horse', requireAuth, writeLimit, (req, res) => {
     const sid = String(req.body?.sid || '');
     player(req.user.id);
-    if (horseToday(req.user.id)) return res.status(429).json({ error: '今日はもう馬を連れてきました。また明日！' });
+    if (!horsesLeft(req.user.id)) return res.status(429).json({ error: `今日はもう ${HORSES_PER_DAY} 頭連れてきました。また明日！` });
     const h = (ctx.raceHorsesOf ? ctx.raceHorsesOf(req.user.id) : []).find((x) => x.sid === sid);
     if (!h) return res.status(404).json({ error: 'その馬は連れてこられません' });
     const rand = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
