@@ -77,6 +77,16 @@ function statsOf(cardId, level = 1) {
 
 // ---------- ガチャ ----------
 const PULL_COST = 100, TEN_COST = 900, PITY = 80;
+// ---------- 期間限定のガチャのセール (この期間だけ値段が変わる。終わると自動で元にもどる) ----------
+// テストのときは環境変数 CB_SALE_START / CB_SALE_END (ミリ秒の時刻) で上書きできる
+const SALES = [
+  { name: '3日間限定セール', start: Date.parse('2026-11-17T16:45:00+09:00'), end: Date.parse('2026-11-20T16:45:00+09:00'), pull: 30, ten: 270 },
+];
+if (Number(process.env.CB_SALE_START) && Number(process.env.CB_SALE_END)) Object.assign(SALES[0], { start: Number(process.env.CB_SALE_START), end: Number(process.env.CB_SALE_END) });
+function pricesNow(now = Date.now()) {
+  const s = SALES.find((x) => now >= x.start && now < x.end);
+  return s ? { pull: s.pull, ten: s.ten, sale: { name: s.name, end: s.end, pull: PULL_COST, ten: TEN_COST } } : { pull: PULL_COST, ten: TEN_COST, sale: null };
+}
 function rollRarity(rnd) {
   let u = rnd() * 100;
   for (const [r, v] of Object.entries(RARITY)) { u -= v.rate; if (u < 0) return r; }
@@ -285,7 +295,7 @@ function install(app, ctx) {
     const p = player(uid), o = owned(uid);
     return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, horses: horsesOwned(uid).map(horseStats), horseReady: !horseToday(uid),
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws,
-      dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
+      prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
   // カードの一覧・排出率 (誰でも見られる)
@@ -293,7 +303,7 @@ function install(app, ctx) {
     cards: releasedIds().map((id) => ({ ...statsOf(id, 1), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     newCards: releasedIds().filter((id) => RELEASES[id] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     rates: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, v.rate])), types: TYPES, beats: BEATS,
-    pullCost: PULL_COST, tenCost: TEN_COST, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries(RARITY).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
 
@@ -310,7 +320,7 @@ function install(app, ctx) {
   app.post('/api/cards/gacha', requireAuth, writeLimit, (req, res) => {
     const n = req.body?.n === 10 ? 10 : req.body?.n === 1 ? 1 : 0;
     if (!n) return res.status(400).json({ error: '回数が正しくありません' });
-    const cost = n === 10 ? TEN_COST : PULL_COST;
+    const price = pricesNow(), cost = n === 10 ? price.ten : price.pull; // セール中はセールの値段 (サーバーの時刻で決める)
     const p = player(req.user.id);
     if (p.coins < cost) return res.status(400).json({ error: `コインが足りません (あと ${cost - p.coins} コイン)` });
     const before = owned(req.user.id);

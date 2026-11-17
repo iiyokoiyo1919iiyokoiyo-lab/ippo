@@ -1683,3 +1683,12 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-ur-shout { font-size: 26px; font-weight: 900; background: linear-gradient(90deg, #c92a2a, #f08c00, #c2255c); -webkit-background-clip: text; background-clip: text; color: transparent; animation: cb-shout 1.8s cubic-bezier(.2, 1.6, .4, 1) both; }
 .cb-horse-reveal .cb-flip.r-UR { animation: cb-pop .8s ease both; }
 @media (prefers-reduced-motion: reduce) { .cb-card.r-UR, .cb-card.r-UR::after, .cb-halo, .cb-ur-shout, .cb-horse-reveal.promoted::before { animation: none !important; } }
+
+/* 期間限定セール */
+.cb-sale { display: grid; gap: 2px; padding: 12px 16px; text-align: center; color: #fff; border: 0; background: linear-gradient(100deg, #e8590c, #e03131 50%, #c2255c); box-shadow: 0 8px 20px -10px rgba(224, 49, 49, .8); }
+.cb-sale b { font-size: 18px; letter-spacing: .04em; }
+.cb-sale span { font-size: var(--fs-sm); }
+.cb-sale s, .cb-gacha-btns s, .cb-gacha-banner s { opacity: .65; }
+.cb-sale em { font-style: normal; font-size: 20px; font-weight: 900; color: #fff3bf; }
+.cb-sale small { opacity: .9; }
+.cb-sale-tag { justify-self: start; padding: 1px 8px; border-radius: 99px; background: #e03131; color: #fff !important; font-size: 11px !important; font-weight: 900; }

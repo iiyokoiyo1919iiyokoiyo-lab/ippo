@@ -3070,6 +3070,7 @@ function cbNewBanner(cat, link = true) {
 const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
 
 async function viewCards() {
+  cbCatalogCache = null;
   main.innerHTML = pageHead({ title: 'ぶんぼうぐバトラーズ', sub: 'カードを集めて、3枚のデッキで対戦', back: '#/games' }) + `<div class="content stack" id="cb">${loadingBlock()}</div>`;
   let cat, mine = null;
   try { cat = await cbCatalog(); if (me) mine = await api('/cards/me'); } catch (e) { $('#cb').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
@@ -3101,7 +3102,7 @@ async function viewCards() {
       <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? '🐴 連れてくる' : '今日は連れてきた'}</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
-      <span><b>ガチャを引く</b><span>1回 ${cat.pullCost}🪙 · 10回 ${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
+      <span><b>ガチャを引く</b>${cat.sale ? `<span class="cb-sale-tag">🔥 ${esc(cat.sale.name)}</span>` : ''}<span>1回 ${cat.sale ? `<s>${cat.sale.pull}</s> ` : ''}${cat.pullCost}🪙 · 10回 ${cat.sale ? `<s>${cat.sale.ten}</s> ` : ''}${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
     : `<section class="card card-pad cb-guest"><p>24種類の文房具のキャラクターを集めて、3枚のデッキで対戦するカードゲームです。<b>ログインすると、すぐにコインとはじめのカードがもらえます。</b></p>
       <button class="btn btn-primary" type="button" id="cb-login">ログインして遊ぶ</button>
       <div class="cb-grid">${cat.cards.slice(0, 6).map((c) => cbCard(c, { small: true })).join('')}</div></section>`}
@@ -3176,6 +3177,7 @@ function cbConfetti(host, n = 40, colors = ['#ffd43b', '#ff6b9d', '#74c0fc', '#8
 }
 async function viewGacha() {
   if (!requireLogin()) return;
+  cbCatalogCache = null; // 値段 (セール) が変わっているかもしれないので取り直す
   main.innerHTML = pageHead({ title: 'ガチャ', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbg">${loadingBlock()}</div>`;
   let cat, mine, timers = [];
   try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbg').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
@@ -3185,7 +3187,9 @@ async function viewGacha() {
     const root = $('#cbg'); if (!root) return;
     timers.forEach(clearTimeout); timers = [];
     const best = results ? results.reduce((a, c) => (RANK[c.rarity] > RANK[a] ? c.rarity : a), 'N') : null;
-    root.innerHTML = `${results ? '' : cbNewBanner(cat, false)}<section class="card card-pad cb-gacha">
+    const price = mine.prices || { pull: cat.pullCost, ten: cat.tenCost, sale: cat.sale };
+    const saleEnd = price.sale ? new Date(price.sale.end).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }) : '';
+    root.innerHTML = `${results ? '' : cbNewBanner(cat, false)}${price.sale ? `<div class="card cb-sale"><b>🔥 ${esc(price.sale.name)}</b><span>ガチャが 1回 <s>${price.sale.pull}</s> → <em>${price.pull}</em>🪙 · 10回 <s>${price.sale.ten}</s> → <em>${price.ten}</em>🪙</span><small>${esc(saleEnd)} まで</small></div>` : ''}<section class="card card-pad cb-gacha">
         <div class="cb-gacha-top">${cbCoins(mine.coins)}<span class="text-sm muted">SSR 確定まであと <b>${cat.pity - mine.pity}</b> 回</span></div>
         <div class="cb-stage${results ? ' rolling best-' + best : ''}" id="cb-stage">
           ${results ? `<div class="cb-capsule"><i></i><b></b></div><div class="cb-burst"></div><div class="cb-shout">${best === 'SSR' ? 'SSR！！' : best === 'SR' ? 'SR！' : ''}</div>
@@ -3195,10 +3199,10 @@ async function viewGacha() {
           : `<div class="cb-machine">${CBArt.svg('case', 'SSR')}<p>きょうは何が出るかな？</p></div>`}
         </div>
         <div class="cb-gacha-btns">
-          <button class="btn btn-outline btn-lg" type="button" data-n="1" ${mine.coins < cat.pullCost ? 'disabled' : ''}>1回<small>${cat.pullCost}🪙</small></button>
-          <button class="btn btn-primary btn-lg cb-ten" type="button" data-n="10" ${mine.coins < cat.tenCost ? 'disabled' : ''}>10回<small>${cat.tenCost}🪙 · SR以上1枚確定</small></button>
+          <button class="btn btn-outline btn-lg" type="button" data-n="1" ${mine.coins < price.pull ? 'disabled' : ''}>1回<small>${price.sale ? `<s>${price.sale.pull}</s> ` : ''}${price.pull}🪙</small></button>
+          <button class="btn btn-primary btn-lg cb-ten" type="button" data-n="10" ${mine.coins < price.ten ? 'disabled' : ''}>10回<small>${price.sale ? `<s>${price.sale.ten}</s> ` : ''}${price.ten}🪙 · SR以上1枚確定</small></button>
         </div>
-        ${mine.coins < cat.pullCost ? `<p class="text-sm muted" style="text-align:center">コインが足りません。毎日のボーナスや対戦でもらえます。</p>` : ''}
+        ${mine.coins < price.pull ? `<p class="text-sm muted" style="text-align:center">コインが足りません。毎日のボーナスや対戦でもらえます。</p>` : ''}
       </section>
       <section class="card card-pad"><div class="panel-head"><h3>提供割合</h3></div>
         <div class="cb-rates">${Object.entries(cat.rates).reverse().map(([r, v]) => `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${v}%</b><small>${cat.cards.filter((c) => c.rarity === r).length}種類 · 1種類あたり ${(v / cat.cards.filter((c) => c.rarity === r).length).toFixed(2)}%</small></div>`).join('')}</div>
