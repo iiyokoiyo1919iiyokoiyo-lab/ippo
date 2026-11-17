@@ -1656,3 +1656,8 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-newchar-tag { justify-self: start; padding: 1px 10px; border-radius: 99px; background: #e5484d; color: #fff; font-size: 12px; font-weight: 900; animation: cb-throb .7s ease-in-out infinite alternate; }
 .cb-machine { font-size: inherit; }
 .cb-machine p { font-size: var(--fs-sm); }
+
+/* 控えへのダメージ (しっぷうぎり) */
+.cb-mini { overflow: visible; }
+.cb-mini.hurt { animation: cb-hurt .42s ease; }
+.cb-float.dmg.bench { top: -6px; font-size: 16px; }

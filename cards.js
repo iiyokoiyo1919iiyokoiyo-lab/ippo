@@ -20,7 +20,7 @@ const SKILLS = {
   drain: { name: 'すいとる', desc: '1.2 倍のダメージ。与えたダメージの半分回復' },
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
-  double: { name: 'ふたつぎり', desc: '0.9 倍のこうげきを 2 回 (疾風剣士ハサミ丸だけのわざ)' },
+  sweep: { name: 'しっぷうぎり', desc: '控えもふくめた相手の全員に、0.8 倍の無属性こうげき (疾風剣士ハサミ丸だけのわざ)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -53,7 +53,7 @@ const CARD_LIST = [
   ['gold', '黄金えんぴつ王', '👑', 'SSR', 'cut', 52, 16, 9, 14, 'power'],
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
-  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 51, 15, 8, 17, 'double'], // 2026-11-18 10:25 (日本時間) 登場
+  ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 50, 15, 8, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
 ];
 const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, hp, atk, def, spd, skill]) => [id, { id, name, emoji, rarity, type, hp, atk, def, spd, skill }]));
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
@@ -124,16 +124,19 @@ function resolveTurn(state, acts, rnd) {
     const a = sides[x].cards[sides[x].active].spd, b = sides[y].cards[sides[y].active].spd;
     return b - a || (rnd() < 0.5 ? -1 : 1);
   });
+  // opt.target: 相手の何枚目に当てるか (なければ場に出ているカード)。opt.typeless: 相性をかけない (無属性)
   const hit = (p, power, opt = {}) => {
-    const me = sides[p].cards[sides[p].active], o = 1 - p, foe = sides[o].cards[sides[o].active];
-    const tm = typeMult(me.type, foe.type);
+    const me = sides[p].cards[sides[p].active], o = 1 - p;
+    const ti = opt.target ?? sides[o].active, foe = sides[o].cards[ti], bench = ti !== sides[o].active;
+    const tm = opt.typeless ? 1 : typeMult(me.type, foe.type);
     const base = opt.pierce ? me.atk * power * 2 : me.atk * power * 2 - foe.def * 0.6; // 1 枚あたり 3〜4 回の攻撃で倒れるくらい
     let dmg = Math.max(1, Math.round(base * tm * (0.9 + rnd() * 0.2)));
-    if (!opt.pierce) dmg = Math.round(dmg * guard[o]);
+    const g = bench ? 1 : guard[o];                                   // ガード・バリアが守るのは場に出ているカードだけ
+    if (!opt.pierce) dmg = Math.round(dmg * g);
     dmg = Math.min(dmg, foe.hp);
     foe.hp -= dmg;
-    ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && guard[o] < 1 });
-    if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name });
+    ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
+    if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     return dmg;
   };
   for (const p of order) {
@@ -148,7 +151,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'heal') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * 0.45)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'barrier') hit(p, 0.8);
-      else if (me.skill === 'double') { hit(p, 0.9); const o = 1 - p; if (sides[o].cards[sides[o].active].hp > 0) hit(p, 0.9); }
+      else if (me.skill === 'sweep') { const o = 1 - p; sides[o].cards.forEach((c, i) => { if (c.hp > 0) hit(p, 0.8, { target: i, typeless: true }); }); } // 控えもふくめた全員に
     }
   }
   // 4. わざの待ち時間を減らし、倒れたカードは次のカードに交代

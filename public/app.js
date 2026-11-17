@@ -3285,10 +3285,10 @@ async function viewBattle(params) {
   const box = () => $('#cbb');
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'hit' ? `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`
+  const evText = (e) => e.k === 'hit' ? (e.bench ? `${1 - e.p === you ? '' : '相手の'}控えの${e.target}に ${e.dmg} ダメージ` : `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`)
     : e.k === 'skill' ? `${name(e.p, e.card)}の「${e.skill}」！` : e.k === 'heal' ? `${name(e.p, e.card)}は ${e.amount} 回復した`
     : e.k === 'guard' ? `${name(e.p, e.card)}はガードした` : e.k === 'switch' ? `${e.p === you ? 'あなた' : '相手'}は ${e.card} を出した`
-    : e.k === 'ko' ? `${name(e.p, e.card)}はたおれた！` : e.k === 'timeup' ? '30ターンたったので、残りの HP で決まります' : '';
+    : e.k === 'ko' ? (e.bench ? `${e.p === you ? '' : '相手の'}控えの${e.card}はたおれた！` : `${name(e.p, e.card)}はたおれた！`) : e.k === 'timeup' ? '30ターンたったので、残りの HP で決まります' : '';
   let prevPct = {}; // HP バーを前のターンの長さから動かすため
   const hpBar = (c, key) => { const now = Math.max(0, (c.hp / c.maxHp) * 100), from = prevPct[key] ?? now; return `<span class="cb-hp"><i data-to="${now}" style="width:${from}%" class="${c.hp / c.maxHp < 0.3 ? 'low' : ''}"></i></span><span class="cb-hpn">${c.hp}/${c.maxHp}</span>`; };
   const fighter = (c, mineSide, key) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
@@ -3334,7 +3334,14 @@ async function viewBattle(params) {
     const replay = (node, cls) => { if (!node) return; const list = cls.split(' '); node.classList.remove('lunge', 'hurt', 'big', 'charge', 'guarding', 'shake'); void node.offsetWidth; node.classList.add(...list); };
     let t = 0;
     events.forEach((e) => {
-      if (e.k === 'hit') {
+      if (e.k === 'hit' && e.bench) {
+        setTimeout(() => {
+          const side = box()?.querySelectorAll('.cb-top')[e.p === you ? 0 : 1];
+          const mini = [...(side?.querySelectorAll('.cb-mini') || [])].find((m) => (m.getAttribute('aria-label') || '').startsWith(e.target + ' '));
+          if (mini) { replay(mini, 'hurt'); const n = document.createElement('span'); n.className = 'cb-float dmg bench'; n.textContent = `-${e.dmg}`; mini.append(n); setTimeout(() => n.remove(), 1100); }
+        }, t);
+        t += 160;
+      } else if (e.k === 'hit') {
         setTimeout(() => {
           replay(el(e.p), 'lunge'); replay(el(1 - e.p), e.dmg >= 25 ? 'hurt big' : 'hurt');
           pop(1 - e.p, `-${e.dmg}`, e.eff === 'good' ? 'dmg crit' : 'dmg');
