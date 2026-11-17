@@ -339,6 +339,7 @@ require('./images')(app, ctx); // 投稿の写真
 require('./verify')(app, ctx); // 認証マーク
 require('./horse')(app, ctx); // ミニゲーム「117万分の1 競走馬版」
 require('./games')(app, ctx); // ミニゲーム「暗算ダッシュ」(ランキングつき)
+require('./cards')(app, ctx); // ミニゲーム「ぶんぼうぐバトラーズ」(ガチャ・オンライン対戦)
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
@@ -425,7 +426,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt') return socket.destroy();
+  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt' && u.pathname !== '/cb') return socket.destroy();
   // CSRF 的な他サイトからの接続を拒否
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
@@ -436,6 +437,12 @@ server.on('upgrade', (req, socket, head) => {
     const rtUser = userFromReq(req);
     if (!rtUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
     return ctx.realtimeUpgrade(req, socket, head, rtUser);
+  }
+  // ぶんぼうぐバトラーズの対戦。本人確認が必要
+  if (u.pathname === '/cb') {
+    const cbUser = userFromReq(req);
+    if (!cbUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
+    return ctx.cardsUpgrade(req, socket, head, cbUser);
   }
   const user = userFromReq(req);
   if (!user) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }

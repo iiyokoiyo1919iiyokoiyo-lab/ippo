@@ -990,7 +990,7 @@ async function viewSearch(q) {
         <span class="pw-banner-text"><b>PIXEL WORLD</b><span>全校で1枚のキャンバスに、みんなで自由に描こう</span></span>${icon('chevron', 'chev')}</a>
       <a class="card pw-banner horse-banner" href="#/games">
         <span class="horse-banner-art md-banner-art" aria-hidden="true">🎮</span>
-        <span class="pw-banner-text"><b>ミニゲーム</b><span>暗算ダッシュ (ランキングつき) · 117万分の1 競走馬版</span></span>${icon('chevron', 'chev')}</a>
+        <span class="pw-banner-text"><b>ミニゲーム</b><span>ぶんぼうぐバトラーズ (対戦・ガチャ) · 暗算ダッシュ · 117万分の1 競走馬版</span></span>${icon('chevron', 'chev')}</a>
       <div class="shortcuts">
         <a class="card shortcut" href="#/schedule"><span class="shortcut-icon">${icon('calendar')}</span><b>予定表</b><span>学校の行事</span></a>
         <a class="card shortcut" href="#/q"><span class="shortcut-icon">${icon('sparkle')}</span><b>今日の質問</b><span>みんなの回答</span></a>
@@ -2541,6 +2541,10 @@ function route() {
   if (h === '/horse') { setActiveNav('games'); return viewHorse(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
+  if (h === '/games/cards') { setActiveNav('games'); return viewCards(); }
+  if (h === '/games/cards/gacha') { setActiveNav('games'); return viewGacha(); }
+  if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
+  if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
   if ((m = h.match(/^\/invite\/([A-Za-z0-9-]+)/))) { setActiveNav(''); return viewInviteLanding(m[1]); }
@@ -2810,6 +2814,10 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card" href="#/games/cards">
+      <span class="game-card-art cb-art" aria-hidden="true">🃏</span>
+      <span class="game-card-body"><b>ぶんぼうぐバトラーズ</b><span>文房具のキャラクターをガチャで集めて、3枚のデッキでオンライン対戦</span>
+        <span class="chip chip-accent">${icon('globe', 'ic-sm')}オンライン対戦・ガチャ・レート</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card" href="#/horse">
       <span class="game-card-art horse-banner-art" aria-hidden="true">🐴</span>
       <span class="game-card-body"><b>117万分の1 競走馬版</b><span>今年生まれる馬の一頭になって、その一生をたどる（非公式のファン作品）</span>
@@ -2982,4 +2990,235 @@ function viewMath() {
     loadRank();
   }));
   intro(); loadRank();
+}
+
+// =====================================================================
+// ぶんぼうぐバトラーズ: カードを集めて (ガチャ) 3 枚のデッキで対戦する
+// 判定はすべてサーバー。端末は「選んだ行動」を送るだけ
+// =====================================================================
+let cbCatalogCache = null;
+async function cbCatalog() { if (!cbCatalogCache) cbCatalogCache = await api('/cards/catalog', { noAuthPrompt: true }); return cbCatalogCache; }
+const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400' };
+function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
+  const T = cbCatalogCache?.types || {};
+  const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
+  if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-emoji">？</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
+  return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
+    <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
+    <span class="cb-emoji">${esc(c.emoji)}</span><b>${esc(c.name)}</b>
+    <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
+    ${small ? '' : `<span class="cb-stats"><i>HP ${Number(c.maxHp)}</i><i>攻 ${Number(c.atk)}</i><i>防 ${Number(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
+  </div>`;
+}
+const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
+
+async function viewCards() {
+  main.innerHTML = pageHead({ title: 'ぶんぼうぐバトラーズ', sub: 'カードを集めて、3枚のデッキで対戦', back: '#/games' }) + `<div class="content stack" id="cb">${loadingBlock()}</div>`;
+  let cat, mine = null;
+  try { cat = await cbCatalog(); if (me) mine = await api('/cards/me'); } catch (e) { $('#cb').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const C = Object.fromEntries(cat.cards.map((c) => [c.id, c]));
+  const root = $('#cb'); if (!root) return;
+  root.innerHTML = `
+    ${me ? `<section class="card card-pad cb-wallet">
+      ${cbCoins(mine.coins)}
+      <button class="btn ${mine.dailyReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-daily" ${mine.dailyReady ? '' : 'disabled'}>${mine.dailyReady ? `🎁 今日のボーナス +${cat.dailyCoins}` : '今日のボーナスは受け取り済み'}</button>
+      <span class="text-xs muted">対戦の報酬は今日あと ${Math.max(0, mine.rewardsLeft)} 回</span>
+    </section>
+    <section class="card card-pad">
+      <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></div>
+      <div class="cb-deck">${mine.deck.map((id) => cbCard(C[id], { level: Math.min(mine.owned[id] || 1, cat.maxLevel) })).join('')}</div>
+    </section>
+    <section class="card card-pad">
+      <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
+      <div class="cb-modes">
+        <a class="btn btn-primary btn-lg" href="#/games/cards/battle?mode=random">${icon('globe')}ランダム対戦<small>レート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
+        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>勝ち +${cat.reward.cpu.win}🪙</small></a>
+        <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
+        <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
+      </div>
+    </section>
+    <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">🎰</span>
+      <span><b>ガチャを引く</b><span>1回 ${cat.pullCost}🪙 · 10回 ${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
+    : `<section class="card card-pad cb-guest"><p>24種類の文房具のキャラクターを集めて、3枚のデッキで対戦するカードゲームです。<b>ログインすると、すぐにコインとはじめのカードがもらえます。</b></p>
+      <button class="btn btn-primary" type="button" id="cb-login">ログインして遊ぶ</button>
+      <div class="cb-grid">${cat.cards.slice(0, 6).map((c) => cbCard(c, { small: true })).join('')}</div></section>`}
+    <section class="card card-pad">
+      <div class="panel-head"><h3>${icon('trend', 'ic-sm')}レート ランキング</h3><span class="text-xs muted">ランダム対戦の成績</span></div>
+      <div id="cb-rank">${loadingBlock()}</div>
+    </section>
+    <section class="card card-pad cb-rules"><details><summary>${icon('sparkle', 'ic-sm')}あそびかた</summary><ul>
+      <li>おたがいに、毎ターン同時に行動を選びます: <b>こうげき</b> / <b>ガード</b> (ダメージ 6 割減) / <b>わざ</b> (使うと 2 ターン休み) / <b>こうたい</b></li>
+      <li>相性: ${Object.entries(cat.beats).map(([a, b]) => `${esc(cat.types[a].icon)}${esc(cat.types[a].name)} は ${esc(cat.types[b].icon)}${esc(cat.types[b].name)} に強い (1.5 倍)`).join('、')}</li>
+      <li>素早いカードから先に動きます。相手の 3 枚をすべてたおすと勝ち。30 ターンたったら残り HP の多いほうの勝ち</li>
+      <li>レア度やレベルで能力は変わりません (対戦はフェア)。ちがいは相性・わざ・能力の配分です</li>
+      <li>コインはお金では買えません。毎日のボーナスと対戦でもらえます</li></ul></details></section>`;
+  $('#cb-login')?.addEventListener('click', () => openAuth());
+  $('#cb-daily')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try { const r = await api('/cards/daily', { method: 'POST' }); toast(`🎁 ${r.got} コインを受け取りました`, 'success'); viewCards(); } catch (err) { toast(err.message, 'error'); }
+  });
+  $('#cb-join')?.addEventListener('submit', (e) => { e.preventDefault(); location.hash = '#/games/cards/battle?mode=room-join&code=' + encodeURIComponent(e.target.code.value.trim()); });
+  try {
+    const r = await api('/cards/ranking', { noAuthPrompt: true });
+    const row = (x, mine) => `<a class="md-row${mine ? ' me' : ''}${x.rank <= 3 ? ' top' + x.rank : ''}" href="#/u/${esc(x.user.username)}"><span class="md-rk">${x.rank}</span>${avatar(x.user, 'sm')}
+      <span class="md-who"><b>${esc(x.user.displayName)}${adminBadge(x.user)}</b><small>@${esc(x.user.username)} · ${Number(x.wins)}勝${Number(x.losses)}敗</small></span><span class="md-pts">${Number(x.rating)}</span></a>`;
+    const meIn = r.me && r.top.some((x) => x.user.id === r.me.user.id);
+    const el = $('#cb-rank'); if (!el) return;
+    el.innerHTML = r.top.length ? `<div class="md-list">${r.top.map((x) => row(x, me && x.user.id === me.id)).join('')}</div>${r.me && !meIn ? `<div class="md-list md-mine">${row(r.me, true)}</div>` : ''}`
+      : '<p class="muted text-sm md-empty">まだだれもランダム対戦をしていません。</p>';
+  } catch { const el = $('#cb-rank'); if (el) el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; }
+}
+
+// ---------- ガチャ ----------
+async function viewGacha() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: 'ガチャ', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbg">${loadingBlock()}</div>`;
+  let cat, mine;
+  try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbg').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const render = (results = null) => {
+    const root = $('#cbg'); if (!root) return;
+    root.innerHTML = `<section class="card card-pad cb-gacha">
+        <div class="cb-gacha-top">${cbCoins(mine.coins)}<span class="text-sm muted">SSR 確定まであと <b>${cat.pity - mine.pity}</b> 回</span></div>
+        <div class="cb-reveal" id="cb-reveal">${results ? results.map((c, i) => `<div class="cb-flip" style="--d:${i * 120}ms">${cbCard(c, { level: c.level, small: true, cls: c.rarity === 'SSR' || c.rarity === 'SR' ? 'shine' : '' })}${c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div>`).join('') : '<div class="cb-machine" aria-hidden="true">🎰</div>'}</div>
+        <div class="cb-gacha-btns">
+          <button class="btn btn-outline btn-lg" type="button" data-n="1" ${mine.coins < cat.pullCost ? 'disabled' : ''}>1回<small>${cat.pullCost}🪙</small></button>
+          <button class="btn btn-primary btn-lg" type="button" data-n="10" ${mine.coins < cat.tenCost ? 'disabled' : ''}>10回<small>${cat.tenCost}🪙 · SR以上1枚確定</small></button>
+        </div>
+        ${mine.coins < cat.pullCost ? `<p class="text-sm muted" style="text-align:center">コインが足りません。毎日のボーナスや対戦でもらえます。</p>` : ''}
+      </section>
+      <section class="card card-pad"><div class="panel-head"><h3>提供割合</h3></div>
+        <div class="cb-rates">${Object.entries(cat.rates).reverse().map(([r, v]) => `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${v}%</b><small>${cat.cards.filter((c) => c.rarity === r).length}種類 · 1種類あたり ${(v / cat.cards.filter((c) => c.rarity === r).length).toFixed(2)}%</small></div>`).join('')}</div>
+        <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
+          <li>同じカードが出るとレベルが上がります (最大 Lv${cat.maxLevel})。対戦の能力は変わりません</li>
+          <li>コインはお金では買えません</li></ul></section>`;
+    $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
+      $$('[data-n]', root).forEach((x) => { x.disabled = true; });
+      try { const r = await api('/cards/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); mine = r; render(r.results); }
+      catch (e) { toast(e.message, 'error'); render(results); }
+    }));
+  };
+  render();
+}
+
+// ---------- 図鑑とデッキ ----------
+async function viewCollection() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: 'カード図鑑・デッキ', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbc">${loadingBlock()}</div>`;
+  let cat, mine;
+  try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbc').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  let deck = [...mine.deck];
+  const C = Object.fromEntries(cat.cards.map((c) => [c.id, c]));
+  const render = () => {
+    const root = $('#cbc'); if (!root) return;
+    const have = cat.cards.filter((c) => mine.owned[c.id]).length;
+    root.innerHTML = `<section class="card card-pad cb-deckedit">
+        <div class="panel-head"><h3>デッキ (${deck.length}/3)</h3><button class="btn btn-primary btn-sm" type="button" id="cb-save" ${deck.length === 3 && deck.join() !== mine.deck.join() ? '' : 'disabled'}>保存</button></div>
+        <p class="text-xs muted">下のカードをタップして、3枚えらんでください (タップした順に先に出ます)。</p>
+        <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] ? cbCard(C[deck[i]], { small: true, level: Math.min(mine.owned[deck[i]], cat.maxLevel), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
+      </section>
+      <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
+        <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
+          ? cbCard(c, { level: Math.min(mine.owned[c.id], cat.maxLevel), cls: 'pick' + (deck.includes(c.id) ? ' chosen' : ''), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
+          : cbCard(c, { locked: true })).join('')}</div></section>`;
+    $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
+      const id = el.dataset.card;
+      if (deck.includes(id)) deck = deck.filter((x) => x !== id); else if (deck.length < 3) deck.push(id); else toast('デッキは3枚までです。上のカードをタップして外してください');
+      render();
+    }));
+    $$('[data-slot]', root).forEach((el) => el.addEventListener('click', () => { deck.splice(Number(el.dataset.slot), 1); render(); }));
+    $('#cb-save').addEventListener('click', async () => {
+      try { mine = await api('/cards/deck', { method: 'PUT', body: { deck } }); deck = [...mine.deck]; toast('デッキを保存しました', 'success'); render(); } catch (e) { toast(e.message, 'error'); }
+    });
+  };
+  render();
+}
+
+// ---------- 対戦 ----------
+async function viewBattle(params) {
+  if (!requireLogin()) return;
+  const mode = params.get('mode'), code = params.get('code') || '';
+  const titles = { cpu: 'CPU と練習', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
+  main.innerHTML = pageHead({ title: titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
+  const cat = await cbCatalog().catch(() => null);
+  const T = cat?.types || {};
+  const box = () => $('#cbb');
+  let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
+  const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
+  const evText = (e) => e.k === 'hit' ? `${name(e.p, e.card)}のこうげき！ ${name(1 - e.p, e.target)}に ${e.dmg} ダメージ${e.eff === 'good' ? '（こうかばつぐん！）' : e.eff === 'bad' ? '（いまひとつ…）' : ''}${e.guarded ? '（ガード）' : ''}`
+    : e.k === 'skill' ? `${name(e.p, e.card)}の「${e.skill}」！` : e.k === 'heal' ? `${name(e.p, e.card)}は ${e.amount} 回復した`
+    : e.k === 'guard' ? `${name(e.p, e.card)}はガードした` : e.k === 'switch' ? `${e.p === you ? 'あなた' : '相手'}は ${e.card} を出した`
+    : e.k === 'ko' ? `${name(e.p, e.card)}はたおれた！` : e.k === 'timeup' ? '30ターンたったので、残りの HP で決まります' : '';
+  const hpBar = (c) => `<span class="cb-hp"><i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%" class="${c.hp / c.maxHp < 0.3 ? 'low' : ''}"></i></span><span class="cb-hpn">${c.hp}/${c.maxHp}</span>`;
+  const fighter = (c, mineSide) => `<div class="cb-fighter${mineSide ? ' mine' : ''}" style="--rc:${CB_RCOL[c.rarity]}">
+      <span class="cb-femoji">${esc(c.emoji)}</span>
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}</span>${hpBar(c)}</div></div>`;
+  const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${esc(c.emoji)}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
+  function render() {
+    if (!box() || !state) return;
+    const mineS = state.sides[you], foeS = state.sides[1 - you], my = mineS.cards[mineS.active], skill = cat?.cards.find((c) => c.id === my.id);
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const canSwitch = mineS.cards.some((c, i) => i !== mineS.active && c.hp > 0);
+    box().innerHTML = `<div class="cb-top">${avatar(players[1 - you], 'sm')}<b>${esc(players[1 - you].displayName)}</b>${bench(foeS, false)}</div>
+      ${fighter(foeS.cards[foeS.active], false)}
+      <div class="cb-log" aria-live="polite">${log.slice(-4).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="muted">バトル開始！</p>'}</div>
+      ${fighter(my, true)}
+      <div class="cb-top mine">${avatar(players[you], 'sm')}<b>あなた</b>${bench(mineS, true)}<span class="cb-timer${left <= 5 ? ' hurry' : ''}" id="cb-timer">${ended ? '' : chosen ? '相手を待っています…' : `のこり ${left}秒`}</span></div>
+      ${ended ? '' : picking ? `<div class="cb-acts"><p class="text-sm" style="grid-column:1/-1">交代するカードをえらんでください</p><button class="btn btn-ghost" type="button" data-act="cancel-switch">もどる</button></div>`
+        : `<div class="cb-acts">
+          <button class="btn btn-primary btn-lg" type="button" data-act="attack" ${chosen ? 'disabled' : ''}>こうげき</button>
+          <button class="btn btn-outline btn-lg" type="button" data-act="guard" ${chosen ? 'disabled' : ''}>ガード</button>
+          <button class="btn btn-outline btn-lg cb-skill" type="button" data-act="skill" ${chosen || my.cd ? 'disabled' : ''}>わざ「${esc(skill?.skillName || '')}」${my.cd ? `<small>あと${my.cd}ターン</small>` : `<small>${esc(skill?.skillDesc || '')}</small>`}</button>
+          <button class="btn btn-outline btn-lg" type="button" data-act="switch" ${chosen || !canSwitch ? 'disabled' : ''}>こうたい</button>
+        </div>`}
+      ${ended ? '' : '<button class="btn btn-ghost btn-sm cb-surrender" type="button" id="cb-surrender">こうさんする</button>'}`;
+    $$('[data-act]', box()).forEach((b) => b.addEventListener('click', () => {
+      const a = b.dataset.act;
+      if (a === 'switch') { picking = true; return render(); }
+      if (a === 'cancel-switch') { picking = false; return render(); }
+      choose({ a });
+    }));
+    $$('[data-switch]', box()).forEach((b) => b.addEventListener('click', () => { picking = false; choose({ a: 'switch', i: Number(b.dataset.switch) }); }));
+    $('#cb-surrender')?.addEventListener('click', async () => { if (await confirmDialog({ title: 'こうさんしますか？', body: 'このバトルは負けになります。', ok: 'こうさんする', danger: true })) wsSend({ t: 'surrender' }); });
+  }
+  const wsSend = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+  function choose(a) { if (chosen || ended) return; chosen = true; wsSend({ t: 'act', ...a }); render(); }
+  function waiting(msg, extra = '') {
+    if (!box()) return;
+    box().innerHTML = `<div class="cb-wait"><span class="md-spin"></span><p>${msg}</p>${extra}<button class="btn btn-ghost" type="button" id="cb-cancel">やめる</button></div>`;
+    $('#cb-cancel').addEventListener('click', () => { wsSend({ t: 'cancel' }); location.hash = '#/games/cards'; });
+  }
+  function end(m) {
+    ended = true; clearInterval(tick); state = m.state || state; render();
+    const word = m.result === 'win' ? '勝ち！' : m.result === 'lose' ? '負け…' : '引き分け';
+    box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
+      <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
+      <p class="cb-gain">${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
+      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="#/games/cards">もどる</a></div></div>`);
+  }
+  function connect() {
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/cb`);
+    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code }); };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (!box()) return;
+      if (m.t === 'waiting') return m.mode === 'room' ? waiting('友だちを待っています', `<div class="cb-code">${esc(m.code)}</div><p class="text-sm muted">この部屋コードを友だちに教えてください (「部屋コードで入る」に入力)</p>`) : waiting('対戦相手を探しています…');
+      if (m.t === 'error') { box().innerHTML = emptyState({ icon: 'alert', title: m.msg, action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); closedByUs = true; ws.close(); return; }
+      if (m.t === 'start') {
+        you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました'); render();
+        // 行動のボタンまで 1 画面に入るよう、バトルの枠を画面の上にそろえる
+        const top = box().getBoundingClientRect().top + window.scrollY - ($('.topbar')?.offsetHeight || 0) - ($('.page-head')?.offsetHeight || 0) - 6;
+        window.scrollTo({ top: Math.max(0, top) });
+        return;
+      }
+      if (m.t === 'turn') { state = m.state; deadline = Date.now() + (m.deadline - Date.now()); chosen = !!m.chosen; picking = false; render(); clearInterval(tick); tick = setInterval(() => { const t = $('#cb-timer'); if (!t) return clearInterval(tick); if (!chosen && !ended) { const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000)); t.textContent = `のこり ${left}秒`; t.classList.toggle('hurry', left <= 5); } }, 250); return; }
+      if (m.t === 'opponentReady') { const t = $('#cb-timer'); if (t && !chosen) t.textContent += ' · 相手は決めました'; return; }
+      if (m.t === 'result') { m.events.forEach((e) => { const s = evText(e); if (s) log.push(s); }); state = m.state; render(); return; }
+      if (m.t === 'opponentLeft') { log.push(`相手の接続が切れました。${Math.round(m.ms / 1000)}秒もどらなければ、あなたの勝ちです`); render(); return; }
+      if (m.t === 'opponentBack') { log.push('相手がもどってきました'); render(); return; }
+      if (m.t === 'end') return end(m);
+    };
+    ws.onclose = () => { if (!closedByUs && !ended && box()) { log.push('接続が切れました。つなぎ直しています…'); setTimeout(() => { if (box() && !ended) connect(); }, 1500); } };
+  }
+  connect();
+  viewCleanup = () => { closedByUs = true; clearInterval(tick); try { ws.close(); } catch {} };
 }

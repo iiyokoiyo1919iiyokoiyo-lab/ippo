@@ -418,6 +418,7 @@ module.exports = function install(app, ctx) {
       db.prepare('DELETE FROM post_images WHERE user_id = ?').run(u.id);
       if (ctx.eraseHorse) ctx.eraseHorse(u.id); // ミニゲームの結果・図鑑・種も消す
       if (ctx.eraseGames) ctx.eraseGames(u.id); // 暗算ダッシュの記録も消す
+      if (ctx.eraseCards) ctx.eraseCards(u.id); // ぶんぼうぐバトラーズのカード・コイン・記録も消す
       if (mode === 'account') {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
