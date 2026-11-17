@@ -146,14 +146,16 @@ const menuEl = $('#menu');
 function openMenu(anchor, items) {
   menuEl.innerHTML = items.map((it, i) => `<button class="menu-item ${it.danger ? 'danger' : ''}" type="button" data-i="${i}" role="menuitem">${icon(it.icon)}${esc(it.label)}</button>`).join('');
   menuEl.classList.remove('hidden');
+  menuOpenedAt = Date.now();
   const r = anchor.getBoundingClientRect(), mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
   menuEl.style.left = Math.max(8, Math.min(window.innerWidth - mw - 8, r.right - mw)) + 'px';
   menuEl.style.top = (r.bottom + mh + 8 > window.innerHeight ? Math.max(8, r.top - mh - 4) : r.bottom + 4) + 'px';
   $$('.menu-item', menuEl).forEach((b) => b.addEventListener('click', () => { closeMenu(); items[b.dataset.i].run(); }));
 }
+let menuOpenedAt = 0;
 function closeMenu() { menuEl.classList.add('hidden'); }
 document.addEventListener('click', (e) => { if (!menuEl.contains(e.target) && !e.target.closest('[data-menu]')) closeMenu(); }, true);
-window.addEventListener('scroll', closeMenu, { passive: true });
+window.addEventListener('scroll', () => { if (Date.now() - menuOpenedAt > 250) closeMenu(); }, { passive: true });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 
 // ---------- テーマ (自動 / ライト / ダーク) ----------
@@ -334,6 +336,16 @@ document.addEventListener('click', (e) => {
 }, true);
 
 // ---------- 投稿カード ----------
+// 引用リポストに埋め込む、元投稿の小さなカード
+function quoteEmbed(q) {
+  if (!q || q.unavailable) return `<div class="quote-embed quote-gone">${icon('repeat', 'ic-sm')}この投稿は削除されました</div>`;
+  const text = q.content ? esc(q.content.length > 180 ? q.content.slice(0, 180) + '…' : q.content) : '';
+  const photo = q.images?.length ? `<span class="quote-photo">${icon('image', 'ic-sm')}写真${q.images.length}枚</span>` : '';
+  return `<a class="quote-embed" href="#/p/${q.id}">
+    <div class="quote-embed-head">${avatar(q.author, 'xs')}<b>${esc(q.author.displayName)}</b>${adminBadge(q.author)}<span class="handle">@${esc(q.author.username)}</span><span class="dot">·</span><time>${timeAgo(q.createdAt)}</time></div>
+    ${text ? `<div class="quote-embed-text">${text}</div>` : ''}${photo}
+  </a>`;
+}
 function renderPost(item, { focus = false, fresh = false } = {}) {
   const p = item.type === 'repost' ? item.post : item;
   const ctx = item.type === 'repost' ? `<div class="post-ctx">${icon('repeat')}${esc(item.by.displayName)}さんがリポスト</div>` : '';
@@ -368,10 +380,11 @@ function renderPost(item, { focus = false, fresh = false } = {}) {
     ${p.content ? `<div class="post-text">${richText(p.content)}</div>` : ''}
     ${p.images?.length ? photoGrid(p) : ''}
     ${media ? `<div class="post-media">${media}</div>` : ''}
+    ${p.quoted ? quoteEmbed(p.quoted) : ''}
     <footer class="post-actions">
       <button class="act like${p.liked ? ' on' : ''}" type="button" aria-label="いいね" aria-pressed="${p.liked}">${icon('heart')}<span>${n(p.counts.likes)}</span></button>
       <button class="act reply" type="button" aria-label="コメント">${icon('comment')}<span>${n(p.counts.replies)}</span></button>
-      <button class="act repost${p.reposted ? ' on' : ''}" type="button" aria-label="リポスト" aria-pressed="${p.reposted}">${icon('repeat')}<span>${n(p.counts.reposts)}</span></button>
+      <button class="act repost${p.reposted ? ' on' : ''}" type="button" data-menu aria-label="リポスト" aria-pressed="${p.reposted}">${icon('repeat')}<span>${n((p.counts.reposts || 0) + (p.counts.quotes || 0))}</span></button>
       <span class="spacer"></span>
       <button class="act bookmark${bm ? ' on' : ''}" type="button" aria-label="ブックマーク" aria-pressed="${bm}">${icon('bookmark')}</button>
     </footer>
@@ -387,7 +400,7 @@ function updatePostEls(p) {
       $('span', b).textContent = count || '';
     };
     set('.act.like', p.liked, p.counts.likes);
-    set('.act.repost', p.reposted, p.counts.reposts);
+    set('.act.repost', p.reposted, (p.counts.reposts || 0) + (p.counts.quotes || 0));
     const r = $('.act.reply span', el); if (r) r.textContent = p.counts.replies || '';
   });
 }
@@ -402,9 +415,10 @@ main.addEventListener('click', async (e) => {
   const postEl = e.target.closest('.post[data-id]');
   if (!postEl || e.target.closest('a, video, iframe, .yt-frame')) return;
   const id = postEl.dataset.id;
+  const btn = e.target.closest('.act');
+  if (btn && btn.classList.contains('repost')) return me ? openRepostMenu(btn, id, postEl.dataset.user) : openAuth();
   const more = e.target.closest('[data-menu]');
   if (more) return openPostMenu(more, postEl);
-  const btn = e.target.closest('.act');
   if (!btn) { if (!postEl.classList.contains('focus') && !window.getSelection().toString()) location.hash = '#/p/' + id; return; }
   if (btn.classList.contains('bookmark')) {
     const on = bookmarks.toggle(id);
@@ -413,22 +427,40 @@ main.addEventListener('click', async (e) => {
     return toast(on ? 'ブックマークに追加しました' : 'ブックマークから外しました', on ? 'success' : '');
   }
   if (!me) return openAuth();
+  if (btn.classList.contains('repost')) return openRepostMenu(btn, id, postEl.dataset.user);
   try {
-    if (btn.classList.contains('like') || btn.classList.contains('repost')) {
-      const kind = btn.classList.contains('like') ? 'like' : 'repost';
+    if (btn.classList.contains('like')) {
       const on = btn.classList.contains('on');
       // すぐに見た目を変え (控えめなアニメーション)、サーバーの結果で確定する
       btn.classList.toggle('on', !on);
       const c = $('span', btn); c.textContent = Math.max(0, (Number(c.textContent) || 0) + (on ? -1 : 1)) || '';
       if (!on) popButton(btn);
-      const { post } = await api(`/posts/${id}/${kind}`, { method: on ? 'DELETE' : 'POST' });
+      const { post } = await api(`/posts/${id}/like`, { method: on ? 'DELETE' : 'POST' });
       updatePostEls(post);
-      if (kind === 'repost') toast(on ? 'リポストを取り消しました' : 'リポストしました', on ? '' : 'success');
     } else if (btn.classList.contains('reply')) {
       openCompose({ replyTo: id, handle: '@' + postEl.dataset.user });
     }
   } catch (err) { toast(err.message, 'error'); route(); }
 });
+
+// リポストボタンのメニュー (リポスト / 引用リポスト)
+function openRepostMenu(btn, id, user) {
+  const on = btn.classList.contains('on');
+  openMenu(btn, [
+    { icon: 'repeat', label: on ? 'リポストを取り消す' : 'リポスト', run: async () => {
+      // すぐ見た目を変え、サーバーの結果で確定
+      const c = $('span', btn);
+      btn.classList.toggle('on', !on); c.textContent = Math.max(0, (Number(c.textContent) || 0) + (on ? -1 : 1)) || '';
+      if (!on) popButton(btn);
+      try { const { post } = await api(`/posts/${id}/repost`, { method: on ? 'DELETE' : 'POST' }); updatePostEls(post); toast(on ? 'リポストを取り消しました' : 'リポストしました', on ? '' : 'success'); }
+      catch (err) { toast(err.message, 'error'); route(); }
+    } },
+    { icon: 'edit', label: '引用リポスト', run: async () => {
+      try { const { post } = await api('/posts/' + id, { noAuthPrompt: true }); openCompose({ quote: post }); }
+      catch (err) { toast(err.message, 'error'); }
+    } },
+  ]);
+}
 
 function openPostMenu(anchor, postEl) {
   const id = postEl.dataset.id, user = postEl.dataset.user;
@@ -535,19 +567,22 @@ function bindCompose(root, { replyTo = null, onDone, extra = {} } = {}) {
   return ta;
 }
 // 投稿作成モーダル (返信 / コミュニティ / 今日の質問 にも使う)
-function openCompose({ replyTo = null, handle = '', extra = {}, title = '', placeholder = '' } = {}) {
+function openCompose({ replyTo = null, handle = '', extra = {}, title = '', placeholder = '', quote = null } = {}) {
   if (!me) return openAuth();
   const dlg = $('#compose-dialog'), slot = $('#compose-modal-slot');
-  if (!replyTo && !extra.question && !extra.community && currentCommunity) extra = { community: currentCommunity.slug };
+  if (!replyTo && !quote && !extra.question && !extra.community && currentCommunity) extra = { community: currentCommunity.slug };
+  if (quote) extra = { ...extra, quoteOf: quote.id };
   let context = '';
   if (replyTo) context = `<div class="compose-context"><span class="chip">${icon('comment')}${esc(handle)} への返信</span></div>`;
+  else if (quote) context = `<div class="compose-context"><span class="chip">${icon('repeat')}引用リポスト</span></div>`;
   else if (extra.community) context = `<div class="compose-context"><span class="chip chip-accent">${icon('users')}${esc(currentCommunity?.name || extra.community)} に投稿</span></div>`;
   else if (extra.question) context = `<div class="compose-context"><span class="chip">${icon('sparkle')}${esc(title)}</span></div>`;
-  $('#compose-title').textContent = replyTo ? 'コメントする' : extra.question ? '今日の質問に答える' : '新しい投稿';
-  slot.innerHTML = composeHtml({ placeholder: placeholder || (replyTo ? 'コメントを書く' : 'いまどうしてる？'), context, submit: replyTo ? 'コメント' : '投稿する' });
+  $('#compose-title').textContent = replyTo ? 'コメントする' : quote ? '引用リポスト' : extra.question ? '今日の質問に答える' : '新しい投稿';
+  slot.innerHTML = composeHtml({ placeholder: placeholder || (quote ? 'ひとこと添える' : replyTo ? 'コメントを書く' : 'いまどうしてる？'), context, submit: replyTo ? 'コメント' : quote ? '投稿' : '投稿する' });
+  if (quote) $('.composer-main', slot).insertAdjacentHTML('beforeend', `<div class="compose-quote">${quoteEmbed(quote)}</div>`);
   const ta = bindCompose(slot, { replyTo, extra, onDone: (post) => {
     closeModal(dlg);
-    toast(replyTo ? 'コメントしました' : '投稿しました', 'success');
+    toast(replyTo ? 'コメントしました' : quote ? '引用リポストしました' : '投稿しました', 'success');
     // いま見ている画面に関係する投稿なら、その場に追加する
     const h = location.hash || '#/';
     const onHome = h === '#/' || h === '#';

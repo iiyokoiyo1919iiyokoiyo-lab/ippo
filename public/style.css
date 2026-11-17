@@ -1108,3 +1108,18 @@ a.announce-title:hover { color: var(--accent-text); }
 .verified-note .ic { width: 18px; height: 18px; color: var(--verified); flex: none; }
 .verified-inline { color: var(--verified); display: inline; vertical-align: -3px; }
 .chip-warn { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); margin-left: 6px; }
+
+/* 引用リポスト */
+.quote-embed { display: block; margin-top: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); color: var(--text); text-decoration: none !important; transition: background var(--t1), border-color var(--t1); }
+a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.quote-embed-head { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-sm); }
+.quote-embed-head .avatar { --av: 22px; }
+.quote-embed-head b { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.quote-embed-head .handle { color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.quote-embed-head .dot { color: var(--text-3); }
+.quote-embed-head time { color: var(--text-3); white-space: nowrap; flex: none; }
+.quote-embed-text { margin-top: 4px; color: var(--text-2); line-height: var(--lh); white-space: pre-wrap; overflow-wrap: anywhere; }
+.quote-photo { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: var(--fs-xs); color: var(--text-3); }
+.quote-gone { color: var(--text-3); font-size: var(--fs-sm); display: flex; align-items: center; gap: 6px; cursor: default; }
+.compose-quote { margin-top: var(--s2); }
+.compose-quote .quote-embed { pointer-events: none; }

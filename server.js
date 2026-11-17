@@ -141,9 +141,10 @@ const qCounts = db.prepare(`SELECT
   (SELECT COUNT(*) FROM posts WHERE repost_of = $id) AS reposts,
   (SELECT COUNT(*) FROM posts WHERE reply_to = $id) AS replies,
   EXISTS(SELECT 1 FROM likes WHERE post_id = $id AND user_id = $me) AS liked,
-  EXISTS(SELECT 1 FROM posts WHERE repost_of = $id AND user_id = $me) AS reposted`);
+  EXISTS(SELECT 1 FROM posts WHERE repost_of = $id AND user_id = $me) AS reposted,
+  (SELECT COUNT(*) FROM posts WHERE quote_of = $id AND repost_of IS NULL AND reply_to IS NULL) AS quotes`);
 
-function hydrate(row, me) {
+function hydrate(row, me, depth = 0) {
   if (!row) return null;
   if (row.repost_of) {
     const orig = hydrate(qPost.get(row.repost_of), me);
@@ -158,12 +159,21 @@ function hydrate(row, me) {
     const parent = qPost.get(row.reply_to);
     if (parent) replyToUser = qUser.get(parent.user_id)?.username || null;
   }
+  let quoted = null;
+  if (row.quote_of && depth < 1) {
+    const qr = qPost.get(row.quote_of);
+    if (qr && !qr.repost_of) quoted = hydrate(qr, me, depth + 1);
+    else if (qr) quoted = { unavailable: true };
+    else quoted = { unavailable: true }; // 元投稿が削除された
+  } else if (row.quote_of) {
+    quoted = { unavailable: true };
+  }
   return {
     id: row.id, type: 'post', content: row.content, createdAt: row.created_at, replyTo: row.reply_to, replyToUser,
     author: publicUser(qUser.get(row.user_id)),
-    counts: { likes: c.likes, reposts: c.reposts, replies: c.replies },
+    counts: { likes: c.likes, reposts: c.reposts, replies: c.replies, quotes: c.quotes },
     liked: !!c.liked, reposted: !!c.reposted,
-    community, question: !!row.question_day,
+    community, question: !!row.question_day, quoted,
     images: ctx.imagesOf ? ctx.imagesOf(row.id) : [],
   };
 }
@@ -200,6 +210,16 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   if ([...content].length > 280) return res.status(400).json({ error: '280文字以内で投稿してください' });
   const parent = replyTo ? qPost.get(replyTo) : null;
   if (replyTo && !parent) return res.status(404).json({ error: '返信先が見つかりません' });
+  // 引用リポスト: 元投稿を埋め込む。元が引用・リポストでも、たどって本体を引用する (入れ子を防ぐ)
+  let quoteOf = null;
+  if (!replyTo && req.body?.quoteOf) {
+    let target = qPost.get(Number(req.body.quoteOf));
+    if (target && target.repost_of) target = qPost.get(target.repost_of);     // 素のリポストは元をたどる
+    if (target && target.quote_of && !target.content) target = qPost.get(target.quote_of);
+    if (!target || target.repost_of) return res.status(404).json({ error: '引用する投稿が見つかりません' });
+    quoteOf = target.id;
+    if (!content && !imgs.ids.length) return res.status(400).json({ error: 'ひとこと添えるか、写真を選んでください' });
+  }
   // コミュニティへの投稿 (返信は返信先のコミュニティを引き継ぐ)。参加者だけが投稿できる
   let communityId = parent ? parent.community_id : null;
   if (!parent && req.body?.community) {
@@ -209,8 +229,8 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   }
   if (communityId && !ctx.isCommunityMember(communityId, req.user)) return res.status(403).json({ error: 'コミュニティに参加すると投稿できます' });
   const questionDay = !parent && req.body?.question ? ctx.todayJst() : null;
-  const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(req.user.id, content, replyTo, communityId, questionDay, Date.now());
+  const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, quote_of, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(req.user.id, content, replyTo, communityId, questionDay, quoteOf, Date.now());
   if (imgs.ids.length) ctx.attachImages(Number(r.lastInsertRowid), req.user, imgs.ids);
   ctx.invalidateTrends();
   res.json({ post: hydrate(qPost.get(r.lastInsertRowid), req.user) });

@@ -88,6 +88,8 @@ function addColumn(table, column, def) {
 }
 addColumn('posts', 'community_id', 'INTEGER REFERENCES communities(id) ON DELETE CASCADE');
 addColumn('posts', 'question_day', 'TEXT'); // 今日の質問への回答なら、その日付 (YYYY-MM-DD, 日本時間)
+addColumn('posts', 'quote_of', 'INTEGER'); // 引用リポストの元投稿 (元が消えても「削除されました」と出せるよう FK なし)
+
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id, id);
 CREATE INDEX IF NOT EXISTS idx_posts_question ON posts(question_day, id);
