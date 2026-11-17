@@ -364,12 +364,17 @@ CREATE TABLE card_horses (
 );
 CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
+// キャラ専用のわざ (馬には付けない): しっぷうぎり = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight'];
+// すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
+const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
+  WHERE skill IN ('sweep', 'starlight');`;
 // SSR の文房具の平均を基準に、それぞれ ±12% でランダム (SSR と同じ +12% もつく)
 function rollHorse(rnd) {
   const ssr = ['gold', 'chalk', 'case'].map((id) => CARDS[id]);
   const avg = (k) => ssr.reduce((a, c) => a + c[k], 0) / ssr.length;
   const r = (k) => avg(k) * (0.88 + rnd() * 0.24);
-  const types = Object.keys(TYPES), skills = Object.keys(SKILLS).filter((k) => k !== 'starlight');
+  const types = Object.keys(TYPES), skills = Object.keys(SKILLS).filter((k) => !EXCLUSIVE_SKILLS.includes(k));
   return { type: types[Math.floor(rnd() * types.length)], skill: skills[Math.floor(rnd() * skills.length)],
     hp: Math.round(r('hp')), atk: Math.round(r('atk')), def: Math.round(r('def')), spd: Math.max(3, Math.round(avg('spd') * (0.7 + rnd() * 0.6))) };
 }
@@ -417,6 +422,9 @@ function install(app, ctx) {
   db.migrate('2026-11-23-card-horses-ur', HORSE_UR_MIGRATION);
   db.migrate('2026-11-23-card-scrolls', SCROLL_MIGRATION);
   db.migrate('2026-11-24-card-quests', QUEST_MIGRATION);
+  { const n = db.prepare("SELECT COUNT(*) AS n FROM card_horses WHERE skill IN ('sweep', 'starlight')").get().n;
+    db.migrate('2026-11-25-horse-exclusive-skills', HORSE_SKILL_FIX);
+    if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end,
     enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
@@ -775,4 +783,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
