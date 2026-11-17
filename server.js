@@ -303,6 +303,7 @@ require('./features')(app, ctx);
 require('./pixel')(app, ctx); // PIXEL WORLD
 require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
 require('./avatar')(app, ctx); // プロフィールのアイコン
+require('./announce')(app, ctx); // 運営からのお知らせ
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)

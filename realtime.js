@@ -95,6 +95,7 @@ module.exports = function install(app, ctx) {
   // ---------- DM から呼ばれる通知 ----------
   ctx.rt = {
     presenceOf,
+    broadcast(msg) { const s = JSON.stringify(msg); for (const set of sockets.values()) for (const ws of set) if (ws.readyState === 1) ws.send(s); },
     // 相手が自分のメッセージをどこまで読んだか (見せてよい時だけ)
     readByPeer(viewerId, peerId) {
       if (!canSeeRead(viewerId, peerId)) return null;

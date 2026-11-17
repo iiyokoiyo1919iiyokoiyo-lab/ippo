@@ -572,12 +572,16 @@ async function refreshBadges(force = false) {
   if (!force && Date.now() - badgeAt < 5000) return;
   badgeAt = Date.now();
   const show = (sel, n) => $$(sel).forEach((b) => { b.classList.toggle('hidden', !n); if (b.classList.contains('count-badge')) b.textContent = n > 99 ? '99+' : n; });
-  if (!me) { show('.dm-badge', 0); show('.notif-badge', 0); return; }
+  if (!me) { show('.dm-badge', 0); show('.notif-badge', 0); show('.news-badge', 0); return; }
+  let news = 0;
+  try { news = location.hash === '#/news' ? 0 : (await api('/announcements/summary', { noAuthPrompt: true })).unread; show('.news-badge', news); } catch {}
   try { const { unread } = await api('/dm/unread', { noAuthPrompt: true }); show('.dm-badge', unread); } catch {}
   try {
     const s = notifSeen();
     const { unread } = await api(`/notifications/unread?at=${s.at}&like=${s.like}&follow=${s.follow}`, { noAuthPrompt: true });
-    show('.notif-badge', location.hash === '#/notifications' ? 0 : unread);
+    const n = location.hash === '#/notifications' ? 0 : unread;
+    show('.sidebar .notif-badge', n);
+    show('.topbar .notif-badge', n + news); // スマホはお知らせも 🔔 から見る
   } catch {}
 }
 setInterval(() => { if (!document.hidden) refreshBadges(true); }, 20_000);
@@ -592,9 +596,11 @@ async function viewHome() {
     <button data-mode="following" class="${tlMode === 'following' ? 'active' : ''}" role="tab">フォロー中</button></div>`;
   main.innerHTML = pageHead({ title: 'ホーム', tabs }).replace('class="page-head', 'class="page-head home-head') + `<div class="content">
     ${me ? `<div class="card compose-card" id="home-compose">${composeHtml()}</div>` : welcomeCard()}
+    <div id="announce-banner"></div>
     <div id="question-card" class="hidden"></div>
     <div class="stack" id="feed"></div></div>`;
   questionCard();
+  loadAnnounceBanner();
   $$('.tabs button', main).forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.mode === 'following' && !me) return openAuth();
     tlMode = b.dataset.mode; viewHome();
@@ -888,12 +894,145 @@ async function viewNotifications() {
   const follows = data.follows.map((f) => `<a class="notif${f.rid > seen.follow ? ' unread' : ''}" href="#/u/${esc(f.user.username)}">
       <span class="notif-icon follow">${icon('user-plus')}</span>
       <div class="notif-body"><div class="notif-text"><b>${esc(f.user.displayName)}${adminBadge(f.user)}</b>さんにフォローされました</div><div class="notif-quote">@${esc(f.user.username)}</div></div></a>`).join('');
-  $('#notifs').innerHTML = (!activity && !likes && !follows)
+  const news = await api('/announcements', { noAuthPrompt: true }).catch(() => ({ announcements: [], lastSeenId: 0 }));
+  const newsHtml = news.announcements.slice(0, 3).map((a) => `<a class="notif${a.id > news.lastSeenId ? ' unread' : ''}" href="#/news/${a.id}">
+      <span class="notif-icon ${a.level === 'important' ? 'important' : 'news'}">${icon('megaphone')}</span>
+      <div class="notif-body"><div class="notif-text"><b>${esc(a.title)}</b></div><div class="notif-quote">IppO 運営${a.level === 'important' ? ' · 重要' : ''}</div></div>
+      <time>${timeAgo(a.createdAt)}</time></a>`).join('');
+  const newsSection = newsHtml ? `<div class="section-row"><h2 class="section-title">運営からのお知らせ</h2><a class="link-sm" href="#/news">すべて見る</a></div><div class="list-card">${newsHtml}</div>` : '';
+  $('#notifs').innerHTML = newsSection + ((!activity && !likes && !follows)
     ? emptyState({ icon: 'bell', title: 'まだ通知はありません', text: 'コメントやいいね、フォローがあるとここでお知らせします。' })
     : (activity ? `<h2 class="section-title">アクティビティ</h2><div class="list-card">${activity}</div>` : '') +
       (likes ? `<h2 class="section-title">いいね</h2><div class="list-card">${likes}</div>` : '') +
-      (follows ? `<h2 class="section-title">新しいフォロワー</h2><div class="list-card">${follows}</div>` : '');
+      (follows ? `<h2 class="section-title">新しいフォロワー</h2><div class="list-card">${follows}</div>` : ''));
 }
+
+// =====================================================================
+// 運営からのお知らせ
+// =====================================================================
+const fmtDate = (t) => new Date(t).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+const announceChips = (a) => `${a.level === 'important' ? '<span class="chip chip-danger">重要</span>' : '<span class="chip chip-accent">お知らせ</span>'}${a.pinned ? `<span class="chip">${icon('pin')}固定</span>` : ''}`;
+async function markAnnouncementsSeen(upTo) {
+  if (!me) return;
+  try { await api('/announcements/seen', { method: 'POST', body: { upTo } }); } catch {}
+  refreshBadges(true);
+}
+// ホームのバナー (固定されたお知らせ、または未読の重要なお知らせ)。× で閉じるとこの端末では出さない
+async function loadAnnounceBanner() {
+  const el = $('#announce-banner');
+  if (!el) return;
+  let s;
+  try { s = await api('/announcements/summary', { noAuthPrompt: true }); } catch { return; }
+  const a = s.banner;
+  const key = a ? `${a.id}:${a.updatedAt}` : '';
+  if (!a || store.get('ippo_banner_closed', []).includes(key)) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="announce-banner ${a.level}">
+    <span class="announce-banner-icon">${icon('megaphone')}</span>
+    <a class="announce-banner-body" href="#/news/${a.id}">
+      <span class="announce-banner-label">運営からのお知らせ${a.level === 'important' ? ' · 重要' : ''}</span>
+      <b>${esc(a.title)}</b>
+      <span class="announce-banner-text">${esc(a.body.replace(/\s+/g, ' ').slice(0, 80))}${a.body.length > 80 ? '…' : ''}</span>
+    </a>
+    <button class="icon-btn" type="button" aria-label="閉じる" id="announce-close">${icon('x')}</button></div>`;
+  $('#announce-close').addEventListener('click', () => {
+    store.set('ippo_banner_closed', [key, ...store.get('ippo_banner_closed', [])].slice(0, 30));
+    el.firstElementChild.classList.add('closing');
+    setTimeout(() => { el.innerHTML = ''; }, 200);
+    if (a.id > s.lastSeenId) markAnnouncementsSeen(a.id);
+  });
+}
+function announceCard(a, lastSeenId, full = false) {
+  const unread = me && a.id > lastSeenId;
+  const body = full ? richText(a.body) : esc(a.body.length > 140 ? a.body.slice(0, 140) + '…' : a.body);
+  return `<article class="card announce ${a.level}${unread ? ' unread' : ''}" data-id="${a.id}">
+    <div class="announce-head">
+      <span class="announce-from"><span class="brand-mark sm"></span><b>IppO 運営</b></span>
+      <span class="announce-chips">${announceChips(a)}${unread ? '<span class="chip chip-new">NEW</span>' : ''}</span>
+    </div>
+    ${full ? `<h2 class="announce-title">${esc(a.title)}</h2>` : `<a class="announce-title" href="#/news/${a.id}">${esc(a.title)}</a>`}
+    <div class="announce-body${full ? '' : ' clamp'}">${body}</div>
+    <div class="announce-foot"><time>${fmtDate(a.createdAt)}${a.edited ? '（編集済み）' : ''}</time>
+      ${full ? '' : `<a class="link-sm" href="#/news/${a.id}">続きを読む</a>`}
+      <span class="spacer"></span>
+      <span class="announce-admin"></span></div>
+  </article>`;
+}
+function bindAnnounceAdmin(root, list, canManage, reload) {
+  if (!canManage) return;
+  $$('.announce[data-id]', root).forEach((card) => {
+    const a = list.find((x) => x.id === Number(card.dataset.id));
+    const slot = $('.announce-admin', card);
+    slot.innerHTML = `<button class="icon-btn" type="button" data-menu aria-label="編集・削除">${icon('more')}</button>`;
+    $('button', slot).addEventListener('click', (e) => openMenu(e.currentTarget, [
+      { icon: 'edit', label: '編集する', run: () => editAnnouncement(a, reload) },
+      { icon: 'trash', label: '削除する', danger: true, run: async () => {
+        if (!(await confirmDialog({ title: 'お知らせを削除しますか？', body: `「${a.title}」を削除します。元に戻せません。`, ok: '削除する', danger: true }))) return;
+        try { await api('/admin/announcements/' + a.id, { method: 'DELETE' }); toast('お知らせを削除しました'); reload(); } catch (err) { toast(err.message, 'error'); }
+      } },
+    ]));
+  });
+}
+// お知らせを書く / 編集する (管理者)
+function editAnnouncement(a, done) {
+  openPanel(a ? 'お知らせを編集' : 'お知らせを書く', `<form class="form-stack" id="announce-form">
+      <label class="field"><span class="field-label">タイトル</span><input class="input" name="title" maxlength="60" required value="${esc(a?.title || '')}" placeholder="例: 期末考査期間中のお願い"></label>
+      <label class="field"><span class="field-label">本文</span><textarea class="textarea" name="body" rows="7" maxlength="2000" required placeholder="生徒のみなさんに伝えたいことを書いてください">${esc(a?.body || '')}</textarea><span class="field-hint" id="announce-count"></span></label>
+      <div class="field"><span class="field-label">重要度</span>
+        <div class="segmented">${[['info', '通常のお知らせ'], ['important', '重要']].map(([v, l]) => `<button type="button" class="seg${(a?.level || 'info') === v ? ' active' : ''}" data-level="${v}">${l}</button>`).join('')}</div></div>
+      <label class="choice"><input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''}><span><b>ホームの上部に固定する</b><small>全員のホームにバナーとして表示し続けます（閉じた人には出ません）</small></span></label>
+      <p class="field-hint">${a ? '編集しても、もう一度通知は送られません。' : '公開すると、IppO を開いている人にすぐ通知されます。'}</p>
+      <p class="form-error" id="announce-error"></p>
+      <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>キャンセル</button><button class="btn btn-primary" type="submit">${a ? '保存する' : '公開する'}</button></div>
+    </form>`, (root, close) => {
+    const f = $('#announce-form', root);
+    let level = a?.level || 'info';
+    $$('[data-level]', root).forEach((b) => b.addEventListener('click', () => { level = b.dataset.level; $$('[data-level]', root).forEach((x) => x.classList.toggle('active', x === b)); }));
+    const cnt = $('#announce-count', root), upd = () => { cnt.textContent = `${[...f.body.value].length} / 2000`; };
+    f.body.addEventListener('input', upd); upd();
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = { title: f.title.value, body: f.body.value, level, pinned: f.pinned.checked };
+      try {
+        await api(a ? '/admin/announcements/' + a.id : '/admin/announcements', { method: a ? 'PATCH' : 'POST', body });
+        close(); toast(a ? 'お知らせを更新しました' : 'お知らせを公開しました', 'success'); done && done();
+      } catch (err) { $('#announce-error', root).textContent = err.message; }
+    });
+  });
+}
+async function viewNews() {
+  main.innerHTML = pageHead({ title: 'お知らせ', sub: 'IppO 運営から', actions: '<span id="news-actions"></span>' }) + `<div class="content stack" id="news">${skeletonPosts(1)}</div>`;
+  let r;
+  try { r = await api('/announcements', { noAuthPrompt: true }); } catch (e) { $('#news').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  if (r.canManage) {
+    $('#news-actions').innerHTML = `<button class="btn btn-primary btn-sm" type="button" id="news-new">${icon('plus')}書く</button>`;
+    $('#news-new').addEventListener('click', () => editAnnouncement(null, viewNews));
+  }
+  $('#news').innerHTML = r.announcements.length ? r.announcements.map((a) => announceCard(a, r.lastSeenId)).join('')
+    : emptyState({ icon: 'megaphone', title: 'お知らせはまだありません', text: r.canManage ? '右上の「書く」から、全員へのお知らせを公開できます。' : '運営からのお知らせがあると、ここに表示されます。' });
+  bindAnnounceAdmin($('#news'), r.announcements, r.canManage, viewNews);
+  const max = Math.max(0, ...r.announcements.map((a) => a.id));
+  if (max > r.lastSeenId) markAnnouncementsSeen(max);
+}
+async function viewNewsItem(id) {
+  main.innerHTML = pageHead({ title: 'お知らせ', back: '#/news' }) + `<div class="content" id="news-item">${skeletonPosts(1)}</div>`;
+  let r;
+  try { r = await api('/announcements/' + id, { noAuthPrompt: true }); } catch (e) { $('#news-item').innerHTML = emptyState({ icon: 'megaphone', title: e.message }); return; }
+  $('#news-item').innerHTML = announceCard(r.announcement, Infinity, true);
+  bindAnnounceAdmin($('#news-item'), [r.announcement], r.canManage, () => viewNewsItem(id));
+  markAnnouncementsSeen(r.announcement.id);
+}
+// 新しいお知らせはすぐに知らせる
+RT.on((m) => {
+  if (m.t === 'announce') {
+    toast(`${m.level === 'important' ? '【重要】' : ''}運営からのお知らせ: ${m.title}`);
+    refreshBadges(true);
+    if (location.hash === '#/' || location.hash === '' || location.hash === '#') loadAnnounceBanner();
+    if (location.hash === '#/news') viewNews();
+  } else if (m.t === 'announce-update') {
+    if (location.hash === '#/' || location.hash === '') loadAnnounceBanner();
+    if (location.hash === '#/news') viewNews();
+  }
+});
 
 // =====================================================================
 // 今日の質問
@@ -2174,6 +2313,8 @@ function route() {
     return viewCommunities();
   }
   if (h === '/q') { setActiveNav('search'); return viewQuestion(); }
+  if (h === '/news') { setActiveNav('news'); return viewNews(); }
+  if ((m = h.match(/^\/news\/(\d+)/))) { setActiveNav('news'); return viewNewsItem(m[1]); }
   if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }

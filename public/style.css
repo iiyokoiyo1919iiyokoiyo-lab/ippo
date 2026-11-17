@@ -1024,3 +1024,37 @@ a.list-item:hover, button.list-item:hover { background: var(--surface-2); }
 .av-emoji-btn { aspect-ratio: 1; border: 0; border-radius: var(--r-sm); background: var(--surface-2); font-size: 22px; cursor: pointer; display: grid; place-items: center; transition: background var(--t1), transform var(--t1); }
 .av-emoji-btn:hover { background: var(--surface-3); }
 .av-emoji-btn.on { background: var(--accent-soft-2); box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* 運営からのお知らせ */
+.chip-danger { background: var(--danger-soft); color: var(--danger); }
+.chip-new { background: var(--like); color: #fff; }
+.brand-mark.sm { width: 18px; height: 18px; border-width: 3.5px; }
+.brand-mark.sm::after { width: 4px; height: 4px; }
+.announce-banner { display: flex; align-items: center; gap: var(--s3); padding: 12px 8px 12px 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); box-shadow: var(--sh-1); animation: postIn var(--t3) var(--ease); }
+.announce-banner.important { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.announce-banner.closing { animation: postOut var(--t2) var(--ease) forwards; }
+.announce-banner-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-text); }
+.announce-banner.important .announce-banner-icon { background: var(--danger-soft); color: var(--danger); }
+.announce-banner-body { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.4; color: var(--text); text-decoration: none !important; }
+.announce-banner-label { font-size: var(--fs-xs); font-weight: 700; color: var(--accent-text); }
+.announce-banner.important .announce-banner-label { color: var(--danger); }
+.announce-banner-body b { font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.announce-banner-text { font-size: var(--fs-sm); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.announce { padding: var(--s4) var(--s5); }
+.announce.important { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.announce.unread { box-shadow: inset 3px 0 0 var(--accent), var(--sh-1); }
+.announce.important.unread { box-shadow: inset 3px 0 0 var(--danger), var(--sh-1); }
+.announce-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+.announce-from { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--primary); }
+.announce-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.announce-title { display: block; margin-top: var(--s3); font-size: var(--fs-lg); font-weight: 800; line-height: 1.45; color: var(--text); }
+h2.announce-title { font-size: var(--fs-xl); }
+a.announce-title:hover { color: var(--accent-text); }
+.announce-body { margin-top: var(--s2); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--lh-loose); color: var(--text-2); }
+.announce-body.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.announce-foot { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3); font-size: var(--fs-xs); color: var(--text-3); }
+.announce-foot .spacer { flex: 1; }
+.announce-admin .icon-btn { margin: -8px -10px -8px 0; }
+.notif-icon.news { background: var(--accent-soft); color: var(--accent-text); }
+.notif-icon.important { background: var(--danger-soft); color: var(--danger); }
+.section-row { display: flex; align-items: baseline; justify-content: space-between; padding-right: var(--s1); }
