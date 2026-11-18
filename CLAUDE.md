@@ -22,6 +22,7 @@
 ## CPU 戦「鬼難」の強さ
 - `cards.js` の `ONI_DECKS` の boost は「Lv18 の SSR・MR デッキで勝率 25% (誤差 5% 以内)」になるよう `node tools/tune_oni.js` で決めた
 - カードの能力・わざ・新キャラなど、対戦の強さが変わる変更をしたら、`node tools/tune_oni.js` で測り直して boost を更新する
+- 高難易度クエストは、1 番目・2 番目にクリアした人を公式アカウントが自動で表彰する (`cards.js` の `QUEST_AWARD_RANKS`、文章は `official.js` の `ctx.officialAward`)
 - 高難易度クエスト (`QUESTS` の `hard: true`) も同じ: 敵は先を読む CPU、`boost` は `node tools/tune_oni.js` の `quest:<id>` の結果を入れる
 
 ## そのほか

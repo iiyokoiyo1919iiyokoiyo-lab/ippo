@@ -450,6 +450,7 @@ if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number
 for (const q of QUESTS) { const k = 'CB_QUEST_' + q.id.toUpperCase().replace(/-/g, '_'); if (Number(process.env[k + '_START'])) q.start = Number(process.env[k + '_START']); if (Number(process.env[k + '_END'])) q.end = Number(process.env[k + '_END']); }
 // 特効: クエストの bonus にあるカードは、そのクエストの中だけ HP・攻撃・防御が上がる (UR に昇格したものも)
 const questBonus = (q, c) => { const k = !c.horse && q?.bonus?.[c.id]; return k ? { ...c, maxHp: Math.round(c.maxHp * k), atk: Math.round(c.atk * k), def: Math.round(c.def * k), bonus: k } : c; };
+const QUEST_AWARD_RANKS = 2; // 高難易度クエストで、公式アカウントが表彰する人数 (クリアした順)
 // クエストの敵のカード (高難易度は boost をかける。速さはそのまま)
 const questEnemyStats = (q, boost = q.boost || 1) => q.enemy.map(([id, lv]) => { const s = statsOf(id, lv); return boost === 1 ? s : { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
 const questsNow = (now = Date.now()) => QUESTS.filter((q) => now >= q.start && now < q.end);
@@ -801,6 +802,9 @@ function install(app, ctx) {
         db.prepare('INSERT INTO card_owned (user_id, card_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET count = count + 1').run(u, b.quest.reward);
         questReward = { ...statsOf(b.quest.reward, 1), skillName: SKILLS[CARDS[b.quest.reward].skill].name, skillDesc: SKILLS[CARDS[b.quest.reward].skill].desc };
         console.log(`[cards] user ${u} クエスト「${b.quest.name}」クリア`);
+        // 高難易度クエストは、1 番目と 2 番目にクリアした人を公式アカウントで表彰する
+        const rank = b.quest.hard ? db.prepare('SELECT COUNT(*) AS n FROM card_quests WHERE quest_id = ?').get(b.quest.id).n : 0;
+        if (rank >= 1 && rank <= QUEST_AWARD_RANKS) ctx.officialAward?.({ quest: b.quest, rank, user: db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(u), turns: b.state.turn, at: Date.now() });
       }
       const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : SCROLL_REWARD[res];
       if (scrolls) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(scrolls, u);

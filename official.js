@@ -206,6 +206,19 @@ module.exports = function install(app, ctx) {
       console.log(`[official] 投稿しました: ${e.key}`);
     }
   }
+  // ---------- 高難易度クエストの表彰 (cards.js が、1 番目・2 番目にクリアした人が出たときに呼ぶ) ----------
+  ctx.officialAward = ({ quest, rank, user, turns, at }) => {
+    const key = `quest-award:${quest.id}:${rank}`;
+    if (!user || posted.get(key)) return;
+    const mins = Math.max(0, Math.floor((at - quest.start) / 60000)), took = mins >= 60 ? `${Math.floor(mins / 60)} 時間 ${mins % 60} 分` : `${mins} 分`;
+    const r = cards.CARDS[quest.reward];
+    const text = `${rank === 1 ? '🏆【最速クリア】' : '🥈【2 番目にクリア】'}高難易度クエスト「${quest.name}」
+${rank === 1 ? 'いちばん最初にクリアしたのは' : '2 番目にクリアしたのは'} ${user.display_name || user.username} (@${user.username}) さん！
+開始から ${took}・${turns} ターンで撃破 ⚡ ${r.rarity}「${r.name}」をゲット！ おめでとうございます🎉 ${TAG}`;
+    const id = post(text, bannerName('quest', quest.id));
+    if (id) { db.prepare('INSERT OR IGNORE INTO official_posts (key, post_id, posted_at) VALUES (?, ?, ?)').run(key, id, Date.now()); console.log(`[official] 表彰しました: ${key} @${user.username}`); }
+  };
+
   setTimeout(tick, 3000).unref();
   setInterval(tick, Number(process.env.OFFICIAL_TICK_MS) || 30_000).unref();
 
