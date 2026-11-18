@@ -23,7 +23,7 @@ const SKILLS = {
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
-// レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
+// レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv15 で +28%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
 const RARITY = { N: { rate: 50, mult: 1.0 }, R: { rate: 35, mult: 1.04 }, SR: { rate: 12, mult: 1.08 }, SSR: { rate: 3, mult: 1.12 } };
@@ -72,7 +72,7 @@ const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
 const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => isReleased(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
-const MAX_LEVEL = 5;
+const MAX_LEVEL = 15; // レベルの上限 (同じカードを引く・レベルアップ書で上がる)
 
 // ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
 const UR_PROMOTE = { from: 'SSR', copies: 3 };
@@ -331,7 +331,7 @@ CREATE TABLE card_players (
 CREATE TABLE card_owned (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   card_id TEXT NOT NULL,
-  count INTEGER NOT NULL DEFAULT 1,            -- 持っている枚数 (レベル = 枚数。最大 5)
+  count INTEGER NOT NULL DEFAULT 1,            -- 持っている枚数 (レベル = 枚数 + レベルアップ書の分。最大 15)
   PRIMARY KEY (user_id, card_id)
 );
 CREATE TABLE card_pulls (
@@ -382,7 +382,7 @@ function rollHorse(rnd) {
 const HORSE_UR_CHANCE = { UR: 0.15, SSR: 0.08, SR: 0.04, R: 0.02, N: 0.01 };
 const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT NULL DEFAULT 'SSR';`; // 'SSR' か 'UR'
 // レベルアップ書: 試合をこなすともらえる (3 ターン以上戦った試合だけ。勝ち 2 枚・負けと引き分け 1 枚、こうさんした側は 0)。
-// レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv5
+// レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv15
 const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
 const SCROLL_MIGRATION = `
 ALTER TABLE card_players ADD COLUMN scrolls INTEGER NOT NULL DEFAULT 0;
