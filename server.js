@@ -82,7 +82,8 @@ function createSession(req, res, userId) {
 // 公開するユーザー情報 (管理者かどうかも含める: 名前の横に管理者バッジを出すため)
 const publicUser = (u) => u && { id: u.id, username: u.username, displayName: u.display_name, bio: u.bio, createdAt: u.created_at, isAdmin: isAdmin(u),
   avatar: ctx.avatarOf ? ctx.avatarOf(u.id) : null, // アイコン (写真 / 絵文字)。未設定なら null
-  verified: ctx.verifiedOf ? ctx.verifiedOf(u) : null }; // 認証マーク (管理者が付与)
+  verified: ctx.verifiedOf ? ctx.verifiedOf(u) : null, // 認証マーク (管理者が付与)
+  titles: ctx.titlesOf ? ctx.titlesOf(u) : [] }; // 称号 (高難易度クエストの最速クリアなど)
 // 管理者: 環境変数 ADMIN_USERS (カンマ区切りのユーザー名) で指定する。未設定なら RCN413
 const ADMINS = new Set(String(process.env.ADMIN_USERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
 const isAdmin = (u) => !!u && ADMINS.has(String(u.username).toLowerCase());

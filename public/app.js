@@ -60,6 +60,8 @@ function avatar(u, size = '', link = false) {
 const adminBadge = (u, withLabel = false) => (!u?.isAdmin ? ''
   : withLabel ? `<span class="admin-badge-label" title="IppO の管理者">${icon('badge')}管理者</span>`
   : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`) + verifiedBadge(u, withLabel);
+// 称号 (高難易度クエストの最速クリアなど)。文字はエスケープして出す
+const titleChips = (u, cls = '') => (u?.titles || []).map((t) => `<span class="user-title ${cls}" title="${esc(t.name)}">🏅${esc(t.name)}</span>`).join('');
 // 認証マーク (管理者が確認したアカウント。権限は増えない表示だけの印)
 function verifiedBadge(u, withLabel = false) {
   const v = u?.verified;
@@ -817,6 +819,7 @@ async function viewUser(username, tab = 'posts') {
         <div class="hero-top">${avatar(user, 'lg')}<div class="hero-actions">${actions}</div></div>
         <h2>${esc(user.displayName)}${adminBadge(user, true)}</h2>
         <div class="handle">@${esc(user.username)}</div>
+        ${(user.titles || []).length ? `<div class="user-titles">${titleChips(user)}</div>` : ''}
         ${user.bio ? `<p class="hero-bio">${richText(user.bio)}</p>` : isMe ? '<p class="hero-bio muted">自己紹介を書いてみましょう</p>' : ''}
         ${user.verified ? `<p class="verified-note">${icon('verified')}<span>IppO 運営が確認したアカウントです${user.verified.label ? `（${esc(user.verified.label)}）` : ''}</span></p>` : ''}
         ${horseNote(horse)}
@@ -3558,7 +3561,7 @@ async function viewBattle(params) {
     const mineS = state.sides[you], foeS = state.sides[1 - you], my = mineS.cards[mineS.active], skill = my.skillName ? my : cat?.cards.find((c) => c.id === my.id);
     const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
     const canSwitch = mineS.cards.some((c, i) => i !== mineS.active && c.hp > 0);
-    box().innerHTML = `<div class="cb-top">${avatar(players[1 - you], 'sm')}<b>${esc(players[1 - you].displayName)}</b>${bench(foeS, false)}</div>
+    box().innerHTML = `<div class="cb-top">${avatar(players[1 - you], 'sm')}<b>${esc(players[1 - you].displayName)}</b>${titleChips(players[1 - you], 'sm')}${bench(foeS, false)}</div>
       ${fighter(foeS.cards[foeS.active], false, `${1 - you}-${foeS.active}-${foeS.cards[foeS.active].id}`, foeS.meteor)}
       <div class="cb-log" aria-live="polite">${log.slice(-4).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="muted">バトル開始！</p>'}</div>
       ${fighter(my, true, `${you}-${mineS.active}-${my.id}`, mineS.meteor)}

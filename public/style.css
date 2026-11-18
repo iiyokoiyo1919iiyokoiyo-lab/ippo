@@ -1999,3 +1999,9 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-quest-bonus-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: .85rem; }
 .cb-quest-bonus-row .cb-svg { width: 52px; height: 52px; flex: none; }
 .cb-quest-bonus-row em { font-style: normal; font-weight: 900; color: #d9480f; font-size: 1.05rem; }
+
+/* 称号 */
+.user-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.user-title { display: inline-flex; align-items: center; gap: 2px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #5c3d00; background: linear-gradient(135deg, #fff3bf, #ffd43b 60%, #fab005); border: 1px solid #f59f00; box-shadow: 0 1px 0 rgba(120, 70, 0, .2); white-space: nowrap; }
+.user-title.sm { padding: 1px 7px; font-size: 10px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+:root[data-theme="dark"] .user-title { color: #3b2600; }

@@ -415,6 +415,16 @@ const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT N
 const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
 // Lv15 より上に上げた分 (レベルアップ書だけで上がる。同じカードを引いた分とは別に数える)
 const HIGH_LEVEL_MIGRATION = `ALTER TABLE card_owned ADD COLUMN lv_high INTEGER NOT NULL DEFAULT 0;`;
+// 称号 (高難易度クエストの最速クリアなど)。title は表示する名前、source はどこでもらったか
+const TITLE_MIGRATION = `
+CREATE TABLE user_titles (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  source TEXT NOT NULL,
+  granted_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, source)
+);
+`;
 // 試合ごとに使ったデッキ (カードの ID の JSON。CPU の側は NULL) を残して、採用率を「その期間の試合で使われた回数」で出す
 const BATTLE_DECK_MIGRATION = `
 ALTER TABLE card_battles ADD COLUMN d1 TEXT;
@@ -443,6 +453,7 @@ const QUESTS = [
     text: '雷鳴とともに現れた魔人「雷神クリりん」。落雷はどんな相性でも 2.3 倍！ 勝てば MR「雷神クリりん」が仲間になる',
     tip: '敵は 3 体とも ✂️きる タイプ。🪨おもい のカード、とくにタドコロが有利！ タドコロの「野獣の眼光」で怯ませると、次のターンの落雷 (相性に関係なく 2.3 倍) を止められる。敵は先を読む強い CPU なので、ガードと交代のタイミングが勝負！',
     enemy: [['raijin', 20], ['scissors', 20], ['gold', 20]],
+    titles: { 1: '栗りん最速クリア🌰', 2: '栗りん準最速クリア🌰' }, // 1 番目・2 番目にクリアした人の称号 (プロフィールなどに出る)
     start: Date.parse('2026-11-19T08:00:00+09:00'), end: Date.parse('2026-11-22T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
@@ -492,6 +503,7 @@ function install(app, ctx) {
     db.migrate('2026-11-25-horse-exclusive-skills', HORSE_SKILL_FIX);
     db.migrate('2026-11-26-card-high-level', HIGH_LEVEL_MIGRATION);
     db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
+    db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
@@ -510,7 +522,10 @@ function install(app, ctx) {
   const dayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return d.getTime() - 9 * 3600_000; };
   const HORSES_PER_DAY = 3; // 1 日に連れてこられる馬の数 (日本時間の 0 時に回復)
   const horsesLeft = (uid) => Math.max(0, HORSES_PER_DAY - db.prepare('SELECT COUNT(*) AS n FROM card_horses WHERE user_id = ? AND created_at >= ?').get(uid, dayStart()).n);
-  const userView = (id) => { const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, isAdmin: u.isAdmin, verified: u.verified }; };
+  // 称号: プロフィール・対戦の名前の横に出す (古いものから)
+  const qTitles = db.prepare('SELECT title, source, granted_at FROM user_titles WHERE user_id = ? ORDER BY granted_at');
+  ctx.titlesOf = (u) => qTitles.all(u.id).map((r) => ({ name: r.title, source: r.source, at: r.granted_at }));
+  const userView = (id) => { const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, isAdmin: u.isAdmin, verified: u.verified, titles: u.titles || [] }; };
 
   // はじめて遊ぶ人には、コインとはじめの 3 枚を渡す
   const qPlayer = db.prepare('SELECT * FROM card_players WHERE user_id = ?');
@@ -804,7 +819,9 @@ function install(app, ctx) {
         console.log(`[cards] user ${u} クエスト「${b.quest.name}」クリア`);
         // 高難易度クエストは、1 番目と 2 番目にクリアした人を公式アカウントで表彰する
         const rank = b.quest.hard ? db.prepare('SELECT COUNT(*) AS n FROM card_quests WHERE quest_id = ?').get(b.quest.id).n : 0;
-        if (rank >= 1 && rank <= QUEST_AWARD_RANKS) ctx.officialAward?.({ quest: b.quest, rank, user: db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(u), turns: b.state.turn, at: Date.now() });
+        const title = rank >= 1 && b.quest.titles?.[rank];
+        if (title) db.prepare('INSERT OR IGNORE INTO user_titles (user_id, title, source, granted_at) VALUES (?, ?, ?, ?)').run(u, title, `quest:${b.quest.id}:${rank}`, Date.now());
+        if (rank >= 1 && rank <= QUEST_AWARD_RANKS) ctx.officialAward?.({ title: title || null, quest: b.quest, rank, user: db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(u), turns: b.state.turn, at: Date.now() });
       }
       const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : SCROLL_REWARD[res];
       if (scrolls) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(scrolls, u);
@@ -889,7 +906,7 @@ function install(app, ctx) {
   ctx.eraseCards = (uid) => {
     leave(uid);
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
-    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses', 'card_quests']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
+    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses', 'card_quests', 'user_titles']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
     db.prepare('UPDATE card_battles SET p1 = NULL WHERE p1 = ?').run(uid);
     db.prepare('UPDATE card_battles SET p2 = NULL WHERE p2 = ?').run(uid);
   };
