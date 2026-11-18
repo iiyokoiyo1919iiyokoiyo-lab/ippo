@@ -1942,3 +1942,8 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .hs-cut.hero .hs-title { animation: cb-shout 2.2s cubic-bezier(.2, 1.6, .4, 1) .3s both; }
 .hs-skip { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: rgba(255, 255, 255, .6); font-size: 13px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .hs-cut { display: none; } }
+
+/* レベル上げ: 目標のレベルを選ぶ */
+.cb-lvup-pick { display: flex; align-items: center; gap: 12px; }
+.cb-lvup-pick .btn { min-width: 40px; font-size: 18px; }
+.cb-lvup-quick { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }

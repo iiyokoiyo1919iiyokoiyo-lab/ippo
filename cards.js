@@ -72,7 +72,10 @@ const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
 const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => isReleased(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
-const MAX_LEVEL = 15; // レベルの上限 (同じカードを引く・レベルアップ書で上がる)
+// レベル: Lv15 までは、同じカードを引くか、レベルアップ書 (今のレベルと同じ枚数) で上がる。
+// Lv16〜20 はレベルアップ書だけで上がり、1 つにつき 50 枚 (同じカードを引いても Lv15 より上には上がらない)
+const MAX_LEVEL = 20, DUP_MAX_LEVEL = 15, HIGH_LEVEL_COST = 50;
+const levelCost = (lv) => (lv < DUP_MAX_LEVEL ? lv : HIGH_LEVEL_COST); // Lv lv → lv+1 に使うレベルアップ書の枚数
 
 // ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
 const UR_PROMOTE = { from: 'SSR', copies: 3 };
@@ -384,6 +387,8 @@ const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT N
 // レベルアップ書: 試合をこなすともらえる (3 ターン以上戦った試合だけ。勝ち 2 枚・負けと引き分け 1 枚、こうさんした側は 0)。
 // レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv15
 const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
+// Lv15 より上に上げた分 (レベルアップ書だけで上がる。同じカードを引いた分とは別に数える)
+const HIGH_LEVEL_MIGRATION = `ALTER TABLE card_owned ADD COLUMN lv_high INTEGER NOT NULL DEFAULT 0;`;
 const SCROLL_MIGRATION = `
 ALTER TABLE card_players ADD COLUMN scrolls INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE card_owned ADD COLUMN lv_bonus INTEGER NOT NULL DEFAULT 0;   -- レベルアップ書で上げた分
@@ -424,6 +429,7 @@ function install(app, ctx) {
   db.migrate('2026-11-24-card-quests', QUEST_MIGRATION);
   { const n = db.prepare("SELECT COUNT(*) AS n FROM card_horses WHERE skill IN ('sweep', 'starlight')").get().n;
     db.migrate('2026-11-25-horse-exclusive-skills', HORSE_SKILL_FIX);
+    db.migrate('2026-11-26-card-high-level', HIGH_LEVEL_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end,
@@ -457,7 +463,8 @@ function install(app, ctx) {
   }
   const copiesOf = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, r.count]));
   const urOf = (uid) => Object.entries(copiesOf(uid)).filter(([id, n]) => isPromoted(id, n)).map(([id]) => id);
-  const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count, lv_bonus FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, Math.min(MAX_LEVEL, r.count + r.lv_bonus)]));
+  const levelOfRow = (r) => Math.min(DUP_MAX_LEVEL, r.count + r.lv_bonus) + Math.min(MAX_LEVEL - DUP_MAX_LEVEL, r.lv_high || 0);
+  const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count, lv_bonus, lv_high FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, levelOfRow(r)]));
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
@@ -475,7 +482,7 @@ function install(app, ctx) {
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
   // 開催中のクエスト (敵のデッキ・報酬)
@@ -514,7 +521,9 @@ function install(app, ctx) {
     const results = r.cards.map((c) => {
       const prev = seen[c.id] || 0, n = (copies[c.id] || 0) + 1; seen[c.id] = prev + 1; copies[c.id] = n;
       const ur = isPromoted(c.id, n);
-      return { ...statsOf(c.id, Math.min(prev + 1, MAX_LEVEL), ur), level: Math.min(prev + 1, MAX_LEVEL), copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < MAX_LEVEL, urUp: ur && n === UR_PROMOTE.copies };
+      const lv = prev >= DUP_MAX_LEVEL ? prev : prev + 1; // Lv15 より上は、引いても上がらない
+      seen[c.id] = lv;
+      return { ...statsOf(c.id, lv, ur), level: lv, copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < DUP_MAX_LEVEL, urUp: ur && n === UR_PROMOTE.copies };
     });
     if (results.some((c) => c.urUp)) console.log(`[cards] @${req.user.username} UR に昇格: ${results.filter((c) => c.urUp).map((c) => c.id).join(',')}`);
     console.log(`[cards] @${req.user.username} ガチャ ${n} 回: ${r.cards.map((c) => c.rarity).join(',')}`);
@@ -548,6 +557,7 @@ function install(app, ctx) {
   });
 
   // ---------- レベルアップ書でレベルを上げる (Lv n → n+1 に n 枚) ----------
+  // body: { id, to? }  to を書くと、そのレベルまでまとめて上げる (なければ 1 つ)
   app.post('/api/cards/levelup', requireAuth, writeLimit, (req, res) => {
     const id = String(req.body?.id || ''), uid = req.user.id, p = player(uid);
     let level, apply;
@@ -555,23 +565,27 @@ function install(app, ctx) {
       const h = qHorse.get(id.slice(2));
       if (!h || h.user_id !== uid) return res.status(404).json({ error: 'そのカードは持っていません' });
       level = Math.min(h.level || 1, MAX_LEVEL);
-      apply = () => db.prepare('UPDATE card_horses SET level = level + 1 WHERE id = ? AND user_id = ?').run(h.id, uid);
+      apply = (from) => db.prepare('UPDATE card_horses SET level = ? WHERE id = ? AND user_id = ?').run(from + 1, h.id, uid);
     } else {
-      level = owned(uid)[id];
-      if (!level) return res.status(404).json({ error: 'そのカードは持っていません' });
-      apply = () => db.prepare('UPDATE card_owned SET lv_bonus = lv_bonus + 1 WHERE user_id = ? AND card_id = ?').run(uid, id);
+      const row = db.prepare('SELECT count, lv_bonus, lv_high FROM card_owned WHERE user_id = ? AND card_id = ?').get(uid, id);
+      if (!row || !CARDS[id]) return res.status(404).json({ error: 'そのカードは持っていません' });
+      level = levelOfRow(row);
+      // Lv15 までは lv_bonus、Lv15 より上は lv_high をふやす
+      apply = (from) => db.prepare(`UPDATE card_owned SET ${from < DUP_MAX_LEVEL ? 'lv_bonus = lv_bonus + 1' : 'lv_high = lv_high + 1'} WHERE user_id = ? AND card_id = ?`).run(uid, id);
     }
     if (level >= MAX_LEVEL) return res.status(400).json({ error: `もう最大のレベル (Lv${MAX_LEVEL}) です` });
-    const cost = level;
+    const to = req.body?.to == null ? level + 1 : Number(req.body.to);
+    if (!Number.isInteger(to) || to <= level || to > MAX_LEVEL) return res.status(400).json({ error: `Lv${level + 1}〜${MAX_LEVEL} のあいだで選んでください` });
+    let cost = 0; for (let l = level; l < to; l++) cost += levelCost(l);
     if (p.scrolls < cost) return res.status(400).json({ error: `レベルアップ書が足りません (あと ${cost - p.scrolls} 枚)` });
     db.exec('BEGIN');
     try {
       if (!db.prepare('UPDATE card_players SET scrolls = scrolls - ? WHERE user_id = ? AND scrolls >= ?').run(cost, uid, cost).changes) throw new Error('scrolls');
-      apply();
+      for (let l = level; l < to; l++) apply(l);
       db.exec('COMMIT');
     } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: 'レベルアップ書が足りません' }); }
-    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, level + 1, urOf(uid).includes(id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
-    res.json({ card, from: level, to: level + 1, used: cost, ...me(uid) });
+    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, to, urOf(uid).includes(id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
+    res.json({ card, from: level, to, used: cost, ...me(uid) });
   });
 
   // デッキ (持っているカード 3 枚。同じカードは 1 枚まで)
@@ -783,4 +797,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

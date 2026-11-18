@@ -3295,7 +3295,7 @@ async function viewGacha() {
           const parts = [...pick.map((c) => `ピックアップ ${esc(c.name)} ${cat.perCard[c.id].toFixed(2)}%`), up.length ? `確率アップ 1体 ${cat.perCard[up[0].id].toFixed(2)}%` : '', normal.length && (pick.length || up.length) ? `ほか 1体 ${cat.perCard[normal[0].id].toFixed(2)}%` : ''].filter(Boolean);
           return `<div><span class="cb-rbadge" style="--rc:${CB_RCOL[r]}">${r}</span><b>${Number(v.toFixed(2))}%</b><small>${list.length}種類 · ${parts.length ? parts.join(' / ') : `1種類あたり ${(v / list.length).toFixed(2)}%`}</small></div>`; }).join('')}</div>
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
-          <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、最大 Lv${cat.maxLevel})</li>
+          <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、同じカードで上がるのは Lv${cat.dupMaxLevel || 15} まで。Lv${cat.maxLevel} まではレベルアップ書で)</li>
           <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
           <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
           ${(cat.pickups || []).map((x) => `<li>${esc(x.name)}: ${esc(cat.cards.find((c) => c.id === x.id)?.name || '')} 1体の出る確率が ${x.rate}%。ほかのキャラは元の確率のままで、ふえた分だけ ほかのレア度の確率が少し下がります</li>`).join('')}
@@ -3347,7 +3347,7 @@ async function viewCollection() {
     const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...mine.horses].map((c) => [c.id, c]));
     const root = $('#cbc'); if (!root) return;
     const have = cat.cards.filter((c) => mine.owned[c.id]).length;
-    const pickCls = (c) => 'pick' + (mode === 'deck' && deck.includes(c.id) ? ' chosen' : '') + (mode === 'level' ? (lvOf(c) >= cat.maxLevel ? ' maxed' : lvOf(c) <= mine.scrolls ? ' can-lv' : '') : '');
+    const pickCls = (c) => 'pick' + (mode === 'deck' && deck.includes(c.id) ? ' chosen' : '') + (mode === 'level' ? (lvOf(c) >= cat.maxLevel ? ' maxed' : costOf(lvOf(c)) <= mine.scrolls ? ' can-lv' : '') : '');
     root.innerHTML = `<div class="segmented cb-mode" role="tablist">
         <button type="button" class="seg${mode === 'deck' ? ' active' : ''}" data-mode="deck">デッキ編成</button>
         <button type="button" class="seg${mode === 'level' ? ' active' : ''}" data-mode="level">📜 レベル上げ</button></div>
@@ -3357,7 +3357,7 @@ async function viewCollection() {
         <div class="cb-deck">${[0, 1, 2].map((i) => deck[i] && C[deck[i]] ? cbCard(C[deck[i]], { small: true, level: lvOf(C[deck[i]]), attrs: `data-slot="${i}"`, cls: 'pick' }) : `<div class="cb-card empty sm">${i + 1}枚目</div>`).join('')}</div>
       </section>`
       : `<section class="card card-pad cb-scrollbox"><div class="cb-scroll-have">📜 レベルアップ書 <b>${mine.scrolls}</b> 枚</div>
-        <p class="text-xs muted">レベルを上げたいカードをタップ。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。最大 Lv${cat.maxLevel}。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
+        <p class="text-xs muted">レベルを上げたいカードをタップ (何レベルかまとめて上げられます)。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。<b>Lv${cat.dupMaxLevel || 15} → ${cat.maxLevel} は 1 つにつき ${cat.highLevelCost || 50} 枚</b> (同じカードを引いても Lv${cat.dupMaxLevel || 15} より上には上がりません)。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
       <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
@@ -3379,32 +3379,53 @@ async function viewCollection() {
     });
   };
   // レベルアップ書を使う (確認してから)
+  // レベルアップ書を使う: 目標のレベルを選んで、まとめて上げられる
+  const costOf = (lv) => (lv < (cat.dupMaxLevel || 15) ? lv : (cat.highLevelCost || 50));
+  const costTo = (from, to) => { let n = 0; for (let l = from; l < to; l++) n += costOf(l); return n; };
   function levelUp(c) {
     const lv = lvOf(c);
     if (lv >= cat.maxLevel) return toast(`${c.name} はもう最大のレベル (Lv${cat.maxLevel}) です`);
-    const cost = lv, enough = mine.scrolls >= cost;
-    const r = (1 + cat.levelBonus * lv) / (1 + cat.levelBonus * (lv - 1)); // 次のレベルでの能力の倍率
-    const cur = c.horse ? c : { ...c, maxHp: Math.round(c.maxHp * (1 + cat.levelBonus * (lv - 1))), atk: Math.round(c.atk * (1 + cat.levelBonus * (lv - 1))), def: Math.round(c.def * (1 + cat.levelBonus * (lv - 1))) };
-    const nx = (v) => Math.round(v * r);
+    let reach = lv; while (reach < cat.maxLevel && costTo(lv, reach + 1) <= mine.scrolls) reach++;   // 今の書で上げられる最高のレベル
+    let to = lv + 1;  // はじめは +1 (まとめて上げるときは選ぶ)
+    const mul = (l) => 1 + cat.levelBonus * (l - 1);
+    const base = c.horse ? { maxHp: c.maxHp / mul(lv), atk: c.atk / mul(lv), def: c.def / mul(lv) } : c;  // Lv1 の能力
+    const at = (l) => ({ maxHp: Math.round(base.maxHp * mul(l)), atk: Math.round(base.atk * mul(l)), def: Math.round(base.def * mul(l)) });
     openPanel('レベルを上げる', `<div class="cb-lvup">
         <div class="cb-lvup-card">${cbCard(c, { level: lv })}</div>
-        <p class="cb-lvup-lv">Lv${lv} → <b>Lv${lv + 1}</b></p>
-        <div class="cb-lvup-stats"><span>HP ${cur.maxHp} → <b>${nx(cur.maxHp)}</b></span><span>攻 ${cur.atk} → <b>${nx(cur.atk)}</b></span><span>防 ${cur.def} → <b>${nx(cur.def)}</b></span></div>
-        <p class="text-sm">📜 レベルアップ書を <b>${cost}</b> 枚使います (持っている: ${mine.scrolls} 枚)</p>
+        <div class="cb-lvup-pick"><button class="btn btn-outline btn-sm" type="button" data-step="-1" aria-label="1 つ下げる">−</button>
+          <p class="cb-lvup-lv">Lv${lv} → <b id="cb-lvto"></b></p>
+          <button class="btn btn-outline btn-sm" type="button" data-step="1" aria-label="1 つ上げる">＋</button></div>
+        <div class="cb-lvup-quick"><button class="btn btn-ghost btn-sm" type="button" data-to="${lv + 1}">+1</button>
+          ${reach > lv + 1 ? `<button class="btn btn-ghost btn-sm" type="button" data-to="${reach}">上げられるだけ (Lv${reach})</button>` : ''}
+          <button class="btn btn-ghost btn-sm" type="button" data-to="${cat.maxLevel}">最大 (Lv${cat.maxLevel})</button></div>
+        <div class="cb-lvup-stats" id="cb-lvstats"></div>
+        <p class="text-sm" id="cb-lvcost"></p>
+        <p class="text-xs muted" style="margin:0">Lv${cat.dupMaxLevel || 15} までは今のレベルと同じ枚数、Lv${cat.dupMaxLevel || 15} → ${cat.maxLevel} は 1 つにつき ${cat.highLevelCost || 50} 枚</p>
         <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button>
-          <button class="btn btn-primary" type="button" id="cb-lvgo" ${enough ? '' : 'disabled'}>${enough ? 'レベルアップ！' : `あと ${cost - mine.scrolls} 枚たりません`}</button></div></div>`, (root, close) => {
+          <button class="btn btn-primary" type="button" id="cb-lvgo"></button></div></div>`, (root, close) => {
       let done = false;
-      $('#cb-lvgo', root)?.addEventListener('click', async (e) => {
+      const show = () => {
+        const cost = costTo(lv, to), enough = mine.scrolls >= cost, a = at(lv), b = at(to);
+        $('#cb-lvto', root).textContent = `Lv${to}`;
+        $('#cb-lvstats', root).innerHTML = `<span>HP ${a.maxHp} → <b>${b.maxHp}</b></span><span>攻 ${a.atk} → <b>${b.atk}</b></span><span>防 ${a.def} → <b>${b.def}</b></span>`;
+        $('#cb-lvcost', root).innerHTML = `📜 レベルアップ書を <b>${cost}</b> 枚使います (持っている: ${mine.scrolls} 枚)`;
+        const go = $('#cb-lvgo', root); go.disabled = !enough; go.textContent = enough ? (to - lv > 1 ? `Lv${to} まで一気に上げる！` : 'レベルアップ！') : `あと ${cost - mine.scrolls} 枚たりません`;
+        $('[data-step="-1"]', root).disabled = to <= lv + 1; $('[data-step="1"]', root).disabled = to >= cat.maxLevel;
+      };
+      show();
+      $$('[data-step]', root).forEach((b) => b.addEventListener('click', () => { to = Math.min(cat.maxLevel, Math.max(lv + 1, to + Number(b.dataset.step))); show(); }));
+      $$('[data-to]', root).forEach((b) => b.addEventListener('click', () => { to = Number(b.dataset.to); show(); }));
+      $('#cb-lvgo', root).addEventListener('click', async (e) => {
         if (done) return close(); // 2 回目のタップは「OK」(とじるだけ)
         e.target.disabled = true;
         try {
-          const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id } });
+          const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id, to } });
           mine = res;
           $('.cb-lvup-card', root).innerHTML = cbCard(res.card.horse ? res.card : C2(res.card.id), { level: res.to, cls: 'lv-flash' });
-          $('.cb-lvup-lv', root).innerHTML = `<span class="cb-lvup-shout">Lv${res.to} にレベルアップ！</span>`;
-          $$('.cb-lvup-stats, .cb-lvup > p.text-sm', root).forEach((x) => x.remove());
+          $('.cb-lvup-pick', root).innerHTML = `<p class="cb-lvup-lv"><span class="cb-lvup-shout">Lv${res.to} にレベルアップ！</span></p>`;
+          $$('.cb-lvup-quick, #cb-lvstats, #cb-lvcost, .cb-lvup > p.text-xs', root).forEach((x) => x.remove());
           done = true; e.target.textContent = 'OK'; e.target.disabled = false;
-          cbConfetti(root, 40, ['#ffd43b', '#74c0fc', '#8ce99a', '#fff']);
+          cbConfetti(root, res.to - res.from > 1 ? 90 : 40, ['#ffd43b', '#74c0fc', '#8ce99a', '#fff']);
           render();
         } catch (err) { toast(err.message, 'error'); close(); }
       });
