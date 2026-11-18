@@ -210,7 +210,7 @@ module.exports = function install(app, ctx) {
   ctx.officialAward = ({ quest, rank, user, turns, at, title }) => {
     const key = `quest-award:${quest.id}:${rank}`;
     if (!user || posted.get(key)) return;
-    const mins = Math.max(0, Math.floor((at - quest.start) / 60000)), took = mins >= 60 ? `${Math.floor(mins / 60)} 時間 ${mins % 60} 分` : `${mins} 分`;
+    const mins = Math.max(0, Math.floor((at - quest.start) / 60000)), took = mins >= 1440 ? `${Math.floor(mins / 1440)} 日 ${Math.floor(mins / 60) % 24} 時間` : mins >= 60 ? `${Math.floor(mins / 60)} 時間 ${mins % 60} 分` : `${mins} 分`;
     const r = cards.CARDS[quest.reward];
     const text = `${rank === 1 ? '🏆【最速クリア】' : '🥈【2 番目にクリア】'}高難易度クエスト「${quest.name}」
 ${rank === 1 ? 'いちばん最初にクリアしたのは' : '2 番目にクリアしたのは'} ${user.display_name || user.username} (@${user.username}) さん！
