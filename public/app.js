@@ -3235,6 +3235,26 @@ function cbConfetti(host, n = 40, colors = ['#ffd43b', '#ff6b9d', '#74c0fc', '#8
   }
   host.append(box); setTimeout(() => box.remove(), 1800);
 }
+// ハサミ丸の登場演出: 暗転して R のカードがアップで映り、そのカードを緑の斬撃が切り裂いて、ハサミ丸が登場する (タップでとばせる)
+const HASAMI_CUT_MS = 3900;
+function cbHasamiCut(cat) {
+  if (document.querySelector('.hs-cut')) return;
+  const rs = cat.cards.filter((c) => c.rarity === 'R'), decoy = rs[Math.floor(Math.random() * rs.length)] || cat.cards[0];
+  const hasami = cat.cards.find((c) => c.id === 'scissors');
+  const ov = document.createElement('div'); ov.className = 'hs-cut'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '疾風剣士ハサミ丸 登場');
+  ov.innerHTML = `<div class="hs-decoy"><div class="hs-half a">${cbCard(decoy)}</div><div class="hs-half b">${cbCard(decoy)}</div></div>
+    <div class="hs-slash"><i></i><i></i><i></i></div><div class="hs-flash"></div>
+    <div class="hs-hero"><div class="hs-rays"></div><div class="hs-card">${hasami ? cbCard(hasami, { cls: 'tilt' }) : ''}</div>
+      <p class="hs-title"><span>疾風剣士</span>ハサミ丸 参上！！</p></div>
+    <p class="hs-skip">タップでとばす</p>`;
+  document.body.append(ov);
+  const timers = [];
+  const close = () => { timers.forEach(clearTimeout); ov.classList.add('out'); setTimeout(() => ov.remove(), 300); };
+  timers.push(setTimeout(() => ov.classList.add('cut'), 1250));             // 切り裂く
+  timers.push(setTimeout(() => { ov.classList.add('hero'); cbConfetti(ov.querySelector('.hs-hero'), 90, ['#38d9a9', '#12b886', '#c3fae8', '#ffe066', '#fff', '#ff6b6b']); }, 1650));
+  timers.push(setTimeout(close, HASAMI_CUT_MS - 250));
+  ov.addEventListener('click', close);
+}
 async function viewGacha() {
   if (!requireLogin()) return;
   cbCatalogCache = null; // 値段 (セール) が変わっているかもしれないので取り直す
@@ -3246,7 +3266,8 @@ async function viewGacha() {
   const render = (results = null) => {
     const root = $('#cbg'); if (!root) return;
     timers.forEach(clearTimeout); timers = [];
-    const best = results ? results.map((c) => c.baseRarity || c.rarity).reduce((a, r) => (RANK[r] > RANK[a] ? r : a), 'N') : null;
+    const hasami = !!results && results.some((c) => c.id === 'scissors');   // ハサミ丸が出た: カプセルの光は R のふりをして、あとで切り裂いて登場
+    const best = results ? results.map((c) => (c.id === 'scissors' ? 'R' : c.baseRarity || c.rarity)).reduce((a, r) => (RANK[r] > RANK[a] ? r : a), 'N') : null;
     const price = mine.prices || { pull: cat.pullCost, ten: cat.tenCost, sale: cat.sale };
     const saleEnd = price.sale ? new Date(price.sale.end).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }) : '';
     root.innerHTML = `${results ? '' : cbRateUpBanner(cat, false) + cbNewBanner(cat, false)}${price.sale ? `<div class="card cb-sale"><b>🔥 ${esc(price.sale.name)}</b><span>ガチャが 1回 <s>${price.sale.pull}</s> → <em>${price.pull}</em>🪙 · 10回 <s>${price.sale.ten}</s> → <em>${price.ten}</em>🪙</span><small>${esc(saleEnd)} まで</small></div>` : ''}<section class="card card-pad cb-gacha">
@@ -3297,6 +3318,7 @@ async function viewGacha() {
     at(900, () => stage.classList.add('burst'));                       // 光る
     at(1350, () => { stage.classList.remove('rolling'); stage.classList.add('opened'); });
     let t = 1500;
+    if (hasami && !reduced) { at(1400, () => cbHasamiCut(cat)); t += HASAMI_CUT_MS; } // 暗転 → R のカード → 切り裂いてハサミ丸が登場
     flips.forEach((f) => {
       const big = f.classList.contains('r-SSR') || f.classList.contains('r-SR');
       if (big) t += 260;                                                  // SR 以上は少しためてからめくる

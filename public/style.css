@@ -1882,3 +1882,40 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 @media (prefers-reduced-motion: reduce) { .cb-gslash { display: none; } }
 
 .cb-gslash, .cb-starfall { border-radius: 16px; z-index: 60; }
+
+/* ===== ハサミ丸の登場演出 ===== */
+.hs-cut { position: fixed; inset: 0; z-index: 200; background: #000; display: grid; place-items: center; overflow: hidden; animation: hs-dark .35s ease both; cursor: pointer; }
+.hs-cut.out { animation: hs-fadeout .3s ease both; }
+@keyframes hs-dark { from { background: rgba(0, 0, 0, 0); } to { background: rgba(0, 0, 0, .94); } }
+@keyframes hs-fadeout { to { opacity: 0; } }
+.hs-decoy { position: absolute; width: min(64vw, 260px); aspect-ratio: 0.72; animation: hs-zoom .9s cubic-bezier(.2, .9, .2, 1) .25s both; }
+.hs-decoy .cb-card { width: 100%; height: 100%; box-shadow: 0 0 40px rgba(77, 171, 247, .6); }
+.hs-half { position: absolute; inset: 0; }
+.hs-half.a { clip-path: polygon(0 0, 100% 0, 100% 39.5%, 0 67.5%); }
+.hs-half.b { clip-path: polygon(0 66%, 100% 38%, 100% 100%, 0 100%); }
+@keyframes hs-zoom { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+.hs-cut.cut .hs-half.a { animation: hs-fly-a .7s cubic-bezier(.3, 0, .6, 1) both; }
+.hs-cut.cut .hs-half.b { animation: hs-fly-b .7s cubic-bezier(.3, 0, .6, 1) both; }
+@keyframes hs-fly-a { 0% { transform: none; } 15% { transform: translate(-4px, -4px); } 100% { transform: translate(-120px, -260px) rotate(-28deg); opacity: 0; } }
+@keyframes hs-fly-b { 0% { transform: none; } 15% { transform: translate(4px, 4px); } 100% { transform: translate(120px, 260px) rotate(24deg); opacity: 0; } }
+.hs-slash { position: absolute; inset: 0; pointer-events: none; }
+.hs-slash i { position: absolute; left: 50%; top: 50%; width: 160vmax; height: 12px; margin-left: -80vmax; border-radius: 50%; opacity: 0; background: linear-gradient(90deg, transparent, #c3fae8 20%, #fff 50%, #38d9a9 75%, transparent); box-shadow: 0 0 24px 6px #20c997, 0 0 60px 16px rgba(32, 201, 151, .6); transform: rotate(-24deg) scaleX(0); }
+.hs-slash i:nth-child(2) { height: 6px; margin-top: -40px; transform: rotate(-30deg) scaleX(0); }
+.hs-slash i:nth-child(3) { height: 6px; margin-top: 46px; transform: rotate(-18deg) scaleX(0); }
+.hs-cut.cut .hs-slash i { animation: hs-slash .5s cubic-bezier(.2, .9, .2, 1) both; }
+.hs-cut.cut .hs-slash i:nth-child(1) { --r: -24deg; } .hs-cut.cut .hs-slash i:nth-child(2) { --r: -30deg; animation-delay: .06s; } .hs-cut.cut .hs-slash i:nth-child(3) { --r: -18deg; animation-delay: .1s; }
+@keyframes hs-slash { 0% { transform: rotate(var(--r)) scaleX(0); opacity: 1; } 55% { transform: rotate(var(--r)) scaleX(1); opacity: 1; } 100% { transform: rotate(var(--r)) scaleX(1); opacity: 0; } }
+.hs-flash { position: absolute; inset: 0; background: #e6fcf5; opacity: 0; pointer-events: none; }
+.hs-cut.cut .hs-flash { animation: hs-flash .6s ease .25s both; }
+@keyframes hs-flash { 0% { opacity: 0; } 30% { opacity: .9; } 100% { opacity: 0; } }
+.hs-hero { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; opacity: 0; pointer-events: none; }
+.hs-cut.hero .hs-hero { animation: hs-hero-in .5s ease both; }
+@keyframes hs-hero-in { from { opacity: 0; } to { opacity: 1; } }
+.hs-rays { position: absolute; left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; background: repeating-conic-gradient(rgba(56, 217, 169, .55) 0 8deg, transparent 8deg 16deg); animation: cb-spin 8s linear infinite; }
+.hs-card { position: relative; width: min(60vw, 240px); }
+.hs-cut.hero .hs-card { animation: cb-pop .8s cubic-bezier(.2, 1.6, .4, 1) both; filter: drop-shadow(0 0 30px #38d9a9); }
+.hs-title { position: relative; margin: 0; text-align: center; font-size: 34px; font-weight: 900; color: #fff; -webkit-text-stroke: 7px #087f5b; paint-order: stroke fill; text-shadow: 0 0 24px #38d9a9; line-height: 1.15; }
+.hs-title span { display: block; font-size: 20px; color: #c3fae8; }
+.hs-cut.hero .hs-title { animation: cb-shout 2s cubic-bezier(.2, 1.6, .4, 1) .15s both; }
+.hs-skip { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: rgba(255, 255, 255, .6); font-size: 13px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { .hs-cut { display: none; } }
