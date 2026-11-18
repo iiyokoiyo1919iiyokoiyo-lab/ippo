@@ -2000,8 +2000,25 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-quest-bonus-row .cb-svg { width: 52px; height: 52px; flex: none; }
 .cb-quest-bonus-row em { font-style: normal; font-weight: 900; color: #d9480f; font-size: 1.05rem; }
 
-/* 称号 */
-.user-titles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.user-title { display: inline-flex; align-items: center; gap: 2px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; color: #5c3d00; background: linear-gradient(135deg, #fff3bf, #ffd43b 60%, #fab005); border: 1px solid #f59f00; box-shadow: 0 1px 0 rgba(120, 70, 0, .2); white-space: nowrap; }
-.user-title.sm { padding: 1px 7px; font-size: 10px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+/* 称号 (ギラギラ: 虹色に回るふち + 金の本体 + 光が走る + キラッと星) */
+.user-titles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.user-title { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 3px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 900; letter-spacing: .02em; color: #5c2d00; white-space: nowrap;
+  background: linear-gradient(135deg, #fffbe6, #ffe066 35%, #fab005 55%, #fff3bf 75%, #f59f00); text-shadow: 0 1px 0 rgba(255, 255, 255, .8);
+  box-shadow: 0 0 0 2px #fff8db inset, 0 0 10px rgba(255, 196, 0, .75), 0 0 22px rgba(255, 140, 0, .45), 0 2px 0 rgba(120, 60, 0, .35); overflow: visible; }
+.user-title::before { content: ''; position: absolute; inset: -3px; z-index: -1; border-radius: inherit; padding: 3px;
+  background: conic-gradient(from var(--ta, 0deg), #ff6b6b, #ffd43b, #fff, #63e6be, #4dabf7, #b197fc, #ff8fd8, #ff6b6b);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: ut-spin 2.4s linear infinite; }
+.user-title::after { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 1; pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, .95) 45%, rgba(255, 255, 255, 0) 60%) -150% 0 / 60% 100% no-repeat; animation: ut-shine 2.2s ease-in-out infinite; }
+.user-title > i { position: absolute; z-index: 2; width: 9px; height: 9px; pointer-events: none; background: #fff; clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%); filter: drop-shadow(0 0 3px #ffe066); animation: ut-twinkle 1.6s ease-in-out infinite; }
+.user-title > i:nth-of-type(1) { top: -5px; right: 8px; }
+.user-title > i:nth-of-type(2) { bottom: -4px; left: 6px; width: 7px; height: 7px; animation-delay: .8s; }
+.user-title.sm { padding: 1px 8px; font-size: 10px; max-width: 40vw; text-overflow: ellipsis; box-shadow: 0 0 0 1px #fff8db inset, 0 0 8px rgba(255, 196, 0, .7); }
+.user-title.sm::before { inset: -2px; padding: 2px; }
+.user-title.sm > i { display: none; }
+@property --ta { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@keyframes ut-spin { to { --ta: 360deg; } }
+@keyframes ut-shine { 0%, 35% { background-position: -150% 0; } 75%, 100% { background-position: 250% 0; } }
+@keyframes ut-twinkle { 0%, 100% { transform: scale(.3) rotate(0deg); opacity: .2; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
 :root[data-theme="dark"] .user-title { color: #3b2600; }
+@media (prefers-reduced-motion: reduce) { .user-title::before, .user-title::after, .user-title > i { animation: none; } }

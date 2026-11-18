@@ -61,7 +61,7 @@ const adminBadge = (u, withLabel = false) => (!u?.isAdmin ? ''
   : withLabel ? `<span class="admin-badge-label" title="IppO の管理者">${icon('badge')}管理者</span>`
   : `<span class="admin-badge" title="管理者" aria-label="管理者" role="img">${icon('badge')}</span>`) + verifiedBadge(u, withLabel);
 // 称号 (高難易度クエストの最速クリアなど)。文字はエスケープして出す
-const titleChips = (u, cls = '') => (u?.titles || []).map((t) => `<span class="user-title ${cls}" title="${esc(t.name)}">🏅${esc(t.name)}</span>`).join('');
+const titleChips = (u, cls = '') => (u?.titles || []).map((t) => `<span class="user-title ${cls}" title="${esc(t.name)}"><i></i><i></i>🏅${esc(t.name)}</span>`).join('');
 // 認証マーク (管理者が確認したアカウント。権限は増えない表示だけの印)
 function verifiedBadge(u, withLabel = false) {
   const v = u?.verified;
