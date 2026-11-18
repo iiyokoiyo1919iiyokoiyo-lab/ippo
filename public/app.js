@@ -3100,7 +3100,7 @@ function cbNewBanner(cat, link = true) {
       <span class="cb-newchar-art">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span>
       <span class="cb-newchar-text"><span class="cb-newchar-tag">🆕 新キャラ登場！</span><b>${esc(c.name)}</b>
         ${(cat.pickups || []).some((x) => x.id === c.id) ? `<span class="cb-pickup">🎯 ピックアップ中！ 出る確率 <em>${Number((cat.pickups.find((x) => x.id === c.id).rate).toFixed(2))}%</em></span>` : ''}
-        <span>${esc(c.rarity)} · ${esc(cat.types[c.type]?.icon || '')}${esc(cat.types[c.type]?.name || '')} · わざ「${esc(c.skillName)}」${esc(c.skillDesc)}</span></span>
+        <span>${esc(c.rarity)} · ${esc(cat.types[c.type]?.icon || '')}${esc(cat.types[c.type]?.name || '')} · わざ「${esc(c.skillName)}」${esc(c.skillDesc)}${c.passiveName ? ` · パッシブ「${esc(c.passiveName)}」${esc(c.passiveDesc)}` : ''}</span></span>
     </${link ? 'a' : 'div'}>`).join('');
 }
 // 確率アップのお知らせ (開催中だけ)
@@ -3367,7 +3367,7 @@ async function viewCollection() {
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
-          ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}"` })
+          ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}${c.passiveName ? ` / パッシブ ${esc(c.passiveName)}: ${esc(c.passiveDesc)}` : ''}"` })
           : cbCard(c, { locked: true, attrs: c.questOnly ? 'title="期間限定クエストのクリア報酬"' : '' })).join('')}</div></section>`;
     $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
     $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
@@ -3530,7 +3530,8 @@ async function viewBattle(params) {
   const box = () => $('#cbb');
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
+  const evText = (e) => e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
+    : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
     : e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
     : e.k === 'poison' ? `${e.p === you ? '' : '相手の'}${e.bench ? '控えの' : ''}${e.card}は毒で ${e.dmg} ダメージ${e.left ? ` (あと${e.left}ターン)` : ' (毒が消えた)'}`
@@ -3543,7 +3544,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3624,6 +3625,7 @@ async function viewBattle(params) {
         }, t);
         t += 700;
       }
+      else if (e.k === 'morale') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, '🔥 士気UP！', 'skill morale'); }, t); t += 500; }
       else if (e.k === 'meteor') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, `🌠-${e.dmg}`, 'dmg met'); }, t); t += 260; }
       else if (e.k === 'poisoned') { setTimeout(() => pop(e.p, '☠️ 毒！', 'skill psn'), t); t += 250; }
       else if (e.k === 'poison') {

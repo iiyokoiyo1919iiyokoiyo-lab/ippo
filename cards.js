@@ -21,8 +21,13 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
+  venom: { name: 'どくづつみ', desc: '相手の場のカードに 1 倍のこうげき + 毒 (毎ターン最大 HP の 8%・3 ターン)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
+// パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' } };
+const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
+const CARD_PASSIVE = { tadokoro: 'morale' };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv15 で +28%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
@@ -56,6 +61,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['tadokoro', 'タドコロ', '🎒', 'SSR', 'wrap', 74, 20, 14, 12, 'venom'], // 2026-11-19 10:30 (日本時間) 登場。パッシブ「士気」
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
@@ -65,7 +71,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T10:30:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEASE_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) RELEASES[id] = v; }
 const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
@@ -84,7 +90,7 @@ const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from
 function statsOf(cardId, level = 1, ur = false) {
   const c = CARDS[cardId], m = (ur ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
   return { id: c.id, name: c.name, emoji: c.emoji, rarity: ur ? 'UR' : c.rarity, ...(ur ? { baseRarity: c.rarity, promoted: true } : {}), type: c.type, skill: c.skill, level,
-    maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd };
+    maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, ...(CARD_PASSIVE[c.id] ? { passive: CARD_PASSIVE[c.id] } : {}) };
 }
 
 // ---------- ガチャ ----------
@@ -224,6 +230,10 @@ function resolveTurn(state, acts, rnd) {
         const o = 1 - p, got = [], act0 = sides[o].active;
         sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
+      } else if (me.skill === 'venom') { // 1 倍のこうげき + 場のカードを毒に
+        const o = 1 - p, foe = sides[o].cards[sides[o].active];
+        hit(p, 1);
+        if (foe.hp > 0) { foe.poison = POISON_TURNS; ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); }
       } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
         const o = 1 - p;
         sides[o].meteor = { left: METEOR_TURNS, atk: me.atk, by: me.name };
@@ -253,6 +263,16 @@ function resolveTurn(state, acts, rnd) {
       c.hp -= dmg; c.poison--;
       ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active });
       if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
+    });
+  });
+  // 4.5 パッシブ「士気」: 倒れたカードに士気があれば、生き残っている味方の攻撃・防御が上がる (1 回だけ)
+  [0, 1].forEach((p) => {
+    sides[p].cards.forEach((c) => {
+      if (c.passive !== 'morale' || c.hp > 0 || c.moraleDone) return;
+      c.moraleDone = true;
+      const up = sides[p].cards.filter((x) => x !== c && x.hp > 0);
+      up.forEach((x) => { x.atk = Math.round(x.atk * MORALE_ATK); x.def = Math.round(x.def * MORALE_DEF); x.morale = true; });
+      if (up.length) ev.push({ k: 'morale', p, card: c.name, cards: up.map((x) => x.name) });
     });
   });
   // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
@@ -368,7 +388,7 @@ CREATE TABLE card_horses (
 CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -488,7 +508,8 @@ function install(app, ctx) {
 
   // カードの一覧・排出率 (誰でも見られる)
   app.get('/api/cards/catalog', (req, res) => res.json({
-    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), ...(RARITY[CARDS[id].rarity] ? {} : { questOnly: true }), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
+    cards: releasedIds().map((id) => ({ ...statsOf(id, 1), ...(RARITY[CARDS[id].rarity] ? {} : { questOnly: true }),
+      ...(CARD_PASSIVE[id] ? { passiveName: PASSIVES[CARD_PASSIVE[id]].name, passiveDesc: PASSIVES[CARD_PASSIVE[id]].desc } : {}), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}) })),
     newCards: releasedIds().filter((id) => RELEASES[id] && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
@@ -831,4 +852,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

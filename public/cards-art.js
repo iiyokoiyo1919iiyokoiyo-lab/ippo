@@ -288,6 +288,26 @@
         <path d="M100,40Q108,32 116,22" stroke="#fff" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round" fill="none"/>
         ${face(60, 62, { eyes: 'star', mouth: 'open', s: 0.95, iris: '#4c2a85' })}`;
       },
+      // タドコロ (SSR・つつむ): 色えんぴつを包むキャンバス地のペンロール。ひもでくるっと巻いて、元気に笑う
+      tadokoro: () => {
+        const pen = (x, c, h) => `<rect x="${x}" y="${30 - h}" width="9" height="${h + 10}" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1"/><path d="M${x},${30 - h}L${x + 4.5},${22 - h}L${x + 9},${30 - h}Z" fill="#f8e7c9"/><path d="M${x + 3},${26 - h}L${x + 4.5},${22 - h}L${x + 6},${26 - h}Z" fill="${c}"/>`;
+        const drop = (x, y, s) => `<path d="M${x},${y}q${3 * s},${5 * s} 0,${7 * s}q${-3 * s},${-2 * s} 0,${-7 * s}z" fill="#b197fc" stroke="#7048e8" stroke-width=".8"/>`;
+        return `
+        ${pen(30, '#ff6b6b', 6)}${pen(41, '#fcc419', 12)}${pen(52, '#51cf66', 4)}${pen(63, '#339af0', 10)}${pen(74, '#cc5de8', 5)}
+        <rect x="20" y="30" width="80" height="76" rx="14" fill="${lg('cv', [[0, '#f4c98b'], [0.55, '#e8a95c'], [1, '#c97d34']])}" stroke="#9c5a1c" stroke-width="2.4"/>
+        <path d="M20,44Q60,52 100,44" stroke="#9c5a1c" stroke-width="2" fill="none"/>
+        <path d="M26,36V100M94,36V100" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 3" opacity=".75"/>
+        <path d="M84,30Q112,40 104,78Q100,96 86,104" fill="none" stroke="#c97d34" stroke-width="8" stroke-linecap="round"/>
+        <path d="M84,30Q112,40 104,78Q100,96 86,104" fill="none" stroke="#f4c98b" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+        <path d="M20,86H100" stroke="#7048e8" stroke-width="5"/>
+        <path d="M60,86q-14,-12 -16,2q2,10 16,-2zM60,86q14,-12 16,2q-2,10 -16,-2z" fill="#9775fa" stroke="#5f3dc4" stroke-width="1.4"/>
+        <circle cx="60" cy="86" r="4" fill="#b197fc" stroke="#5f3dc4" stroke-width="1.4"/>
+        <path d="M58,90q-4,10 -10,16M62,90q4,10 10,16" stroke="#7048e8" stroke-width="3" stroke-linecap="round" fill="none"/>
+        ${gloss(34, 52, 6, 3.5)}
+        ${face(60, 64, { eyes: 'sparkle', mouth: 'open', s: 0.95 })}
+        ${drop(10, 70, 1.3)}${drop(108, 24, 1.1)}${drop(14, 30, 0.9)}
+        ${twinkle(106, 100, 5, '#ffe066')}${twinkle(8, 104, 4, '#fff')}`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>

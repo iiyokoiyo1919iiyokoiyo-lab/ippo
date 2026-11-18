@@ -1964,3 +1964,7 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-cpu-pick .btn { padding-left: 6px; padding-right: 6px; }
 .cb-easy-btn { border-color: #8ce99a; }
 @media (max-width: 420px) { .cb-cpu-pick { grid-template-columns: 1fr 1fr; } .cb-cpu-pick .cb-oni-btn { grid-column: 1 / -1; } }
+
+/* パッシブ「士気」 */
+.cb-morale { color: #e8590c; font-weight: 800; }
+.cb-float.skill.morale { color: #e8590c; text-shadow: 0 0 10px #ffd8a8; }

@@ -76,7 +76,7 @@ function schedule() {
     const pk = PICKUPS.find((x) => x.id === id);
     out.push({ key: `release:${id}`, at, until: at + D, banner: bannerName('char', id),
       text: `🆕【新キャラ登場】${c.rarity}「${c.name}」がガチャに登場しました！
-わざ「${SKILLS[c.skill].name}」${SKILLS[c.skill].desc.replace(/\s*\([^()]*だけのわざ\)/, '')}${pk ? `\n🎯 ピックアップ中は 1 体 ${pk.rate}%！${pk.end ? ` (${fmt(pk.end)} まで)` : ''}` : ''}\n${TAG}` });
+わざ「${SKILLS[c.skill].name}」${SKILLS[c.skill].desc.replace(/\s*\([^()]*だけのわざ\)/, '')}${cards.CARD_PASSIVE[id] ? `\n🔥 パッシブ「${cards.PASSIVES[cards.CARD_PASSIVE[id]].name}」${cards.PASSIVES[cards.CARD_PASSIVE[id]].desc}` : ''}${pk ? `\n🎯 ピックアップ中は 1 体 ${pk.rate}%！${pk.end ? ` (${fmt(pk.end)} まで)` : ''}` : ''}\n${TAG}` });
   }
   for (const pk of PICKUPS) {
     if (!pk.end) continue;
