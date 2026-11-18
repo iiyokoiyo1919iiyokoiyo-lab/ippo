@@ -1972,3 +1972,7 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 /* 怯み (野獣の眼光) */
 .cb-flinch { color: #c92a2a; font-weight: 800; }
 .cb-float.skill.flinch { color: #c92a2a; }
+
+/* UR のダブり → レベルアップ書 */
+.cb-new.conv { background: linear-gradient(135deg, #8d5a2b, #c9783a); color: #fff; white-space: nowrap; }
+.cb-conv-note { margin: 6px 0 0; text-align: center; font-weight: 700; font-size: .85rem; color: #8d5a2b; }

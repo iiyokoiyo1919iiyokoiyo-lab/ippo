@@ -85,6 +85,7 @@ const levelCost = (lv) => (lv < DUP_MAX_LEVEL ? lv : HIGH_LEVEL_COST); // Lv lv 
 
 // ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
 const UR_PROMOTE = { from: 'SSR', copies: 3 };
+const UR_DUP_SCROLLS = 50; // UR に昇格したあとのダブりは、レベルアップ書 50 冊に変換
 const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from && copies >= UR_PROMOTE.copies;
 // レベル (同じカードを引くと上がる) とレア度で強さが決まる。ur: UR に昇格したカード
 function statsOf(cardId, level = 1, ur = false) {
@@ -410,6 +411,12 @@ const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT N
 const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
 // Lv15 より上に上げた分 (レベルアップ書だけで上がる。同じカードを引いた分とは別に数える)
 const HIGH_LEVEL_MIGRATION = `ALTER TABLE card_owned ADD COLUMN lv_high INTEGER NOT NULL DEFAULT 0;`;
+// 試合ごとに使ったデッキ (カードの ID の JSON。CPU の側は NULL) を残して、採用率を「その期間の試合で使われた回数」で出す
+const BATTLE_DECK_MIGRATION = `
+ALTER TABLE card_battles ADD COLUMN d1 TEXT;
+ALTER TABLE card_battles ADD COLUMN d2 TEXT;
+CREATE INDEX card_battles_created ON card_battles(created_at);
+`;
 const SCROLL_MIGRATION = `
 ALTER TABLE card_players ADD COLUMN scrolls INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE card_owned ADD COLUMN lv_bonus INTEGER NOT NULL DEFAULT 0;   -- レベルアップ書で上げた分
@@ -463,6 +470,7 @@ function install(app, ctx) {
   { const n = db.prepare("SELECT COUNT(*) AS n FROM card_horses WHERE skill IN ('sweep', 'starlight')").get().n;
     db.migrate('2026-11-25-horse-exclusive-skills', HORSE_SKILL_FIX);
     db.migrate('2026-11-26-card-high-level', HIGH_LEVEL_MIGRATION);
+    db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end,
@@ -516,7 +524,7 @@ function install(app, ctx) {
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
   // 鬼難のデッキ (CPU が使う 5 種類)
@@ -547,21 +555,27 @@ function install(app, ctx) {
     try {
       const u = db.prepare('UPDATE card_players SET coins = coins - ?, pity = ? WHERE user_id = ? AND coins >= ?').run(cost, r.pity, req.user.id, cost);
       if (!u.changes) throw new Error('coins');
-      const now = Date.now();
+      const now = Date.now(), cnt = { ...copies };
       for (const c of r.cards) {
-        db.prepare('INSERT INTO card_owned (user_id, card_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET count = count + 1').run(req.user.id, c.id);
         db.prepare('INSERT INTO card_pulls (user_id, card_id, rarity, created_at) VALUES (?, ?, ?, ?)').run(req.user.id, c.id, c.rarity, now);
+        if (isPromoted(c.id, cnt[c.id] || 0)) { c.converted = UR_DUP_SCROLLS; continue; } // もう UR: 枚数はふやさず、レベルアップ書に変換
+        cnt[c.id] = (cnt[c.id] || 0) + 1;
+        db.prepare('INSERT INTO card_owned (user_id, card_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET count = count + 1').run(req.user.id, c.id);
       }
+      const conv = r.cards.reduce((s, c) => s + (c.converted || 0), 0);
+      if (conv) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(conv, req.user.id);
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); return res.status(400).json({ error: 'コインが足りません' }); }
     const seen = { ...before };
     const results = r.cards.map((c) => {
+      if (c.converted) { const lv = seen[c.id] || 1; return { ...statsOf(c.id, lv, true), level: lv, copies: copies[c.id], converted: c.converted }; }
       const prev = seen[c.id] || 0, n = (copies[c.id] || 0) + 1; seen[c.id] = prev + 1; copies[c.id] = n;
       const ur = isPromoted(c.id, n);
       const lv = prev >= DUP_MAX_LEVEL ? prev : prev + 1; // Lv15 より上は、引いても上がらない
       seen[c.id] = lv;
       return { ...statsOf(c.id, lv, ur), level: lv, copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < DUP_MAX_LEVEL, urUp: ur && n === UR_PROMOTE.copies };
     });
+    if (results.some((c) => c.converted)) console.log(`[cards] @${req.user.username} UR のダブりをレベルアップ書に変換: ${results.filter((c) => c.converted).length} 枚`);
     if (results.some((c) => c.urUp)) console.log(`[cards] @${req.user.username} UR に昇格: ${results.filter((c) => c.urUp).map((c) => c.id).join(',')}`);
     console.log(`[cards] @${req.user.username} ガチャ ${n} 回: ${r.cards.map((c) => c.rarity).join(',')}`);
     res.json({ results, ...me(req.user.id) });
@@ -633,7 +647,8 @@ function install(app, ctx) {
     res.json(me(req.user.id));
   });
 
-  // ---------- デッキの採用率 (その期間に対戦した人の、いまのデッキに入っている割合。だれのデッキかは出さない) ----------
+  // ---------- デッキの採用率 (その期間の試合で、そのカードがデッキに入っていた回数と割合。だれのデッキかは出さない) ----------
+  // 1 試合で 2 人とも人なら 2 デッキと数える。CPU・クエストの敵のデッキは数えない
   // days: 1 / 7 / 30 / 0 (全期間)、scope: all (全部の対戦) / random (ランダム対戦 = レート戦だけ)
   const usageCache = new Map();
   app.get('/api/cards/usage', rateLimit({ windowMs: 60_000, max: 60 }), (req, res) => {
@@ -642,17 +657,19 @@ function install(app, ctx) {
     const key = `${days}:${scope}`, hit = usageCache.get(key);
     if (hit && Date.now() - hit.at < 60_000) return res.json(hit.data);
     const since = days ? Date.now() - days * 86400_000 : 0;
-    const ids = db.prepare(`SELECT DISTINCT u FROM (SELECT p1 AS u, mode, created_at FROM card_battles UNION ALL SELECT p2 AS u, mode, created_at FROM card_battles)
-      WHERE u IS NOT NULL AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).all(since).map((r) => r.u);
-    const count = {}; let horse = 0;
-    for (const uid of ids) {
-      const p = qPlayer.get(uid); if (!p) continue;
-      let deck; try { deck = JSON.parse(p.deck); } catch { continue; }
+    const rows = db.prepare(`SELECT d FROM (SELECT d1 AS d, mode, created_at FROM card_battles UNION ALL SELECT d2 AS d, mode, created_at FROM card_battles)
+      WHERE d IS NOT NULL AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).all(since);
+    const count = {}; let horse = 0, n = 0;
+    for (const { d } of rows) {
+      let deck; try { deck = JSON.parse(d); } catch { continue; }
+      if (!Array.isArray(deck)) continue;
+      n++;
       if (deck.some((id) => String(id).startsWith('h:'))) horse++;
       for (const id of new Set(deck)) if (CARDS[id]) count[id] = (count[id] || 0) + 1;
     }
-    const n = ids.length, rate = (c) => (n ? (c / n) * 100 : 0);
-    const data = { days, scope, players: n, updatedAt: Date.now(),
+    const matches = db.prepare(`SELECT COUNT(*) AS n FROM card_battles WHERE (d1 IS NOT NULL OR d2 IS NOT NULL) AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).get(since).n;
+    const rate = (c) => (n ? (c / n) * 100 : 0);
+    const data = { days, scope, decks: n, matches, players: n, updatedAt: Date.now(),
       cards: releasedIds().map((id) => ({ id, count: count[id] || 0, rate: rate(count[id] || 0) })).sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
       horse: { count: horse, rate: rate(horse) } };
     usageCache.set(key, { at: Date.now(), data });
@@ -742,7 +759,8 @@ function install(app, ctx) {
   function finish(b, winner, reason = '') {
     if (b.ended) return;
     b.ended = true; clearTimeout(b.timer); b.left.forEach((t) => clearTimeout(t));
-    db.prepare('INSERT INTO card_battles (mode, p1, p2, winner, turns, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(b.mode, b.uids[0], b.uids[1] || null, winner, b.state.turn, Date.now());
+    const deckOf = (i) => (b.uids[i] ? JSON.stringify(b.state.sides[i].cards.map((c) => c.id)) : null);
+    db.prepare('INSERT INTO card_battles (mode, p1, p2, winner, turns, created_at, d1, d2) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(b.mode, b.uids[0], b.uids[1] || null, winner, b.state.turn, Date.now(), deckOf(0), deckOf(1));
     // レート (ランダム対戦だけ)
     let delta = [0, 0];
     if (b.mode === 'random') {

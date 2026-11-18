@@ -3282,7 +3282,8 @@ async function viewGacha() {
         <div class="cb-stage${results ? ' rolling best-' + best : ''}" id="cb-stage">
           ${results ? `<div class="cb-capsule"><i></i><b></b></div><div class="cb-burst"></div><div class="cb-shout">${best === 'SSR' ? 'SSR！！' : best === 'SR' ? 'SR！' : ''}</div>
             <div class="cb-reveal">${results.map((c) => `<div class="cb-flip r-${esc(c.baseRarity || c.rarity)}"><div class="cb-flip-in"><div class="cb-back"><span>✦</span></div>
-              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.urUp ? '<span class="cb-new ur">UR 昇格！</span>' : c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
+              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.converted ? `<span class="cb-new conv">📜×${c.converted}</span>` : c.urUp ? '<span class="cb-new ur">UR 昇格！</span>' : c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
+            ${results.some((c) => c.converted) ? `<p class="cb-conv-note">📜 UR のダブり ${results.filter((c) => c.converted).length} 枚を、レベルアップ書 <b>${results.reduce((s, c) => s + (c.converted || 0), 0)}</b> 冊に変換しました</p>` : ''}
             ${results.some((c) => c.urUp) ? `<p class="cb-ur-shout cb-gacha-ur">✨ ${results.filter((c) => c.urUp).map((c) => esc(c.name)).join('・')} が UR に昇格！！ ✨</p>` : ''}
             <p class="cb-skip">タップでとばす</p>`
           : `<div class="cb-machine">${CBArt.svg('case', 'SSR')}<p>きょうは何が出るかな？</p></div>`}
@@ -3300,7 +3301,7 @@ async function viewGacha() {
         <ul class="text-xs muted cb-notes"><li>${cat.pity}回引いて SSR が出なかったら、${cat.pity}回目は SSR が確定します (回数は SSR が出ると 0 にもどる)</li>
           <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、同じカードで上がるのは Lv${cat.dupMaxLevel || 15} まで。Lv${cat.maxLevel} まではレベルアップ書で)</li>
           <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
-          <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)</li>
+          <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)。UR になったあとに同じカードが出たら、レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換されます</li>
           ${(cat.pickups || []).map((x) => `<li>${esc(x.name)}: ${esc(cat.cards.find((c) => c.id === x.id)?.name || '')} 1体の出る確率が ${x.rate}%。ほかのキャラは元の確率のままで、ふえた分だけ ほかのレア度の確率が少し下がります</li>`).join('')}
           ${(cat.rateUps || []).map((x) => `<li>${esc(x.name)}: ${x.ids.map((id) => esc(cat.cards.find((c) => c.id === id)?.name || '')).join('・')} の出る確率が ${x.mult} 倍。上がった分、ほかのレア度の確率が少し下がります</li>`).join('')}
           <li>コインはお金では買えません</li></ul></section>`;
@@ -3365,7 +3366,7 @@ async function viewCollection() {
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
-        <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)</p>
+        <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)。UR のあとのダブりは 📜 レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
           ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}${c.passiveName ? ` / パッシブ ${esc(c.passiveName)}: ${esc(c.passiveDesc)}` : ''}"` })
           : cbCard(c, { locked: true, attrs: c.questOnly ? 'title="期間限定クエストのクリア報酬"' : '' })).join('')}</div></section>`;
@@ -3471,16 +3472,16 @@ async function viewCardUsage() {
         <span class="cbu-art" aria-hidden="true">${art}</span>
         <span class="cbu-main"><span class="cbu-name"><b>${esc(name)}</b>${rarity ? `<span class="cb-rbadge" style="--rc:${CB_RCOL[rarity] || '#888'}">${esc(rarity)}</span>` : ''}</span>
           <span class="cbu-bar"><i style="width:${(x.rate / max) * 100}%;--rc:${CB_RCOL[rarity] || '#c9783a'}"></i></span></span>
-        <span class="cbu-pct"><b>${x.rate.toFixed(1)}%</b><small>${x.count}人</small></span></li>`;
+        <span class="cbu-pct"><b>${x.count}回</b><small>${x.rate.toFixed(1)}%</small></span></li>`;
     let rank = 0, last = -1;
     $('#cbu').innerHTML = `<section class="card card-pad stack-sm">
         ${seg('days', days, [[1, '今日'], [7, '7日間'], [30, '30日間'], [0, 'ぜんぶ']])}
         ${seg('scope', scope, [['all', 'すべての対戦'], ['random', 'レート戦だけ']])}
-        <p class="text-xs muted" style="margin:0">${days ? `この ${days === 1 ? '1 日' : days + ' 日間'}` : 'これまで'}に${scope === 'random' ? 'ランダム対戦 (レート戦)' : '対戦'}をした <b>${u.players}</b> 人の、いまのデッキに入っている割合です (1 人 3 枚なので、合計は 300% になります)。1 分ごとに更新。</p></section>
-      ${u.players ? `<section class="card card-pad"><ol class="cbu-list">
+        <p class="text-xs muted" style="margin:0">${days ? `この ${days === 1 ? '1 日' : days + ' 日間'}` : 'これまで'}の${scope === 'random' ? 'ランダム対戦 (レート戦)' : '対戦'} <b>${u.matches}</b> 試合で、そのカードが使われた回数です (プレイヤーのデッキ <b>${u.decks}</b> 個を数えます。CPU のデッキは数えません)。% は使われたデッキの割合。1 分ごとに更新。</p></section>
+      ${u.decks ? `<section class="card card-pad"><ol class="cbu-list">
         ${u.cards.map((x, i) => { if (x.count !== last) { rank = i + 1; last = x.count; } const c = C[x.id]; return c ? row(rank, CBArt.svg(c.id, c.rarity), c.name, c.rarity, x) : ''; }).join('')}
         ${u.horse.count ? row('🐴', CBArt.svg('h:x', 'SSR', { coat: '栗毛' }), '連れてきた馬 (どれか 1 頭以上)', '', u.horse) : ''}
-      </ol></section>` : emptyState({ icon: 'sparkle', title: 'この期間に対戦した人はいません', text: '期間を変えてみてください' })}`;
+      </ol></section>` : emptyState({ icon: 'sparkle', title: 'この期間の試合はまだありません', text: '期間を変えてみてください' })}`;
     $$('[data-days]').forEach((b) => b.addEventListener('click', () => { days = Number(b.dataset.days); load(); }));
     $$('[data-scope]').forEach((b) => b.addEventListener('click', () => { scope = b.dataset.scope; load(); }));
   }
