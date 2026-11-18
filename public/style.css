@@ -1991,3 +1991,11 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-quest.hard { background: linear-gradient(160deg, #1b1035, #3b2a85 55%, #f59f00 140%); }
 .cb-quest-hard { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff4e6; color: #d9480f; font-weight: 700; font-size: .8rem; }
 .cb-questbn.hard .cb-questbn-tag { color: #ffd43b; }
+
+/* クエストの特効キャラ */
+.cb-bonus { color: #e67700; font-weight: 800; }
+.cb-quest-bonus { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, #fff9db, #ffe8cc); color: #5c3d00; border: 2px solid #fcc419; }
+.cb-quest-bonus > b { display: block; font-size: .85rem; color: #e67700; }
+.cb-quest-bonus-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: .85rem; }
+.cb-quest-bonus-row .cb-svg { width: 52px; height: 52px; flex: none; }
+.cb-quest-bonus-row em { font-style: normal; font-weight: 900; color: #d9480f; font-size: 1.05rem; }

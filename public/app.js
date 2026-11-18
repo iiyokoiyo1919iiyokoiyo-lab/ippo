@@ -3512,6 +3512,9 @@ async function viewQuest() {
     </section>
     <section class="card card-pad"><div class="panel-head"><h3>${esc(q.emoji)} 敵: ${esc(q.boss)}</h3><span class="text-xs muted">3 体を全部たおすとクリア</span></div>
       <div class="cb-deck">${q.enemy.map((c) => cbCard(c, { level: c.lv, small: false })).join('')}</div>
+      ${(q.bonus || []).length || (q.bonusSoon || []).length ? `<div class="cb-quest-bonus"><b>⭐ 特効キャラ</b>
+        ${(q.bonus || []).map((c) => `<div class="cb-quest-bonus-row">${CBArt.svg(c.id, c.rarity, { label: c.name })}<span><b>${esc(c.name)}</b>をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}
+        ${(q.bonusSoon || []).map((c) => `<div class="cb-quest-bonus-row"><span><b>${esc(c.name)}</b> (${esc(fmt(c.at))} ガチャに登場) をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}</div>` : ''}
       ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。Lv18 の SSR・MR デッキで勝率 25% くらいの強さです</p>` : ''}
       <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
@@ -3548,7 +3551,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? ' · <span class="cb-flinch">😨怯み</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? ' · <span class="cb-flinch">😨怯み</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
