@@ -3515,7 +3515,7 @@ async function viewQuest() {
       ${(q.bonus || []).length || (q.bonusSoon || []).length ? `<div class="cb-quest-bonus"><b>⭐ 特効キャラ</b>
         ${(q.bonus || []).map((c) => `<div class="cb-quest-bonus-row">${CBArt.svg(c.id, c.rarity, { label: c.name })}<span><b>${esc(c.name)}</b>をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}
         ${(q.bonusSoon || []).map((c) => `<div class="cb-quest-bonus-row"><span><b>${esc(c.name)}</b> (${esc(fmt(c.at))} ガチャに登場) をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}</div>` : ''}
-      ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。Lv18 の SSR・MR デッキで勝率 25% くらいの強さです</p>` : ''}
+      ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。ガチで難しいので、デッキと作戦をしっかり考えて挑もう！</p>` : ''}
       <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
       ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}</a>
