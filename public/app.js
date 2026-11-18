@@ -3508,7 +3508,7 @@ async function viewCardBoard() {
           <div class="cbd-tags" role="radiogroup" aria-label="タグ">${b.tags.map((t, i) => `<button type="button" class="chip cbd-tag${i ? '' : ' active'}" data-tag="${esc(t)}" role="radio" aria-checked="${i ? 'false' : 'true'}">${esc(t)}</button>`).join('')}</div>
           <input class="input" name="comment" maxlength="${b.max}" placeholder="ひとこと (例: タドコロ使ってます！ 誰でもどうぞ)" autocomplete="off">
           <button class="btn btn-primary btn-block" type="submit">📋 掲示板に募集を出す</button>
-          <p class="text-xs muted" style="margin:0">掲示板の対戦は<b>レート戦</b>です (ランダム対戦と同じく、レートが動いて勝ち +${b.reward.win}🪙)。同じ相手とのレート戦は 1 日 ${b.ratedPerPair} 回まで。募集を出すと待ち受け画面になり、相手が来たらすぐ始まります。待ち受け画面をはなれると、募集は消えます</p>
+          <p class="text-xs muted" style="margin:0">掲示板の対戦は<b>レート戦</b>です (ランダム対戦と同じく、レートが動いて勝ち +${b.reward.win}🪙)。同じ相手と何回でもできますが、2 人のレート戦が ${b.banGames} 戦以上で片方が 1 回も勝てていないと、その 2 人は対戦できなくなります。募集を出すと待ち受け画面になり、相手が来たらすぐ始まります。待ち受け画面をはなれると、募集は消えます</p>
         </form>` : '<p class="text-sm">ログインすると、募集を出したり、募集している人と対戦したりできます</p><button class="btn btn-primary" type="button" id="cbd-login">ログイン</button>'}</section>
         <section class="card card-pad"><div class="panel-head"><h3>⚔️ 募集中</h3><span class="text-xs muted" id="cbd-n"></span></div><div id="cbd-list"></div></section>`;
       $$('.cbd-tag').forEach((x) => x.addEventListener('click', () => { tag = x.dataset.tag; $$('.cbd-tag').forEach((y) => { y.classList.toggle('active', y === x); y.setAttribute('aria-checked', String(y === x)); }); }));
@@ -3521,7 +3521,8 @@ async function viewCardBoard() {
         ${p.comment ? `<p class="cbd-comment">${esc(p.comment)}</p>` : ''}
         <div class="cbd-deck">${p.deck.map((c) => `<span class="cbd-card r-${esc(c.rarity)}" title="${esc(c.name)} Lv${Number(c.level)}">${CBArt.svg(c.horse ? 'h:x' : c.id, c.rarity, { coat: c.coat })}<small>Lv${Number(c.level)}</small></span>`).join('')}</div>
         ${p.mine ? '<p class="text-xs muted" style="margin:6px 0 0">あなたの募集です (待ち受け画面で待っています)</p>'
-          : me ? `<a class="btn btn-primary btn-block cbd-go" href="#/games/cards/battle?mode=room-join&code=${encodeURIComponent(p.code)}&from=board&n=${Date.now()}">⚔️ この人と対戦する</a>` : ''}
+          : p.vs?.banned ? `<p class="cbd-banned">🚫 この人とは対戦できません (${p.vs.games} 戦 ${p.vs.wins} 勝 ${p.vs.losses} 敗。${b.banGames} 戦以上で片方が 1 回も勝てていないため)</p>`
+          : me ? `${p.vs?.games ? `<p class="text-xs muted" style="margin:8px 0 0">この人との成績: ${p.vs.games} 戦 ${p.vs.wins} 勝 ${p.vs.losses} 敗</p>` : ''}<a class="btn btn-primary btn-block cbd-go" href="#/games/cards/battle?mode=room-join&code=${encodeURIComponent(p.code)}&from=board&n=${Date.now()}">⚔️ この人と対戦する</a>` : ''}
       </article>`).join('') : emptyState({ icon: 'sparkle', title: 'いま募集している人はいません', text: '上のフォームから募集を出してみよう！' });
   };
   const load = async () => { try { draw(await api('/cards/board', { noAuthPrompt: true })); } catch (e) { if (first && $('#cbd')) $('#cbd').innerHTML = emptyState({ icon: 'alert', title: e.message }); } };
@@ -3729,7 +3730,8 @@ async function viewBattle(params) {
       if (m.t === 'start') {
         you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました');
         if (m.board) { fromBoard = true; const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = m.rated ? '📋 レート戦 (掲示板)' : '📋 掲示板の対戦';
-          if (!m.resumed) log.push(m.rated ? `掲示板からのレート戦です (この相手とのレート戦は今日あと ${m.ratedLeft} 回)` : 'この相手とのレート戦は今日はもう上限です。レートの動かない対戦になります'); }
+          if (!m.resumed && m.vs && you === 1) log.push(`掲示板からのレート戦です (この相手とはこれまで ${m.vs.games} 戦 ${m.vs.wins} 勝 ${m.vs.losses} 敗)`);
+          else if (!m.resumed) log.push('掲示板からのレート戦です'); }
         render();
         // 行動のボタンまで 1 画面に入るよう、バトルの枠を画面の上にそろえる
         const top = box().getBoundingClientRect().top + window.scrollY - ($('.topbar')?.offsetHeight || 0) - ($('.page-head')?.offsetHeight || 0) - 6;

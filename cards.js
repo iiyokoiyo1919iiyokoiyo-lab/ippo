@@ -491,8 +491,9 @@ const REWARDS_PER_DAY = 15;
 // 対戦募集掲示板: 部屋を作るときに、ひとこと (40 文字まで) とタグを付けて掲示板に出せる。待っているあいだ (10 分まで) だけ載る
 const BOARD_TAGS = ['気軽に', 'ガチ勝負', '初心者歓迎', '新キャラ試したい', 'クエスト前の練習'];
 const BOARD_MAX = 40, ROOM_MS = 10 * 60_000;
-// 掲示板の対戦はレート戦 (ランダム対戦と同じレートと報酬)。同じ相手とのレート戦は 1 日 3 回まで (それより多いと、レートの動かない部屋対戦になる)
-const BOARD_RATED_PER_PAIR = 3;
+// 掲示板の対戦はレート戦 (ランダム対戦と同じレートと報酬)。同じ相手と何回でもできる。
+// ただし、同じ 2 人のレート戦が 10 戦以上で、どちらかが 1 回も勝っていなければ (勝率 0%)、その 2 人は掲示板で対戦できなくなる (レート稼ぎの防止)
+const PAIR_BAN_GAMES = 10;
 const boardText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, BOARD_MAX);
 const TURN_MS = Number(process.env.CB_TURN_MS || 25_000);
 const RECONNECT_MS = Number(process.env.CB_RECONNECT_MS || 30_000);
@@ -844,6 +845,14 @@ function install(app, ctx) {
   }
   // ---------- 対戦募集掲示板 (いま部屋で待っている募集の一覧。だれでも見られる・入るにはログイン) ----------
   let boardCache = null;
+  // 2 人のレート戦の成績 (ランダム対戦と掲示板)。banned: 10 戦以上でどちらかの勝率が 0%
+  const qPair = db.prepare("SELECT p1, winner FROM card_battles WHERE mode = 'random' AND ((p1 = ? AND p2 = ?) OR (p1 = ? AND p2 = ?))");
+  const pairStats = (a, b) => {
+    const rows = qPair.all(a, b, b, a);
+    const winsOf = (u) => rows.filter((r) => (r.p1 === u ? r.winner === 0 : r.winner === 1)).length;
+    const wa = winsOf(a), wb = winsOf(b);
+    return { games: rows.length, wins: [wa, wb], banned: rows.length >= PAIR_BAN_GAMES && (wa === 0 || wb === 0) };
+  };
   app.get('/api/cards/board', rateLimit({ windowMs: 60_000, max: 120 }), (req, res) => {
     const now = Date.now();
     if (!boardCache || now - boardCache.at > 2000) {
@@ -857,7 +866,11 @@ function install(app, ctx) {
       }
       boardCache = { at: now, list: list.sort((a, b) => b.at - a.at) };
     }
-    res.json({ tags: BOARD_TAGS, max: BOARD_MAX, ratedPerPair: BOARD_RATED_PER_PAIR, reward: REWARD.random, posts: boardCache.list.map((p) => ({ ...p, mine: !!req.user && p.user.id === req.user.id })) });
+    res.json({ tags: BOARD_TAGS, max: BOARD_MAX, banGames: PAIR_BAN_GAMES, reward: REWARD.random, posts: boardCache.list.map((p) => {
+      const mine = !!req.user && p.user.id === req.user.id;
+      const ps = req.user && !mine ? pairStats(req.user.id, p.user.id) : null;
+      return { ...p, mine, ...(ps ? { vs: { games: ps.games, wins: ps.wins[0], losses: ps.wins[1], banned: ps.banned } } : {}) };
+    }) });
   });
   wss.on('connection', (ws, req, user) => {
     const uid = user.id;
@@ -907,12 +920,12 @@ function install(app, ctx) {
           const code = String(m.code || ''), r = rooms.get(code);
           if (!r || Date.now() - r.at > ROOM_MS || conns.get(r.uid)?.readyState !== 1) { rooms.delete(code); return send(uid, { t: 'error', msg: 'その部屋コードは見つかりません' }); }
           if (r.uid === uid) return send(uid, { t: 'error', msg: '自分の部屋には入れません' });
+          if (r.board && pairStats(r.uid, uid).banned) return send(uid, { t: 'error', msg: `この人とは対戦できません (おたがいのレート戦が ${PAIR_BAN_GAMES} 戦以上で、どちらかが 1 回も勝っていないため)` });
           rooms.delete(code); boardCache = null;
-          if (r.board) { // 掲示板からの対戦はレート戦 (同じ相手とは 1 日 3 回まで)
-            const since = Date.parse(jstDay() + 'T00:00:00+09:00');
-            const n = db.prepare("SELECT COUNT(*) AS n FROM card_battles WHERE mode = 'random' AND created_at >= ? AND ((p1 = ? AND p2 = ?) OR (p1 = ? AND p2 = ?))").get(since, r.uid, uid, uid, r.uid).n;
-            const rated = n < BOARD_RATED_PER_PAIR;
-            return startBattle(rated ? 'random' : 'room', [r.uid, uid], null, null, { board: true, rated, ratedLeft: Math.max(0, BOARD_RATED_PER_PAIR - n - (rated ? 1 : 0)) });
+          if (r.board) { // 掲示板からの対戦はレート戦 (同じ相手と何回でも)
+            const ps = pairStats(uid, r.uid);
+            console.log(`[cards] 掲示板のレート戦: user ${r.uid} vs ${uid} (これまで ${ps.games} 戦)`);
+            return startBattle('random', [r.uid, uid], null, null, { board: true, rated: true, vs: { games: ps.games, wins: ps.wins[0], losses: ps.wins[1] } });
           }
           return startBattle('room', [r.uid, uid]);
         }
