@@ -288,7 +288,7 @@
         <path d="M100,40Q108,32 116,22" stroke="#fff" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round" fill="none"/>
         ${face(60, 62, { eyes: 'star', mouth: 'open', s: 0.95, iris: '#4c2a85' })}`;
       },
-      // タドコロ (SSR・つつむ): 色えんぴつを包むキャンバス地のペンロール。ひもでくるっと巻いて、元気に笑う
+      // タドコロ (SSR・おもい): 色えんぴつを包むキャンバス地のペンロール。ひもでくるっと巻いて、元気に笑う
       tadokoro: () => {
         const pen = (x, c, h) => `<rect x="${x}" y="${30 - h}" width="9" height="${h + 10}" rx="1.5" fill="${c}" stroke="#fff" stroke-width="1"/><path d="M${x},${30 - h}L${x + 4.5},${22 - h}L${x + 9},${30 - h}Z" fill="#f8e7c9"/><path d="M${x + 3},${26 - h}L${x + 4.5},${22 - h}L${x + 6},${26 - h}Z" fill="${c}"/>`;
         const drop = (x, y, s) => `<path d="M${x},${y}q${3 * s},${5 * s} 0,${7 * s}q${-3 * s},${-2 * s} 0,${-7 * s}z" fill="#b197fc" stroke="#7048e8" stroke-width=".8"/>`;
