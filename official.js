@@ -61,6 +61,11 @@ const UPDATES = [
 ・試合でもらえる「レベルアップ書」でカードのレベル上げ
 ・ガチャ限定 SSR は 3 枚で UR に昇格
 ゲーム → ぶんぼうぐバトラーズ ${TAG}` },
+  { key: 'preview-tadokoro-2026-11-18', at: Date.parse('2026-11-18T11:25:00+09:00'), until: Date.parse('2026-11-19T10:30:00+09:00'), banner: 'char-tadokoro',
+    text: `📣【新キャラ予告】明日 11/19(木) 10:30、SSR「タドコロ」がガチャに登場！
+わざ「野獣の眼光」: 相手を毒にして、次のターン怯ませる
+🔥 パッシブ「士気」: たおれると味方の攻撃 1.4 倍・防御 1.3 倍
+お楽しみに！ ${TAG}` },
 ];
 
 const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
