@@ -52,7 +52,7 @@ function charHtml(id, at) {
       <div style="margin-top:6px;font-size:22px;line-height:1.45;font-weight:700">${esc(sk.desc.replace(/\s*\([^()]*だけのわざ\)/, ''))}</div>
       ${cards.CARD_PASSIVE[id] ? `<div style="margin-top:10px;font-size:26px;color:#ffc078">🔥 パッシブ「${esc(cards.PASSIVES[cards.CARD_PASSIVE[id]].name)}」</div><div style="font-size:21px;line-height:1.45;font-weight:700">${esc(cards.PASSIVES[cards.CARD_PASSIVE[id]].desc)}</div>` : ''}</div>
     </div>
-    ${pk ? `<div class="badge" style="right:40px;bottom:30px;width:230px;height:230px;background:radial-gradient(#ff8787,#e03131)"><div><div style="font-size:26px">ピックアップ</div><div style="font-size:72px;line-height:1">${pk.rate}%</div></div></div>` : ''}
+    ${pk ? `<div class="badge" style="right:30px;top:24px;width:210px;height:210px;background:radial-gradient(#ff8787,#e03131)"><div><div style="font-size:26px">ピックアップ</div><div style="font-size:72px;line-height:1">${pk.rate}%</div></div></div>` : ''}
     <div class="date" style="left:600px;bottom:44px;background:#fff;color:#c2255c;box-shadow:0 6px 0 rgba(120,0,60,.25)">${esc(fmt(at))}〜 ガチャに登場</div>
   </div>`;
 }
