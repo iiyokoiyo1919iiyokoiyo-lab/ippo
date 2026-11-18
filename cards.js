@@ -21,7 +21,7 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
-  venom: { name: 'どくづつみ', desc: '相手の場のカードに 1 倍のこうげき + 毒 (毎ターン最大 HP の 8%・3 ターン)' },
+  venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
@@ -185,6 +185,7 @@ function resolveTurn(state, acts, rnd) {
     const s = sides[p], a = acts[p] || { a: 'guard' };
     const me = s.cards[s.active];
     if (a.a === 'switch' && Number.isInteger(a.i) && a.i !== s.active && s.cards[a.i]?.hp > 0) return a;
+    if (me.flinch === 1) return { a: 'flinch' }; // 怯み: 交代のほかは何もできない
     if (a.a === 'skill' && me.cd === 0) return a;
     if (a.a === 'attack' || a.a === 'skill') return { a: 'attack' };
     return { a: 'guard' };
@@ -216,6 +217,7 @@ function resolveTurn(state, acts, rnd) {
   };
   for (const p of order) {
     const s = sides[p], me = s.cards[s.active];
+    if (act[p].a === 'flinch') { if (me.hp > 0) ev.push({ k: 'flinch', p, card: me.name }); continue; }
     if (me.hp <= 0 || act[p].a === 'switch' || act[p].a === 'guard') { if (act[p].a === 'guard' && me.hp > 0) ev.push({ k: 'guard', p, card: me.name }); continue; }
     if (act[p].a === 'attack') hit(p, 1);
     else {
@@ -230,10 +232,9 @@ function resolveTurn(state, acts, rnd) {
         const o = 1 - p, got = [], act0 = sides[o].active;
         sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
-      } else if (me.skill === 'venom') { // 1 倍のこうげき + 場のカードを毒に
+      } else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
-        hit(p, 1);
-        if (foe.hp > 0) { foe.poison = POISON_TURNS; ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); }
+        if (foe.hp > 0) { foe.poison = POISON_TURNS; foe.flinch = 2; ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); ev.push({ k: 'flinched', p: o, card: foe.name }); }
       } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
         const o = 1 - p;
         sides[o].meteor = { left: METEOR_TURNS, atk: me.atk, by: me.name };
@@ -278,7 +279,7 @@ function resolveTurn(state, acts, rnd) {
   // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
   [0, 1].forEach((p) => {
     const s = sides[p];
-    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; });
+    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; });
     if (s.cards[s.active].hp <= 0) { const next = s.cards.findIndex((c) => c.hp > 0); if (next >= 0) { s.active = next; ev.push({ k: 'switch', p, card: s.cards[next].name, forced: true }); } }
   });
   state.turn++;

@@ -3530,7 +3530,9 @@ async function viewBattle(params) {
   const box = () => $('#cbb');
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
+  const evText = (e) => e.k === 'flinched' ? `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`
+    : e.k === 'flinch' ? `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`
+    : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
     : e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
@@ -3544,7 +3546,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? ' · <span class="cb-flinch">😨怯み</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3625,6 +3627,8 @@ async function viewBattle(params) {
         }, t);
         t += 700;
       }
+      else if (e.k === 'flinched') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, '😨 怯み！', 'skill flinch'); }, t); t += 400; }
+      else if (e.k === 'flinch') { setTimeout(() => { replay(el(e.p), 'shake'); pop(e.p, '怯んで動けない…', 'tag'); }, t); t += 350; }
       else if (e.k === 'morale') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, '🔥 士気UP！', 'skill morale'); }, t); t += 500; }
       else if (e.k === 'meteor') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, `🌠-${e.dmg}`, 'dmg met'); }, t); t += 260; }
       else if (e.k === 'poisoned') { setTimeout(() => pop(e.p, '☠️ 毒！', 'skill psn'), t); t += 250; }

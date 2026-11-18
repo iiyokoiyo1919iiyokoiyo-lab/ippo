@@ -1968,3 +1968,7 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 /* パッシブ「士気」 */
 .cb-morale { color: #e8590c; font-weight: 800; }
 .cb-float.skill.morale { color: #e8590c; text-shadow: 0 0 10px #ffd8a8; }
+
+/* 怯み (野獣の眼光) */
+.cb-flinch { color: #c92a2a; font-weight: 800; }
+.cb-float.skill.flinch { color: #c92a2a; }
