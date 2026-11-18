@@ -96,6 +96,27 @@ function hardQuestHtml(q, r) {
   </div>`;
 }
 
+// 高難易度クエストの表彰 (1 番目・2 番目の討伐者)。金ピカ (2 番目は銀) の「討伐速報」
+function awardHtml(q, rank) {
+  const r = cards.CARDS[q.reward], gold = rank === 1;
+  const c1 = gold ? '#fff3bf' : '#f8f9fa', c2 = gold ? '#ffd43b' : '#ced4da', c3 = gold ? '#f08c00' : '#868e96', ink = gold ? '#5c2d00' : '#212529';
+  const bolt = (x, y, s, o = 1) => `<svg style="position:absolute;left:${x}px;top:${y}px;width:${90 * s}px;height:${220 * s}px;opacity:${o};filter:drop-shadow(0 0 18px #fff3bf) drop-shadow(0 0 40px #fab005)" viewBox="0 0 90 220"><path d="M50,0L10,110H40L20,220L85,80H52L72,0Z" fill="#fff9db" stroke="#ffd43b" stroke-width="4"/></svg>`;
+  return `<div class="bn" style="background:radial-gradient(circle at 28% 52%,${c1},${c2} 30%,${c3} 62%,#3b1d00 100%);--r1:rgba(255,255,255,.6);--r2:transparent">
+    <div class="rays" style="left:28%"></div>${confetti(60, gold ? ['#fff', '#ffd43b', '#fab005', '#fff3bf', '#ff922b'] : ['#fff', '#dee2e6', '#adb5bd', '#e9ecef', '#74c0fc'])}${sparks(22)}
+    ${bolt(560, -30, 1.2, 0.9)}${bolt(1090, 380, 0.9, 0.8)}
+    <div class="glow" style="left:30px;top:70px;width:560px;height:560px;background:radial-gradient(#fff,rgba(255,255,255,0))"></div>
+    <div class="art" style="left:40px;top:90px;width:520px;height:520px">%%ART%%</div>
+    <div style="position:absolute;left:400px;top:430px;font-size:170px;line-height:1;transform:rotate(12deg);filter:drop-shadow(0 8px 0 rgba(0,0,0,.25))">${gold ? '🏆' : '🥈'}</div>
+    <div class="ribbon" style="left:-40px;top:34px;background:linear-gradient(90deg,#c92a2a,#e67700)">⚡ ${esc(r.name)} 討伐速報</div>
+    <div style="position:absolute;left:560px;top:110px;width:620px;text-align:center">
+      <div class="stroke" style="--sw:16px;--sc:${ink};font-size:${gold ? 132 : 112}px;line-height:1.05;color:${gold ? '#fff9db' : '#fff'};text-shadow:0 0 40px ${gold ? '#ffd43b' : '#fff'};white-space:nowrap">${gold ? '最速討伐' : '準最速討伐'}</div>
+      <div class="stroke" style="--sw:12px;--sc:${ink};margin-top:16px;font-size:64px;color:${gold ? '#ffe066' : '#e9ecef'};white-space:nowrap">${gold ? '👑 誕生！！ 👑' : '✨ 現る！！ ✨'}</div>
+      <div style="margin-top:22px;display:inline-block;padding:12px 26px;border-radius:999px;background:linear-gradient(90deg,#fff9db,#ffd43b,#fab005);color:#5c2d00;font-size:34px;font-weight:900;box-shadow:0 6px 0 rgba(90,40,0,.35)">称号「${esc(q.titles?.[rank] || '')}」</div>
+      <div style="margin-top:20px;font-size:30px;color:#fff;font-weight:900;text-shadow:0 3px 0 ${ink}">高難易度クエスト「${esc(q.name)}」</div>
+    </div>
+  </div>`;
+}
+
 // ガチャの告知 (セール・ピックアップ・確率アップ)
 function gachaHtml(n) {
   const g = gachaInfo(n), pk = g.pickups[0];
@@ -123,6 +144,7 @@ function gachaHtml(n) {
   const jobs = [];
   for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity]) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
+  for (const q of cards.QUESTS) for (const rank of Object.keys(q.titles || {})) jobs.push({ name: bannerName('award', `${q.id}-${rank}`), html: awardHtml(q, Number(rank)), art: [q.reward, cards.CARDS[q.reward].rarity] });
   for (const n of GACHA_NOTICES) { const pk = gachaInfo(n).pickups[0]; jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
   // 絵の抜けがないか確かめる (cards-art.js にないキャラは、えんぴつの絵になってしまう)
   {

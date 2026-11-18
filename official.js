@@ -212,10 +212,21 @@ module.exports = function install(app, ctx) {
     if (!user || posted.get(key)) return;
     const mins = Math.max(0, Math.floor((at - quest.start) / 60000)), took = mins >= 1440 ? `${Math.floor(mins / 1440)} 日 ${Math.floor(mins / 60) % 24} 時間` : mins >= 60 ? `${Math.floor(mins / 60)} 時間 ${mins % 60} 分` : `${mins} 分`;
     const r = cards.CARDS[quest.reward];
-    const text = `${rank === 1 ? '🏆【最速クリア】' : '🥈【2 番目にクリア】'}高難易度クエスト「${quest.name}」
-${rank === 1 ? 'いちばん最初にクリアしたのは' : '2 番目にクリアしたのは'} ${user.display_name || user.username} (@${user.username}) さん！
-開始から ${took}・${turns} ターンで撃破 ⚡ ${r.rarity}「${r.name}」をゲット！${title ? `\n称号「${title}」を贈ります！` : ''} おめでとうございます🎉 ${TAG}`;
-    const id = post(text, bannerName('quest', quest.id));
+    const who = `${user.display_name || user.username} (@${user.username})`;
+    const text = rank === 1 ? `⚡⚡⚡【${quest.boss} 討伐速報】⚡⚡⚡
+🏆👑 最速討伐者、誕生！！ 👑🏆
+${who} さんが「${quest.name}」で ${quest.boss}を全校最速で討伐ッ！！
+⏱ 開始から ${took}・${turns} ターンで撃破
+🎁 ${r.rarity}「${r.name}」GET＆称号「${title || '最速討伐'}」授与！！
+雷鳴が止んだ…伝説の始まりだ🔥🔥🔥 ${TAG}`
+      : `⚡⚡【${quest.boss} 討伐速報・第 2 報】⚡⚡
+🥈✨ 準最速討伐者、現る！！ ✨🥈
+${who} さんが「${quest.name}」で ${quest.boss}を討伐ッ！！
+⏱ 開始から ${took}・${turns} ターンで撃破
+🎁 ${r.rarity}「${r.name}」GET＆称号「${title || '準最速討伐'}」授与！！
+次の討伐者はキミだ⚡🔥 ${TAG}`;
+    const award = bannerName('award', `${quest.id}-${rank}`); // 表彰の金ピカ画像 (なければクエストのバナー)
+    const id = post(text, bannerFile(award) ? award : bannerName('quest', quest.id));
     if (id) { db.prepare('INSERT OR IGNORE INTO official_posts (key, post_id, posted_at) VALUES (?, ?, ?)').run(key, id, Date.now()); console.log(`[official] 表彰しました: ${key} @${user.username}`); }
   };
 
