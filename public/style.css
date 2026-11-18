@@ -1958,3 +1958,9 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-oni-hero span { font-size: 12px; color: #ffc9c9; }
 .cb-oni-deck .cb-deck { margin-bottom: 6px; }
 .cb-oni-stats { margin: 0 0 10px; line-height: 1.6; }
+
+/* CPU (かんたん) */
+.cb-cpu-pick { grid-template-columns: repeat(3, 1fr); }
+.cb-cpu-pick .btn { padding-left: 6px; padding-right: 6px; }
+.cb-easy-btn { border-color: #8ce99a; }
+@media (max-width: 420px) { .cb-cpu-pick { grid-template-columns: 1fr 1fr; } .cb-cpu-pick .cb-oni-btn { grid-column: 1 / -1; } }

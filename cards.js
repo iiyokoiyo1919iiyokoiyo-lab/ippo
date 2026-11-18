@@ -414,7 +414,7 @@ CREATE TABLE card_quests (
 );
 `;
 const START_COINS = 1000, DAILY_COINS = 300;
-const REWARD = { cpu: { win: 30, lose: 10 }, oni: { win: 40, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
+const REWARD = { easy: { win: 20, lose: 5 }, cpu: { win: 30, lose: 10 }, oni: { win: 40, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
 // ---------- CPU 戦「鬼難」: 決まった 5 種類のデッキ ----------
 // どのデッキも「Lv18 の SSR・MR でそろえたデッキ」で、先を読むプレイヤーが戦って勝率 25% くらいになるよう、
 // シミュレーションで boost (能力の倍率) を決めた (tools/tune_oni.js)。CPU は先を読む強い CPU
@@ -663,15 +663,26 @@ function install(app, ctx) {
   function startBattle(mode, uids, quest = null, oni = null) {
     const cpuView = quest ? { id: 0, username: 'quest', displayName: quest.boss, avatar: { kind: 'emoji', emoji: quest.emoji, color: '#3b2f8f' } }
       : oni ? { id: 0, username: 'oni', displayName: `鬼難CPU・${oni.name}`, avatar: { kind: 'emoji', emoji: '👹', color: '#a61e1e' } }
+      : mode === 'easy' ? { id: 0, username: 'cpu', displayName: 'CPU (かんたん)', avatar: { kind: 'emoji', emoji: '🐣', color: '#2f9e44' } }
       : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } };
     const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
       players: uids.map((u) => (u ? userView(u) : cpuView)),
-      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : oni ? oniDeckStats(oni) : cpuDeck(uids[0]))) } };
+      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
     uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }
   // CPU のデッキ: 相手と同じくらいの強さ (同じレア度の、ちがうカード)
+  // CPU (かんたん): SR までのキャラだけ。プレイヤーのカードと同じレベル・レア度 (SR より上には SR を当てる)
+  const EASY_RANKS = ['N', 'R', 'SR'];
+  function easyDeck(uid) {
+    const mine = deckStats(uid);
+    return mine.map((c) => {
+      const r = EASY_RANKS.includes(c.promoted ? c.baseRarity : c.rarity) ? (c.promoted ? c.baseRarity : c.rarity) : 'SR';
+      const pool = poolOf(r).filter((id) => !mine.some((m) => m.id === id));
+      return statsOf(pool[Math.floor(rnd() * pool.length)] || 'pencil', c.level);
+    });
+  }
   function cpuDeck(uid) {
     const mine = deckStats(uid);
     return mine.map((c) => { // UR・MR には、SSR を UR の強さにして当てる
@@ -683,7 +694,7 @@ function install(app, ctx) {
   function nextTurn(b) {
     if (b.ended) return;
     b.acts = [null, null];
-    if (!b.uids[1]) b.acts[1] = b.mode === 'quest' ? cpuAct(b.state, 1, rnd) : smartAct(b.state, 1, rnd); // CPU 戦は強い CPU (クエストの敵はいつもの CPU)
+    if (!b.uids[1]) b.acts[1] = b.mode === 'quest' || b.mode === 'easy' ? cpuAct(b.state, 1, rnd) : smartAct(b.state, 1, rnd); // ふつう・鬼難は先を読む強い CPU (かんたん・クエストの敵は素直な CPU)
     b.deadline = Date.now() + TURN_MS;
     b.uids.forEach((u) => u && send(u, { t: 'turn', turn: b.state.turn + 1, deadline: b.deadline, ms: TURN_MS, state: publicState(b) }));
     clearTimeout(b.timer);
@@ -722,7 +733,7 @@ function install(app, ctx) {
       if (!u) return;
       const p = player(u), res = winner === -1 ? 'draw' : winner === i ? 'win' : 'lose';
       const count = p.reward_day === today ? p.reward_count : 0;
-      const capped = b.mode !== 'cpu' && b.mode !== 'quest' && b.mode !== 'oni'; // CPU 戦 (ふつう・鬼難)・クエストの報酬は回数制限なし
+      const capped = !['easy', 'cpu', 'quest', 'oni'].includes(b.mode); // CPU 戦 (かんたん・ふつう・鬼難)・クエストの報酬は回数制限なし
       const coins = !capped || count < REWARDS_PER_DAY ? (REWARD[b.mode] || REWARD.cpu)[res === 'win' ? 'win' : 'lose'] : 0;
       // クエスト: はじめて勝ったときだけ、報酬のカード
       let questReward = null;
@@ -767,6 +778,7 @@ function install(app, ctx) {
         if (battleOf.get(uid)) return;
         leave(uid);
         if (m.mode === 'cpu') return startBattle('cpu', [uid, null]);
+        if (m.mode === 'easy') return startBattle('easy', [uid, null]);
         if (m.mode === 'oni') { // 鬼難: デッキをえらぶ (なければランダム)
           const d = ONI_DECKS.find((x) => x.id === String(m.deck || '')) || ONI_DECKS[crypto.randomInt(0, ONI_DECKS.length)];
           return startBattle('oni', [uid, null], null, d);
