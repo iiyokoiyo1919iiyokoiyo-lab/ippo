@@ -20,8 +20,8 @@ const SKILLS = {
   drain: { name: 'すいとる', desc: '1.2 倍のダメージ。与えたダメージの半分回復' },
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
-  starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる) (星キャンディーだけのわざ)' },
-  sweep: { name: 'しっぷうぎり', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
+  starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
+  sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv5 で +8%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
@@ -161,7 +161,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
-const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // しっぷうぎり: 場のカードに 1.4 倍、控えに 0.8 倍
+const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに 1.4 倍、控えに 0.8 倍
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
 const METEOR_TURNS = 5, METEOR_RATE = 0.3; // 流星: 5 ターン、ターンの終わりに相手の場のカードへ最大 HP の 30% (ガード無視)
 function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0, meteor: null }; }
@@ -364,7 +364,7 @@ CREATE TABLE card_horses (
 );
 CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
-// キャラ専用のわざ (馬には付けない): しっぷうぎり = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
+// キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
 const EXCLUSIVE_SKILLS = ['sweep', 'starlight'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END

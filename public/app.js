@@ -3541,10 +3541,10 @@ async function viewBattle(params) {
         }, t);
         t += 420;
       } else if (e.k === 'heal') { setTimeout(() => pop(e.p, `+${e.amount}`, 'heal'), t); t += 300; }
-      else if (e.k === 'skill' && e.id === 'sweep') { // しっぷうぎり: 緑の斬撃が相手の盤面を横切る
+      else if (e.k === 'skill' && e.id === 'sweep') { // 疾風斬り: 緑の斬撃が相手の盤面を横切る
         setTimeout(() => {
           replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill sweep');
-          overlayFx('cb-gslash' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><i></i><b>しっぷうぎり！</b>', 1300, e.p === you ? 'top' : 'bottom');
+          overlayFx('cb-gslash' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><i></i><b>疾風斬り！</b>', 1300, e.p === you ? 'top' : 'bottom');
         }, t);
         t += 650;
       }
