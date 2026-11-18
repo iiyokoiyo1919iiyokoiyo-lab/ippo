@@ -491,6 +491,8 @@ const REWARDS_PER_DAY = 15;
 // 対戦募集掲示板: 部屋を作るときに、ひとこと (40 文字まで) とタグを付けて掲示板に出せる。待っているあいだ (10 分まで) だけ載る
 const BOARD_TAGS = ['気軽に', 'ガチ勝負', '初心者歓迎', '新キャラ試したい', 'クエスト前の練習'];
 const BOARD_MAX = 40, ROOM_MS = 10 * 60_000;
+// 掲示板の対戦はレート戦 (ランダム対戦と同じレートと報酬)。同じ相手とのレート戦は 1 日 3 回まで (それより多いと、レートの動かない部屋対戦になる)
+const BOARD_RATED_PER_PAIR = 3;
 const boardText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, BOARD_MAX);
 const TURN_MS = Number(process.env.CB_TURN_MS || 25_000);
 const RECONNECT_MS = Number(process.env.CB_RECONNECT_MS || 30_000);
@@ -739,7 +741,7 @@ function install(app, ctx) {
   const rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 
   const publicState = (b) => ({ turn: b.state.turn, sides: b.state.sides.map((s) => ({ active: s.active, meteor: s.meteor ? s.meteor.left : 0, cards: s.cards.map((c) => ({ ...c })) })) });
-  function startBattle(mode, uids, quest = null, oni = null) {
+  function startBattle(mode, uids, quest = null, oni = null, extra = {}) {
     const cpuView = quest ? { id: 0, username: 'quest', displayName: quest.boss, avatar: { kind: 'emoji', emoji: quest.emoji, color: '#3b2f8f' } }
       : oni ? { id: 0, username: 'oni', displayName: `鬼難CPU・${oni.name}`, avatar: { kind: 'emoji', emoji: '👹', color: '#a61e1e' } }
       : mode === 'easy' ? { id: 0, username: 'cpu', displayName: 'CPU (かんたん)', avatar: { kind: 'emoji', emoji: '🐣', color: '#2f9e44' } }
@@ -747,7 +749,7 @@ function install(app, ctx) {
     const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
       players: uids.map((u) => (u ? userView(u) : cpuView)),
       state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u).map((c) => questBonus(quest, c)) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
-    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
+    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }
@@ -855,7 +857,7 @@ function install(app, ctx) {
       }
       boardCache = { at: now, list: list.sort((a, b) => b.at - a.at) };
     }
-    res.json({ tags: BOARD_TAGS, max: BOARD_MAX, posts: boardCache.list.map((p) => ({ ...p, mine: !!req.user && p.user.id === req.user.id })) });
+    res.json({ tags: BOARD_TAGS, max: BOARD_MAX, ratedPerPair: BOARD_RATED_PER_PAIR, reward: REWARD.random, posts: boardCache.list.map((p) => ({ ...p, mine: !!req.user && p.user.id === req.user.id })) });
   });
   wss.on('connection', (ws, req, user) => {
     const uid = user.id;
@@ -905,7 +907,14 @@ function install(app, ctx) {
           const code = String(m.code || ''), r = rooms.get(code);
           if (!r || Date.now() - r.at > ROOM_MS || conns.get(r.uid)?.readyState !== 1) { rooms.delete(code); return send(uid, { t: 'error', msg: 'その部屋コードは見つかりません' }); }
           if (r.uid === uid) return send(uid, { t: 'error', msg: '自分の部屋には入れません' });
-          rooms.delete(code); boardCache = null; return startBattle('room', [r.uid, uid]);
+          rooms.delete(code); boardCache = null;
+          if (r.board) { // 掲示板からの対戦はレート戦 (同じ相手とは 1 日 3 回まで)
+            const since = Date.parse(jstDay() + 'T00:00:00+09:00');
+            const n = db.prepare("SELECT COUNT(*) AS n FROM card_battles WHERE mode = 'random' AND created_at >= ? AND ((p1 = ? AND p2 = ?) OR (p1 = ? AND p2 = ?))").get(since, r.uid, uid, uid, r.uid).n;
+            const rated = n < BOARD_RATED_PER_PAIR;
+            return startBattle(rated ? 'random' : 'room', [r.uid, uid], null, null, { board: true, rated, ratedLeft: Math.max(0, BOARD_RATED_PER_PAIR - n - (rated ? 1 : 0)) });
+          }
+          return startBattle('room', [r.uid, uid]);
         }
       }
       if (m.t === 'cancel') { leave(uid); return send(uid, { t: 'cancelled' }); }

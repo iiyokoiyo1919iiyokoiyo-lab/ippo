@@ -3159,7 +3159,7 @@ async function viewCards() {
         <div class="cb-cpu-pick"><a class="btn btn-outline cb-easy-btn" href="#/games/cards/battle?mode=easy">🐣 CPU (かんたん)<small>SR までのキャラ · 勝ち +${cat.reward.easy?.win ?? 20}🪙</small></a>
           <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU (ふつう)<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
           <a class="btn cb-oni-btn" href="#/games/cards/oni">👹 CPU (鬼難)<small>勝ち +${cat.reward.oni?.win ?? 40}🪙 · ガチで強い</small></a></div>
-        <a class="btn cb-board-btn" href="#/games/cards/board">📋 対戦募集掲示板<small>募集を出す・募集している人と対戦</small></a>
+        <a class="btn cb-board-btn" href="#/games/cards/board">📋 レート戦 募集掲示板<small>相手をえらんでレート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
@@ -3495,7 +3495,7 @@ async function viewCardUsage() {
 
 // ---------- 対戦募集掲示板 ----------
 async function viewCardBoard() {
-  main.innerHTML = pageHead({ title: '対戦募集掲示板', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbd">${loadingBlock()}</div>`;
+  main.innerHTML = pageHead({ title: 'レート戦 募集掲示板', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbd">${loadingBlock()}</div>`;
   let cat; try { cat = await cbCatalog(); } catch (e) { $('#cbd').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   let tag = '', timer = 0, first = true;
   const draw = (b) => {
@@ -3508,7 +3508,7 @@ async function viewCardBoard() {
           <div class="cbd-tags" role="radiogroup" aria-label="タグ">${b.tags.map((t, i) => `<button type="button" class="chip cbd-tag${i ? '' : ' active'}" data-tag="${esc(t)}" role="radio" aria-checked="${i ? 'false' : 'true'}">${esc(t)}</button>`).join('')}</div>
           <input class="input" name="comment" maxlength="${b.max}" placeholder="ひとこと (例: タドコロ使ってます！ 誰でもどうぞ)" autocomplete="off">
           <button class="btn btn-primary btn-block" type="submit">📋 掲示板に募集を出す</button>
-          <p class="text-xs muted" style="margin:0">募集を出すと待ち受け画面になり、相手が来たらすぐ対戦が始まります (勝ち +${cat.reward.room?.win ?? 50}🪙)。待ち受け画面をはなれると、募集は消えます</p>
+          <p class="text-xs muted" style="margin:0">掲示板の対戦は<b>レート戦</b>です (ランダム対戦と同じく、レートが動いて勝ち +${b.reward.win}🪙)。同じ相手とのレート戦は 1 日 ${b.ratedPerPair} 回まで。募集を出すと待ち受け画面になり、相手が来たらすぐ始まります。待ち受け画面をはなれると、募集は消えます</p>
         </form>` : '<p class="text-sm">ログインすると、募集を出したり、募集している人と対戦したりできます</p><button class="btn btn-primary" type="button" id="cbd-login">ログイン</button>'}</section>
         <section class="card card-pad"><div class="panel-head"><h3>⚔️ 募集中</h3><span class="text-xs muted" id="cbd-n"></span></div><div id="cbd-list"></div></section>`;
       $$('.cbd-tag').forEach((x) => x.addEventListener('click', () => { tag = x.dataset.tag; $$('.cbd-tag').forEach((y) => { y.classList.toggle('active', y === x); y.setAttribute('aria-checked', String(y === x)); }); }));
@@ -3575,6 +3575,7 @@ async function viewBattle(params) {
   const cat = await cbCatalog().catch(() => null);
   const T = cat?.types || {};
   const box = () => $('#cbb');
+  let fromBoard = !!board || params.get('from') === 'board';
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
   const evText = (e) => e.k === 'flinched' ? `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`
@@ -3713,7 +3714,7 @@ async function viewBattle(params) {
       ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
         <p><em class="cb-mr-word">MR</em>「${esc(m.questReward.name)}」が仲間になった！<br><small>わざ「${esc(m.questReward.skillName)}」${esc(m.questReward.skillDesc)}</small></p></div>`
         : m.quest && m.result === 'win' ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
-      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${mode === 'oni' && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : '#/games/cards'}">もどる</a></div></div>`);
+      <div class="md-actions">${fromBoard ? '<a class="btn btn-primary" href="#/games/cards/board">掲示板にもどる</a><a class="btn btn-ghost" href="#/games/cards">ゲームのホーム</a>' : `<a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${mode === 'oni' && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : '#/games/cards'}">もどる</a>`}</div></div>`);
     if (m.questReward) { cbCatalogCache = null; const q = box().querySelector('.cb-qreward'); if (q) { cbConfetti(q, 140, ['#ff6bd6', '#ffd43b', '#63e6be', '#4dabf7', '#b197fc', '#fff']); setTimeout(() => cbConfetti(q, 90, ['#ffe066', '#fff', '#d0a8ff']), 700); } }
   }
   function connect() {
@@ -3726,7 +3727,10 @@ async function viewBattle(params) {
       if (m.t === 'waiting') return m.mode === 'room' ? waiting('友だちを待っています', `<div class="cb-code">${esc(m.code)}</div><p class="text-sm muted">この部屋コードを友だちに教えてください (「部屋コードで入る」に入力)</p>`) : waiting('対戦相手を探しています…');
       if (m.t === 'error') { box().innerHTML = emptyState({ icon: 'alert', title: m.msg, action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); closedByUs = true; ws.close(); return; }
       if (m.t === 'start') {
-        you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました'); render();
+        you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました');
+        if (m.board) { fromBoard = true; const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = m.rated ? '📋 レート戦 (掲示板)' : '📋 掲示板の対戦';
+          if (!m.resumed) log.push(m.rated ? `掲示板からのレート戦です (この相手とのレート戦は今日あと ${m.ratedLeft} 回)` : 'この相手とのレート戦は今日はもう上限です。レートの動かない対戦になります'); }
+        render();
         // 行動のボタンまで 1 画面に入るよう、バトルの枠を画面の上にそろえる
         const top = box().getBoundingClientRect().top + window.scrollY - ($('.topbar')?.offsetHeight || 0) - ($('.page-head')?.offsetHeight || 0) - 6;
         window.scrollTo({ top: Math.max(0, top) });
