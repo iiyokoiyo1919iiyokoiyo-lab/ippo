@@ -414,7 +414,19 @@ CREATE TABLE card_quests (
 );
 `;
 const START_COINS = 1000, DAILY_COINS = 300;
-const REWARD = { cpu: { win: 30, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
+const REWARD = { cpu: { win: 30, lose: 10 }, oni: { win: 40, lose: 10 }, random: { win: 100, lose: 30 }, room: { win: 50, lose: 20 } };
+// ---------- CPU 戦「鬼難」: 決まった 5 種類のデッキ ----------
+// どのデッキも「Lv18 の SSR・MR でそろえたデッキ」で、先を読むプレイヤーが戦って勝率 25% くらいになるよう、
+// シミュレーションで boost (能力の倍率) を決めた (tools/tune_oni.js)。CPU は先を読む強い CPU
+const ONI_DECKS = [
+  { id: 'shippu', name: '疾風忍軍', emoji: '🌪️', text: '素早さで押し切る忍びの軍団', cards: [['scissors', 20], ['pin', 20], ['tape', 20]], boost: 0.946 },
+  { id: 'hoshi', name: '星降る夜の騎士団', emoji: '🌠', text: '流星で削ってから回復で粘る', cards: [['star', 20], ['leaf', 20], ['case', 20]], boost: 1.015 },
+  { id: 'ougon', name: '黄金の王国', emoji: '👑', text: '王と騎士の一撃必殺', cards: [['gold', 20], ['fountain', 20], ['sharp', 20]], boost: 1.237 },
+  { id: 'teppeki', name: '鉄壁要塞', emoji: '🏯', text: '固くて倒れない、おもい軍団', cards: [['chalk', 20], ['board', 20], ['weight', 20]], boost: 1.78 },
+  { id: 'niji', name: '虹の魔導団', emoji: '🌈', text: '吸収と回復の魔法使いたち', cards: [['case', 20], ['compass', 20], ['protractor', 20]], boost: 1.345 },
+];
+// 鬼難のデッキのカード (boost をかける)。速さはそのまま
+const oniDeckStats = (d, boost = d.boost) => d.cards.map(([id, lv]) => { const s = statsOf(id, lv); return { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
 const REWARDS_PER_DAY = 15;
 const TURN_MS = Number(process.env.CB_TURN_MS || 25_000);
 const RECONNECT_MS = Number(process.env.CB_RECONNECT_MS || 30_000);
@@ -485,6 +497,9 @@ function install(app, ctx) {
     urPromote: UR_PROMOTE, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
+  // 鬼難のデッキ (CPU が使う 5 種類)
+  app.get('/api/cards/oni', (req, res) => res.json({ reward: REWARD.oni, decks: ONI_DECKS.map((d) => ({ id: d.id, name: d.name, emoji: d.emoji, text: d.text, boost: d.boost,
+    cards: oniDeckStats(d).map((s, i) => ({ ...s, lv: d.cards[i][1], skillName: SKILLS[CARDS[s.id].skill].name, skillDesc: SKILLS[CARDS[s.id].skill].desc })) })) }));
   // 開催中のクエスト (敵のデッキ・報酬)
   app.get('/api/cards/quests', (req, res) => res.json({ quests: questsNow().map((q) => questView(q, req.user?.id)) }));
 
@@ -645,11 +660,14 @@ function install(app, ctx) {
   const rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 
   const publicState = (b) => ({ turn: b.state.turn, sides: b.state.sides.map((s) => ({ active: s.active, meteor: s.meteor ? s.meteor.left : 0, cards: s.cards.map((c) => ({ ...c })) })) });
-  function startBattle(mode, uids, quest = null) {
-    const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
-      players: uids.map((u) => (u ? userView(u) : quest ? { id: 0, username: 'quest', displayName: quest.boss, avatar: { kind: 'emoji', emoji: quest.emoji, color: '#3b2f8f' } } : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } })),
-      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : cpuDeck(uids[0]))) } };
-    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, you: i, players: b.players, state: publicState(b) }); } });
+  function startBattle(mode, uids, quest = null, oni = null) {
+    const cpuView = quest ? { id: 0, username: 'quest', displayName: quest.boss, avatar: { kind: 'emoji', emoji: quest.emoji, color: '#3b2f8f' } }
+      : oni ? { id: 0, username: 'oni', displayName: `鬼難CPU・${oni.name}`, avatar: { kind: 'emoji', emoji: '👹', color: '#a61e1e' } }
+      : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } };
+    const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
+      players: uids.map((u) => (u ? userView(u) : cpuView)),
+      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : oni ? oniDeckStats(oni) : cpuDeck(uids[0]))) } };
+    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }
@@ -704,7 +722,7 @@ function install(app, ctx) {
       if (!u) return;
       const p = player(u), res = winner === -1 ? 'draw' : winner === i ? 'win' : 'lose';
       const count = p.reward_day === today ? p.reward_count : 0;
-      const capped = b.mode !== 'cpu' && b.mode !== 'quest'; // CPU 戦 (AI 戦)・クエストの報酬は回数制限なし
+      const capped = b.mode !== 'cpu' && b.mode !== 'quest' && b.mode !== 'oni'; // CPU 戦 (ふつう・鬼難)・クエストの報酬は回数制限なし
       const coins = !capped || count < REWARDS_PER_DAY ? (REWARD[b.mode] || REWARD.cpu)[res === 'win' ? 'win' : 'lose'] : 0;
       // クエスト: はじめて勝ったときだけ、報酬のカード
       let questReward = null;
@@ -749,6 +767,10 @@ function install(app, ctx) {
         if (battleOf.get(uid)) return;
         leave(uid);
         if (m.mode === 'cpu') return startBattle('cpu', [uid, null]);
+        if (m.mode === 'oni') { // 鬼難: デッキをえらぶ (なければランダム)
+          const d = ONI_DECKS.find((x) => x.id === String(m.deck || '')) || ONI_DECKS[crypto.randomInt(0, ONI_DECKS.length)];
+          return startBattle('oni', [uid, null], null, d);
+        }
         if (m.mode === 'quest') {
           const q = questsNow().find((x) => x.id === String(m.quest || ''));
           if (!q) return send(uid, { t: 'error', msg: 'そのクエストは今は開催していません' });
@@ -797,4 +819,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

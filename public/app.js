@@ -2596,6 +2596,7 @@ function route() {
   if (h === '/games/cards/gacha') { setActiveNav('games'); return viewGacha(); }
   if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
   if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
+  if (h === '/games/cards/oni') { setActiveNav('games'); return viewOni(); }
   if (h === '/games/cards/usage') { setActiveNav('games'); return viewCardUsage(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
@@ -3151,7 +3152,8 @@ async function viewCards() {
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
       <div class="cb-modes">
         <a class="btn btn-primary btn-lg" href="#/games/cards/battle?mode=random">${icon('globe')}ランダム対戦<small>レート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
-        <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU と練習<small>先を読む強い CPU · 勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
+        <div class="cb-cpu-pick"><a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU (ふつう)<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
+          <a class="btn cb-oni-btn" href="#/games/cards/oni">👹 CPU (鬼難)<small>勝ち +${cat.reward.oni?.win ?? 40}🪙 · ガチで強い</small></a></div>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
@@ -3435,6 +3437,23 @@ async function viewCollection() {
   render();
 }
 
+// ---------- CPU 戦「鬼難」: 5 種類のデッキからえらぶ ----------
+async function viewOni() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: '👹 CPU (鬼難)', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbo">${loadingBlock()}</div>`;
+  let o; try { await cbCatalog(); o = await api('/cards/oni'); } catch (e) { $('#cbo').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const root = $('#cbo'); if (!root) return;
+  root.innerHTML = `<section class="card cb-oni-hero"><b>👹 鬼難</b><p>先を読む強い CPU が、鍛えぬいた Lv20 のデッキで待ちかまえる。<br>Lv18 の SSR・MR でそろえても、勝てるのは 4 回に 1 回くらい。</p>
+      <span>勝ち +${o.reward.win}🪙 · 負け +${o.reward.lose}🪙 · 回数制限なし · レベルアップ書もいつもどおり</span></section>
+    ${o.decks.map((d) => `<section class="card card-pad cb-oni-deck">
+      <div class="panel-head"><h3>${esc(d.emoji)} ${esc(d.name)}</h3><span class="text-xs muted">全員 Lv20${d.boost > 1 ? ` · 鬼強化 +${Math.round((d.boost - 1) * 100)}%` : ''}</span></div>
+      <p class="text-sm muted" style="margin:0 0 8px">${esc(d.text)}</p>
+      <div class="cb-deck">${d.cards.map((c) => cbCard(c, { small: true })).join('')}</div>
+      <p class="text-xs muted cb-oni-stats">${d.cards.map((c) => `${esc(c.name)}: HP ${c.maxHp} 攻 ${c.atk} 防 ${c.def} 速 ${c.spd}`).join('<br>')}</p>
+      <a class="btn cb-oni-btn btn-block" href="#/games/cards/battle?mode=oni&deck=${encodeURIComponent(d.id)}">⚔️ この鬼に挑む</a></section>`).join('')}
+    <a class="btn btn-outline btn-block" href="#/games/cards/battle?mode=oni">🎲 ランダムな鬼に挑む</a>`;
+}
+
 // ---------- デッキの採用率 ----------
 async function viewCardUsage() {
   main.innerHTML = pageHead({ title: 'デッキ採用率', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbu">${loadingBlock()}</div>`;
@@ -3502,8 +3521,8 @@ async function viewQuest() {
 // ---------- 対戦 ----------
 async function viewBattle(params) {
   if (!requireLogin()) return;
-  const mode = params.get('mode'), code = params.get('code') || '', questId = params.get('q') || '';
-  const titles = { quest: '🌠 期間限定クエスト', cpu: 'CPU と練習', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
+  const mode = params.get('mode'), code = params.get('code') || '', questId = params.get('q') || '', oniDeck = params.get('deck') || '';
+  const titles = { quest: '🌠 期間限定クエスト', oni: '👹 CPU (鬼難)', cpu: 'CPU (ふつう)', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
   main.innerHTML = pageHead({ title: titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
   const cat = await cbCatalog().catch(() => null);
   const T = cat?.types || {};
@@ -3633,12 +3652,12 @@ async function viewBattle(params) {
       ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
         <p><em class="cb-mr-word">MR</em>「${esc(m.questReward.name)}」が仲間になった！<br><small>わざ「${esc(m.questReward.skillName)}」${esc(m.questReward.skillDesc)}</small></p></div>`
         : m.quest && m.result === 'win' ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
-      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : '#/games/cards'}">もどる</a></div></div>`);
+      <div class="md-actions"><a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${mode === 'oni' && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : '#/games/cards'}">もどる</a></div></div>`);
     if (m.questReward) { cbCatalogCache = null; const q = box().querySelector('.cb-qreward'); if (q) { cbConfetti(q, 140, ['#ff6bd6', '#ffd43b', '#63e6be', '#4dabf7', '#b197fc', '#fff']); setTimeout(() => cbConfetti(q, 90, ['#ffe066', '#fff', '#d0a8ff']), 700); } }
   }
   function connect() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/cb`);
-    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code, quest: questId }); };
+    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code, quest: questId, deck: oniDeck }); };
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (!box()) return;

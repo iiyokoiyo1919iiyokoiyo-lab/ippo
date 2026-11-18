@@ -19,6 +19,10 @@
   公式アカウントの投稿 (ドパバナーつき) とアプリの告知バナー (until まで) を自動で作る
 - 足したら `node tools/make_banners.js` で `public/banners/gacha-<id>.jpg` を作り、画像を開いて確認してからコミットする
 
+## CPU 戦「鬼難」の強さ
+- `cards.js` の `ONI_DECKS` の boost は「Lv18 の SSR・MR デッキで勝率 25% (誤差 5% 以内)」になるよう `node tools/tune_oni.js` で決めた
+- カードの能力・わざ・新キャラなど、対戦の強さが変わる変更をしたら、`node tools/tune_oni.js` で測り直して boost を更新する
+
 ## そのほか
 - 既存の機能を消さない・データベースの構造を勝手に変えない (表の追加・列の追加は `db.migrate` で)・認証やアクセス制御を弱めない
 - 利用者の書いた文字は必ずエスケープして表示する (innerHTML に生のまま入れない)
