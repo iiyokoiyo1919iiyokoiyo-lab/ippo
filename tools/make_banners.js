@@ -89,7 +89,7 @@ function hardQuestHtml(q, r) {
       <div class="stroke" style="--sw:14px;--sc:#3b1d00;font-size:100px;line-height:1.1;color:#ffe066;text-shadow:0 0 34px #fab005;white-space:nowrap">${esc(q.name)}</div>
       <div style="margin-top:18px;font-size:36px;color:#fff;text-shadow:0 3px 0 #1b1035">クリアで <span style="color:#ff8fd8;font-size:54px;text-shadow:0 0 16px #ff6bd6,0 3px 0 #1b1035">${esc(r.rarity)}</span> ${esc(r.name)} GET!!</div>
       <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！</div>
-      ${Object.entries(q.bonus || {}).map(([id, k]) => `<div style="margin-top:10px;display:inline-block;padding:6px 16px;border-radius:14px;background:linear-gradient(90deg,#fff3bf,#ffc078);font-size:26px;color:#7a3e00;font-weight:900">⭐ 特効 ${esc(cards.CARDS[id].name)} 能力 ${k} 倍！</div><br>`).join('')}
+      ${q.hint ? `<div style="margin-top:10px;display:inline-block;padding:6px 16px;border-radius:14px;background:linear-gradient(90deg,#fff3bf,#ffc078);font-size:26px;color:#7a3e00;font-weight:900">${esc(q.hint)}</div><br>` : ''}
       <div style="margin-top:12px;display:inline-block;padding:8px 16px;border-radius:14px;background:rgba(11,7,32,.75);font-size:22px;color:#fff3bf;font-weight:700">敵: ${q.enemy.map(([id, lv]) => `${esc(cards.CARDS[id].name)} Lv${lv}`).join('・')}</div>
     </div>
     <div class="date" style="left:600px;bottom:40px;background:linear-gradient(90deg,#ffe066,#fab005);color:#3b1d00">${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</div>

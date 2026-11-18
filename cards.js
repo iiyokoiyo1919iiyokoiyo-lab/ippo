@@ -64,7 +64,7 @@ const CARD_LIST = [
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 10:30 (日本時間) 登場。パッシブ「士気」
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
-  ['raijin', '雷神クリりん', '⚡', 'MR', 'heavy', 70, 16, 12, 10, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
+  ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 10, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -438,11 +438,11 @@ const QUESTS = [
     start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
   // 高難易度 (hard): 敵は先を読む強い CPU。能力に boost をかける (Lv18 の SSR・MR デッキで勝率 25% くらい。tools/tune_oni.js で決める)
   { id: 'raijin-2026', name: '雷神降臨', boss: '雷神クリりん', emoji: '⚡', reward: 'raijin', hard: true, boost: 1,
-    pr: 'わざ「落雷」は、どんな相性でも 2.3 倍の無属性こうげき！ 敵は先を読む強い CPU。\n⭐ 特効: タドコロをデッキに入れると、このクエストでは HP・攻撃・防御が 1.5 倍！',
+    hint: '敵は全員 ✂️きる → 🪨おもいのタドコロが有利！',
+    pr: 'わざ「落雷」は、どんな相性でも 2.3 倍の無属性こうげき！ 敵は先を読む強い CPU。\n敵は全員 ✂️きる。🪨おもいのタドコロが大活躍！ 野獣の眼光で怯ませれば落雷も止められる！',
     text: '雷鳴とともに現れた魔人「雷神クリりん」。落雷はどんな相性でも 2.3 倍！ 勝てば MR「雷神クリりん」が仲間になる',
-    tip: '雷神クリりんの「落雷」は相性に関係なく 2.3 倍。お供は Lv20 の疾風剣士ハサミ丸と黄金えんぴつ王。敵は先を読む強い CPU なので、ガードと交代のタイミングが勝負！',
+    tip: '敵は 3 体とも ✂️きる タイプ。🪨おもい のカード、とくにタドコロが有利！ タドコロの「野獣の眼光」で怯ませると、次のターンの落雷 (相性に関係なく 2.3 倍) を止められる。敵は先を読む強い CPU なので、ガードと交代のタイミングが勝負！',
     enemy: [['raijin', 20], ['scissors', 20], ['gold', 20]],
-    bonus: { tadokoro: 1.5 }, // 特効: このクエストでは、タドコロの HP・攻撃・防御が 1.5 倍
     start: Date.parse('2026-11-19T08:00:00+09:00'), end: Date.parse('2026-11-22T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
@@ -467,11 +467,11 @@ const REWARD = { easy: { win: 20, lose: 5 }, cpu: { win: 30, lose: 10 }, oni: { 
 // どのデッキも「Lv18 の SSR・MR でそろえたデッキ」で、先を読むプレイヤーが戦って勝率 25% くらいになるよう、
 // シミュレーションで boost (能力の倍率) を決めた (tools/tune_oni.js)。CPU は先を読む強い CPU
 const ONI_DECKS = [
-  { id: 'shippu', name: '疾風忍軍', emoji: '🌪️', text: '素早さで押し切る忍びの軍団', cards: [['scissors', 20], ['pin', 20], ['tape', 20]], boost: 0.946 },
-  { id: 'hoshi', name: '星降る夜の騎士団', emoji: '🌠', text: '流星で削ってから回復で粘る', cards: [['star', 20], ['leaf', 20], ['case', 20]], boost: 1.015 },
-  { id: 'ougon', name: '黄金の王国', emoji: '👑', text: '王と騎士の一撃必殺', cards: [['gold', 20], ['fountain', 20], ['sharp', 20]], boost: 1.237 },
-  { id: 'teppeki', name: '鉄壁要塞', emoji: '🏯', text: '固くて倒れない、おもい軍団', cards: [['chalk', 20], ['board', 20], ['weight', 20]], boost: 1.78 },
-  { id: 'niji', name: '虹の魔導団', emoji: '🌈', text: '吸収と回復の魔法使いたち', cards: [['case', 20], ['compass', 20], ['protractor', 20]], boost: 1.345 },
+  { id: 'shippu', name: '疾風忍軍', emoji: '🌪️', text: '素早さで押し切る忍びの軍団', cards: [['scissors', 20], ['pin', 20], ['tape', 20]], boost: 0.943 },
+  { id: 'hoshi', name: '星降る夜の騎士団', emoji: '🌠', text: '流星で削ってから回復で粘る', cards: [['star', 20], ['leaf', 20], ['case', 20]], boost: 1.054 },
+  { id: 'ougon', name: '黄金の王国', emoji: '👑', text: '王と騎士の一撃必殺', cards: [['gold', 20], ['fountain', 20], ['sharp', 20]], boost: 1.401 },
+  { id: 'teppeki', name: '鉄壁要塞', emoji: '🏯', text: '固くて倒れない、おもい軍団', cards: [['chalk', 20], ['board', 20], ['weight', 20]], boost: 1.94 },
+  { id: 'niji', name: '虹の魔導団', emoji: '🌈', text: '吸収と回復の魔法使いたち', cards: [['case', 20], ['compass', 20], ['protractor', 20]], boost: 1.471 },
 ];
 // 鬼難のデッキのカード (boost をかける)。速さはそのまま
 const oniDeckStats = (d, boost = d.boost) => d.cards.map(([id, lv]) => { const s = statsOf(id, lv); return { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
