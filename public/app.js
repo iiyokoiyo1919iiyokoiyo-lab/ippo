@@ -2601,6 +2601,7 @@ function route() {
   if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
   if (h === '/games/cards/oni') { setActiveNav('games'); return viewOni(); }
   if (h === '/games/cards/usage') { setActiveNav('games'); return viewCardUsage(); }
+  if (h === '/games/cards/board') { setActiveNav('games'); return viewCardBoard(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
   if ((m = h.match(/^\/pixel\/archive\/(\d+)/))) { setActiveNav('pixel'); return viewPixelArtwork(m[1]); }
@@ -3158,6 +3159,7 @@ async function viewCards() {
         <div class="cb-cpu-pick"><a class="btn btn-outline cb-easy-btn" href="#/games/cards/battle?mode=easy">🐣 CPU (かんたん)<small>SR までのキャラ · 勝ち +${cat.reward.easy?.win ?? 20}🪙</small></a>
           <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU (ふつう)<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
           <a class="btn cb-oni-btn" href="#/games/cards/oni">👹 CPU (鬼難)<small>勝ち +${cat.reward.oni?.win ?? 40}🪙 · ガチで強い</small></a></div>
+        <a class="btn cb-board-btn" href="#/games/cards/board">📋 対戦募集掲示板<small>募集を出す・募集している人と対戦</small></a>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
       </div>
@@ -3491,6 +3493,42 @@ async function viewCardUsage() {
   load();
 }
 
+// ---------- 対戦募集掲示板 ----------
+async function viewCardBoard() {
+  main.innerHTML = pageHead({ title: '対戦募集掲示板', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbd">${loadingBlock()}</div>`;
+  let cat; try { cat = await cbCatalog(); } catch (e) { $('#cbd').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  let tag = '', timer = 0, first = true;
+  const draw = (b) => {
+    const root = $('#cbd'); if (!root) return clearInterval(timer);
+    if (first) {
+      tag = b.tags[0]; first = false;
+      root.innerHTML = `<section class="card card-pad cbd-new">${me ? `
+        <div class="panel-head"><h3>📣 対戦相手を募集する</h3><span class="text-xs muted">いまのデッキで募集します</span></div>
+        <form id="cbd-form" class="stack-sm">
+          <div class="cbd-tags" role="radiogroup" aria-label="タグ">${b.tags.map((t, i) => `<button type="button" class="chip cbd-tag${i ? '' : ' active'}" data-tag="${esc(t)}" role="radio" aria-checked="${i ? 'false' : 'true'}">${esc(t)}</button>`).join('')}</div>
+          <input class="input" name="comment" maxlength="${b.max}" placeholder="ひとこと (例: タドコロ使ってます！ 誰でもどうぞ)" autocomplete="off">
+          <button class="btn btn-primary btn-block" type="submit">📋 掲示板に募集を出す</button>
+          <p class="text-xs muted" style="margin:0">募集を出すと待ち受け画面になり、相手が来たらすぐ対戦が始まります (勝ち +${cat.reward.room?.win ?? 50}🪙)。待ち受け画面をはなれると、募集は消えます</p>
+        </form>` : '<p class="text-sm">ログインすると、募集を出したり、募集している人と対戦したりできます</p><button class="btn btn-primary" type="button" id="cbd-login">ログイン</button>'}</section>
+        <section class="card card-pad"><div class="panel-head"><h3>⚔️ 募集中</h3><span class="text-xs muted" id="cbd-n"></span></div><div id="cbd-list"></div></section>`;
+      $$('.cbd-tag').forEach((x) => x.addEventListener('click', () => { tag = x.dataset.tag; $$('.cbd-tag').forEach((y) => { y.classList.toggle('active', y === x); y.setAttribute('aria-checked', String(y === x)); }); }));
+      $('#cbd-form')?.addEventListener('submit', (e) => { e.preventDefault(); location.hash = `#/games/cards/battle?mode=room-create&board=1&tag=${encodeURIComponent(tag)}&comment=${encodeURIComponent(e.target.comment.value.trim())}&n=${Date.now()}`; });
+      $('#cbd-login')?.addEventListener('click', () => openAuth());
+    }
+    $('#cbd-n').textContent = `${b.posts.length} 件 · 自動で更新`;
+    $('#cbd-list').innerHTML = b.posts.length ? b.posts.map((p) => `<article class="cbd-post${p.mine ? ' mine' : ''}">
+        <div class="cbd-head"><a href="#/u/${esc(p.user.username)}">${avatar(p.user, 'sm')}</a><span class="cbd-who"><a href="#/u/${esc(p.user.username)}"><b>${esc(p.user.displayName)}</b>${adminBadge(p.user)}</a>${titleChips(p.user, 'sm')}<small>@${esc(p.user.username)} · ${esc(timeAgo(p.at))}</small></span><span class="cbd-ptag">${esc(p.tag)}</span></div>
+        ${p.comment ? `<p class="cbd-comment">${esc(p.comment)}</p>` : ''}
+        <div class="cbd-deck">${p.deck.map((c) => `<span class="cbd-card r-${esc(c.rarity)}" title="${esc(c.name)} Lv${Number(c.level)}">${CBArt.svg(c.horse ? 'h:x' : c.id, c.rarity, { coat: c.coat })}<small>Lv${Number(c.level)}</small></span>`).join('')}</div>
+        ${p.mine ? '<p class="text-xs muted" style="margin:6px 0 0">あなたの募集です (待ち受け画面で待っています)</p>'
+          : me ? `<a class="btn btn-primary btn-block cbd-go" href="#/games/cards/battle?mode=room-join&code=${encodeURIComponent(p.code)}&from=board&n=${Date.now()}">⚔️ この人と対戦する</a>` : ''}
+      </article>`).join('') : emptyState({ icon: 'sparkle', title: 'いま募集している人はいません', text: '上のフォームから募集を出してみよう！' });
+  };
+  const load = async () => { try { draw(await api('/cards/board', { noAuthPrompt: true })); } catch (e) { if (first && $('#cbd')) $('#cbd').innerHTML = emptyState({ icon: 'alert', title: e.message }); } };
+  await load();
+  timer = setInterval(() => { if (!$('#cbd') || document.hidden) { if (!$('#cbd')) clearInterval(timer); return; } load(); }, 5000);
+}
+
 // ---------- 期間限定クエスト ----------
 async function viewQuest() {
   main.innerHTML = pageHead({ title: '期間限定クエスト', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbq">${loadingBlock()}</div>`;
@@ -3531,8 +3569,9 @@ async function viewQuest() {
 async function viewBattle(params) {
   if (!requireLogin()) return;
   const mode = params.get('mode'), code = params.get('code') || '', questId = params.get('q') || '', oniDeck = params.get('deck') || '';
+  const board = mode === 'room-create' && params.get('board') ? { comment: params.get('comment') || '', tag: params.get('tag') || '' } : null; // 対戦募集掲示板に出す
   const titles = { quest: '🌠 期間限定クエスト', oni: '👹 CPU (鬼難)', easy: '🐣 CPU (かんたん)', cpu: 'CPU (ふつう)', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
-  main.innerHTML = pageHead({ title: titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
+  main.innerHTML = pageHead({ title: board ? '📋 対戦募集' : titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: board || params.get('from') === 'board' ? '#/games/cards/board' : '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
   const cat = await cbCatalog().catch(() => null);
   const T = cat?.types || {};
   const box = () => $('#cbb');
@@ -3679,10 +3718,11 @@ async function viewBattle(params) {
   }
   function connect() {
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/cb`);
-    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code, quest: questId, deck: oniDeck }); };
+    ws.onopen = () => { if (!state) wsSend({ t: 'find', mode, code, quest: questId, deck: oniDeck, board }); };
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (!box()) return;
+      if (m.t === 'waiting' && m.board) return waiting('📋 掲示板で対戦相手を募集中…', `<p class="text-sm">この画面のまま待っていると、掲示板を見た人が対戦しに来ます (最大 ${Math.round((m.ms || 600000) / 60000)} 分)</p><div class="cb-code">${esc(m.code)}</div><p class="text-xs muted">部屋コードを友だちに教えて入ってもらうこともできます。ほかの画面に行くと、募集は取り消されます</p>`);
       if (m.t === 'waiting') return m.mode === 'room' ? waiting('友だちを待っています', `<div class="cb-code">${esc(m.code)}</div><p class="text-sm muted">この部屋コードを友だちに教えてください (「部屋コードで入る」に入力)</p>`) : waiting('対戦相手を探しています…');
       if (m.t === 'error') { box().innerHTML = emptyState({ icon: 'alert', title: m.msg, action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); closedByUs = true; ws.close(); return; }
       if (m.t === 'start') {

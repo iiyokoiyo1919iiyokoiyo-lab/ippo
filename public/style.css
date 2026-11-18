@@ -2022,3 +2022,24 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 @keyframes ut-twinkle { 0%, 100% { transform: scale(.3) rotate(0deg); opacity: .2; } 50% { transform: scale(1.15) rotate(45deg); opacity: 1; } }
 :root[data-theme="dark"] .user-title { color: #3b2600; }
 @media (prefers-reduced-motion: reduce) { .user-title::before, .user-title::after, .user-title > i { animation: none; } }
+
+/* 対戦募集掲示板 */
+.cb-board-btn { background: linear-gradient(135deg, #fff4e6, #ffe8cc); border: 2px solid #ff922b; color: #a63c06; font-weight: 800; }
+.cbd-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cbd-tag { cursor: pointer; }
+.cbd-tag.active { background: var(--primary, #4b55f0); color: #fff; border-color: transparent; }
+.cbd-post { padding: 12px 0; border-top: 1px solid var(--border, #e9ecef); }
+.cbd-post:first-child { border-top: 0; padding-top: 4px; }
+.cbd-post.mine { background: linear-gradient(90deg, rgba(255, 212, 59, .14), transparent); border-radius: 12px; padding-inline: 8px; }
+.cbd-head { display: flex; align-items: center; gap: 8px; }
+.cbd-who { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.cbd-who a { color: inherit; text-decoration: none; }
+.cbd-who small { flex-basis: 100%; color: var(--text-2, #868e96); font-size: 11px; }
+.cbd-ptag { flex: none; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #fff4e6; color: #d9480f; border: 1px solid #ffc078; }
+.cbd-comment { margin: 6px 0 0; font-size: 14px; word-break: break-word; }
+.cbd-deck { display: flex; gap: 6px; margin-top: 8px; }
+.cbd-card { position: relative; width: 56px; height: 56px; border-radius: 12px; background: var(--surface-2, #f1f3f5); display: grid; place-items: center; }
+.cbd-card .cb-svg { width: 50px; height: 50px; }
+.cbd-card small { position: absolute; right: 2px; bottom: 0; font-size: 9px; font-weight: 800; background: rgba(0, 0, 0, .55); color: #fff; padding: 0 4px; border-radius: 6px; }
+.cbd-card.r-SSR, .cbd-card.r-UR, .cbd-card.r-MR { box-shadow: 0 0 0 2px #fcc419 inset; }
+.cbd-go { margin-top: 10px; }

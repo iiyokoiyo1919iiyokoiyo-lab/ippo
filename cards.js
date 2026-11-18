@@ -488,6 +488,10 @@ const ONI_DECKS = [
 // 鬼難のデッキのカード (boost をかける)。速さはそのまま
 const oniDeckStats = (d, boost = d.boost) => d.cards.map(([id, lv]) => { const s = statsOf(id, lv); return { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
 const REWARDS_PER_DAY = 15;
+// 対戦募集掲示板: 部屋を作るときに、ひとこと (40 文字まで) とタグを付けて掲示板に出せる。待っているあいだ (10 分まで) だけ載る
+const BOARD_TAGS = ['気軽に', 'ガチ勝負', '初心者歓迎', '新キャラ試したい', 'クエスト前の練習'];
+const BOARD_MAX = 40, ROOM_MS = 10 * 60_000;
+const boardText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, BOARD_MAX);
 const TURN_MS = Number(process.env.CB_TURN_MS || 25_000);
 const RECONNECT_MS = Number(process.env.CB_RECONNECT_MS || 30_000);
 const jstDay = (t = Date.now()) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
@@ -834,8 +838,25 @@ function install(app, ctx) {
   }
   function leave(uid) {
     if (queue === uid) queue = null;
-    for (const [code, r] of rooms) if (r.uid === uid) rooms.delete(code);
+    for (const [code, r] of rooms) if (r.uid === uid) { rooms.delete(code); boardCache = null; }
   }
+  // ---------- 対戦募集掲示板 (いま部屋で待っている募集の一覧。だれでも見られる・入るにはログイン) ----------
+  let boardCache = null;
+  app.get('/api/cards/board', rateLimit({ windowMs: 60_000, max: 120 }), (req, res) => {
+    const now = Date.now();
+    if (!boardCache || now - boardCache.at > 2000) {
+      const list = [];
+      for (const [code, r] of rooms) {
+        if (!r.board) continue;
+        if (now - r.at > ROOM_MS || conns.get(r.uid)?.readyState !== 1 || battleOf.get(r.uid)) { if (now - r.at > ROOM_MS) rooms.delete(code); continue; }
+        const user = userView(r.uid); if (!user) continue;
+        const deck = deckStats(r.uid).map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, level: c.level, horse: !!c.horse, coat: c.coat || '' }));
+        list.push({ code, user, comment: r.board.comment, tag: r.board.tag, at: r.at, until: r.at + ROOM_MS, deck });
+      }
+      boardCache = { at: now, list: list.sort((a, b) => b.at - a.at) };
+    }
+    res.json({ tags: BOARD_TAGS, max: BOARD_MAX, posts: boardCache.list.map((p) => ({ ...p, mine: !!req.user && p.user.id === req.user.id })) });
+  });
   wss.on('connection', (ws, req, user) => {
     const uid = user.id;
     const old = conns.get(uid); if (old && old !== ws) { try { old.close(4000, 'replaced'); } catch {} }
@@ -875,14 +896,16 @@ function install(app, ctx) {
         }
         if (m.mode === 'room-create') {
           let code; do { code = String(crypto.randomInt(1000, 10000)); } while (rooms.has(code));
-          rooms.set(code, { uid, at: Date.now() });
-          return send(uid, { t: 'waiting', mode: 'room', code });
+          const board = m.board && typeof m.board === 'object' ? { comment: boardText(m.board.comment), tag: BOARD_TAGS.includes(m.board.tag) ? m.board.tag : BOARD_TAGS[0] } : null;
+          rooms.set(code, { uid, at: Date.now(), board }); if (board) boardCache = null;
+          if (board) console.log(`[cards] 掲示板に募集: user ${uid} 「${board.tag}」`);
+          return send(uid, { t: 'waiting', mode: 'room', code, board: !!board, ms: ROOM_MS });
         }
         if (m.mode === 'room-join') {
           const code = String(m.code || ''), r = rooms.get(code);
-          if (!r || Date.now() - r.at > 10 * 60_000 || conns.get(r.uid)?.readyState !== 1) { rooms.delete(code); return send(uid, { t: 'error', msg: 'その部屋コードは見つかりません' }); }
+          if (!r || Date.now() - r.at > ROOM_MS || conns.get(r.uid)?.readyState !== 1) { rooms.delete(code); return send(uid, { t: 'error', msg: 'その部屋コードは見つかりません' }); }
           if (r.uid === uid) return send(uid, { t: 'error', msg: '自分の部屋には入れません' });
-          rooms.delete(code); return startBattle('room', [r.uid, uid]);
+          rooms.delete(code); boardCache = null; return startBattle('room', [r.uid, uid]);
         }
       }
       if (m.t === 'cancel') { leave(uid); return send(uid, { t: 'cancelled' }); }
