@@ -66,6 +66,11 @@ const UPDATES = [
 わざ「野獣の眼光」: 相手を毒にして、次のターン怯ませる
 🔥 パッシブ「士気」: たおれると味方の攻撃 1.4 倍・防御 1.3 倍
 お楽しみに！ ${TAG}` },
+  { key: 'preview-raijin-2026-11-18', at: Date.parse('2026-11-18T11:55:00+09:00'), until: Date.parse('2026-11-19T08:00:00+09:00'), banner: 'quest-raijin-2026',
+    text: `⚡【高難易度クエスト予告】明日 11/19(木) 8:00 から 3 日間、「雷神降臨」開催！
+敵は 雷神クリりん・疾風剣士ハサミ丸・黄金えんぴつ王 (全員 Lv20)。先を読む強い CPU が相手！
+わざ「落雷」は、どんな相性でも 2.3 倍の無属性こうげき。
+クリアすると MR「雷神クリりん」が仲間に！ 11/22(日) 8:00 まで ${TAG}` },
 ];
 
 const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
