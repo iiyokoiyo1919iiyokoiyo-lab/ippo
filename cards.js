@@ -177,6 +177,13 @@ const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターン�
 const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに 1.4 倍、控えに 0.8 倍
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
+// ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
+const ITEMS = {
+  potion: { name: '回復薬', emoji: '🧪', price: 300, desc: '場のカードの HP を最大 HP の 30% 回復' },
+  elixir: { name: '全回復薬', emoji: '💖', price: 1000, desc: '場のカードの HP を全回復' },
+  tea: { name: 'アイスティー', emoji: '🧋', price: 1200, desc: '相手の場のカードを眠らせる: 次のターン動けない (怯みと同じ)' },
+};
+const ITEMS_AFTER = 30 * 60_000; // クエストが始まってから 30 分後から使える
 const METEOR_TURNS = 5, METEOR_RATE = 0.3; // 流星: 5 ターン、ターンの終わりに相手の場のカードへ最大 HP の 30% (ガード無視)
 function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0, meteor: null }; }
 const alive = (side) => side.cards.filter((c) => c.hp > 0).length;
@@ -190,6 +197,7 @@ function resolveTurn(state, acts, rnd) {
     const s = sides[p], a = acts[p] || { a: 'guard' };
     const me = s.cards[s.active];
     if (a.a === 'switch' && Number.isInteger(a.i) && a.i !== s.active && s.cards[a.i]?.hp > 0) return a;
+    if (a.a === 'item' && ITEMS[a.item]) return a; // アイテムは怯んでいても使える (使うのはプレイヤー)
     if (me.flinch === 1) return { a: 'flinch' }; // 怯み: 交代のほかは何もできない
     if (a.a === 'skill' && me.cd === 0) return a;
     if (a.a === 'attack' || a.a === 'skill') return { a: 'attack' };
@@ -197,6 +205,19 @@ function resolveTurn(state, acts, rnd) {
   });
   // 1. 交代はいちばん先
   [0, 1].forEach((p) => { if (act[p].a === 'switch') { sides[p].active = act[p].i; ev.push({ k: 'switch', p, card: sides[p].cards[act[p].i].name }); } });
+  // 1.5 アイテム (交代の次、こうげきより先)
+  [0, 1].forEach((p) => {
+    if (act[p].a !== 'item') return;
+    const it = act[p].item, me = sides[p].cards[sides[p].active];
+    if (it === 'potion' || it === 'elixir') {
+      const h = Math.min(me.maxHp - me.hp, it === 'elixir' ? me.maxHp : Math.round(me.maxHp * 0.3));
+      me.hp += h; ev.push({ k: 'item', p, item: it, name: ITEMS[it].name, card: me.name, amount: h });
+    } else if (it === 'tea') {
+      const o = 1 - p, foe = sides[o].cards[sides[o].active];
+      ev.push({ k: 'item', p, item: it, name: ITEMS[it].name, target: foe.name });
+      if (foe.hp > 0) { foe.flinch = 2; foe.sleep = true; ev.push({ k: 'flinched', p: o, card: foe.name, sleep: true }); }
+    }
+  });
   // 2. ガード・バリア
   const skillOf = (p) => act[p].a === 'skill' ? sides[p].cards[sides[p].active].skill : null;
   const guard = [0, 1].map((p) => act[p].a === 'guard' ? 0.4 : skillOf(p) === 'barrier' ? 0 : skillOf(p) === 'heal' ? 0.5 : 1);
@@ -222,7 +243,8 @@ function resolveTurn(state, acts, rnd) {
   };
   for (const p of order) {
     const s = sides[p], me = s.cards[s.active];
-    if (act[p].a === 'flinch') { if (me.hp > 0) ev.push({ k: 'flinch', p, card: me.name }); continue; }
+    if (act[p].a === 'flinch') { if (me.hp > 0) ev.push({ k: 'flinch', p, card: me.name, sleep: !!me.sleep }); continue; }
+    if (act[p].a === 'item') continue;
     if (me.hp <= 0 || act[p].a === 'switch' || act[p].a === 'guard') { if (act[p].a === 'guard' && me.hp > 0) ev.push({ k: 'guard', p, card: me.name }); continue; }
     if (act[p].a === 'attack') hit(p, 1);
     else {
@@ -285,7 +307,7 @@ function resolveTurn(state, acts, rnd) {
   // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
   [0, 1].forEach((p) => {
     const s = sides[p];
-    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; });
+    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; if (!c.flinch) c.sleep = false; });
     if (s.cards[s.active].hp <= 0) { const next = s.cards.findIndex((c) => c.hp > 0); if (next >= 0) { s.active = next; ev.push({ k: 'switch', p, card: s.cards[next].name, forced: true }); } }
   });
   state.turn++;
@@ -514,7 +536,7 @@ function install(app, ctx) {
     db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
-  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
+  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
     enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     reward: { ...statsOf(q.reward, 1), skillName: SKILLS[CARDS[q.reward].skill].name, skillDesc: SKILLS[CARDS[q.reward].skill].desc },
     cleared: uid ? clearedOf(uid).has(q.id) : false });
@@ -751,7 +773,8 @@ function install(app, ctx) {
     const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
       players: uids.map((u) => (u ? userView(u) : cpuView)),
       state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u).map((c) => questBonus(quest, c)) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
-    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
+    const items = quest?.hard ? { list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })), from: quest.start + ITEMS_AFTER } : null;
+    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, ...(items ? { items, coins: player(u).coins } : {}), quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }
@@ -795,6 +818,20 @@ function install(app, ctx) {
     const b = battleOf.get(uid); if (!b || b.ended) return;
     const p = b.uids.indexOf(uid);
     if (b.acts[p]) return; // 1 ターンに 1 回だけ
+    if (msg.a === 'item') { // ボスクエストのアイテム: コインを払って使う (足りない・まだ使えないときは、行動を決めなかったことにする)
+      const it = ITEMS[msg.item], q = b.quest, now = Date.now();
+      const no = (m) => send(uid, { t: 'itemError', msg: m });
+      if (!it || !q?.hard) return no('このバトルではアイテムは使えません');
+      if (now < q.start + ITEMS_AFTER) return no(`アイテムは ${new Date(q.start + ITEMS_AFTER).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' })} から使えます`);
+      const side = b.state.sides[p], me = side.cards[side.active];
+      if ((msg.item === 'potion' || msg.item === 'elixir') && me.hp >= me.maxHp) return no('HP はもう満タンです');
+      if (!db.prepare('UPDATE card_players SET coins = coins - ? WHERE user_id = ? AND coins >= ?').run(it.price, uid, it.price).changes) return no(`コインが足りません (${it.price} コイン)`);
+      console.log(`[cards] user ${uid} がアイテム「${it.name}」を使った (${it.price} コイン)`);
+      b.acts[p] = { a: 'item', item: msg.item };
+      send(uid, { t: 'coins', coins: player(uid).coins });
+      if (b.acts[0] && b.acts[1]) resolve(b);
+      return;
+    }
     const a = ['attack', 'guard', 'skill', 'switch'].includes(msg.a) ? { a: msg.a, i: Number.isInteger(msg.i) ? msg.i : undefined } : { a: 'guard' };
     b.acts[p] = a;
     const o = 1 - p; if (b.uids[o]) send(b.uids[o], { t: 'opponentReady' });
@@ -958,4 +995,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

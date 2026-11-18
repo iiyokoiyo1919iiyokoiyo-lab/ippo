@@ -2044,3 +2044,13 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cbd-card.r-SSR, .cbd-card.r-UR, .cbd-card.r-MR { box-shadow: 0 0 0 2px #fcc419 inset; }
 .cbd-go { margin-top: 10px; }
 .cbd-banned { margin: 10px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff5f5; color: #c92a2a; font-size: 12px; font-weight: 700; }
+
+/* ボスクエストのアイテム */
+.cb-item-btn { grid-column: 1 / -1; background: linear-gradient(135deg, #e6fcf5, #c3fae8); border: 2px solid #20c997; color: #087f5b; font-weight: 800; }
+.cb-items .cb-item { display: grid; gap: 2px; text-align: left; padding: 8px 10px; height: auto; }
+.cb-items .cb-item b { font-size: 14px; }
+.cb-items .cb-item small { font-size: 11px; font-weight: 500; line-height: 1.35; white-space: normal; }
+.cb-items .cb-item em { font-style: normal; font-weight: 800; color: #e67700; }
+.cb-quest-items { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #e6fcf5; color: #0b5345; border: 2px solid #63e6be; display: grid; gap: 4px; font-size: .82rem; }
+.cb-quest-items > b { color: #087f5b; }
+.cb-quest-items small { color: #2b8a3e; }

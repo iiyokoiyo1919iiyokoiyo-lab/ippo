@@ -3557,6 +3557,7 @@ async function viewQuest() {
       ${(q.bonus || []).length || (q.bonusSoon || []).length ? `<div class="cb-quest-bonus"><b>⭐ 特効キャラ</b>
         ${(q.bonus || []).map((c) => `<div class="cb-quest-bonus-row">${CBArt.svg(c.id, c.rarity, { label: c.name })}<span><b>${esc(c.name)}</b>をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}
         ${(q.bonusSoon || []).map((c) => `<div class="cb-quest-bonus-row"><span><b>${esc(c.name)}</b> (${esc(fmt(c.at))} ガチャに登場) をデッキに入れると、このクエストでは HP・攻撃・防御が <em>${c.mult} 倍</em>！</span></div>`).join('')}</div>` : ''}
+      ${q.items ? `<div class="cb-quest-items"><b>🧪 アイテムが使える！ (${esc(fmt(q.items.from))} から)</b>${q.items.list.map((it) => `<span>${esc(it.emoji)} <b>${esc(it.name)}</b> 🪙${Number(it.price).toLocaleString()} — ${esc(it.desc)}</span>`).join('')}<small>バトル中に「🧪 アイテム」ボタンから、コインを払ってその場で使います (そのターンの行動になります)</small></div>` : ''}
       ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。ガチで難しいので、デッキと作戦をしっかり考えて挑もう！</p>` : ''}
       <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
@@ -3577,10 +3578,12 @@ async function viewBattle(params) {
   const T = cat?.types || {};
   const box = () => $('#cbb');
   let fromBoard = !!board || params.get('from') === 'board';
+  let items = null, coins = 0; // ボスクエストのアイテム (コインで買ってその場で使う)
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
-  const evText = (e) => e.k === 'flinched' ? `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`
-    : e.k === 'flinch' ? `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`
+  const evText = (e) => e.k === 'item' ? (e.item === 'tea' ? `${e.p === you ? 'あなた' : '相手'}は🧋アイスティーを使った！` : `${e.p === you ? 'あなた' : '相手'}は${e.item === 'elixir' ? '💖' : '🧪'}${e.name}を使った！ ${e.card}の HP が ${e.amount} 回復`)
+    : e.k === 'flinched' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠ってしまった！💤 (次のターン動けない)` : `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`)
+    : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
@@ -3595,7 +3598,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? ' · <span class="cb-flinch">😨怯み</span>' : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3607,12 +3610,17 @@ async function viewBattle(params) {
       <div class="cb-log" aria-live="polite">${log.slice(-4).map((l) => `<p>${esc(l)}</p>`).join('') || '<p class="muted">バトル開始！</p>'}</div>
       ${fighter(my, true, `${you}-${mineS.active}-${my.id}`, mineS.meteor)}
       <div class="cb-top mine">${avatar(players[you], 'sm')}<b>あなた</b>${bench(mineS, true)}<span class="cb-timer${left <= 5 ? ' hurry' : ''}" id="cb-timer">${ended ? '' : chosen ? '相手を待っています…' : `のこり ${left}秒`}</span></div>
-      ${ended ? '' : picking ? `<div class="cb-acts"><p class="text-sm" style="grid-column:1/-1">交代するカードをえらんでください</p><button class="btn btn-ghost" type="button" data-act="cancel-switch">もどる</button></div>`
+      ${ended ? '' : picking === 'item' ? `<div class="cb-acts cb-items"><p class="text-sm" style="grid-column:1/-1">アイテムをえらんでください (🪙 ${Number(coins).toLocaleString()} コイン持っています)</p>
+          ${items.list.map((it) => `<button class="btn btn-outline cb-item" type="button" data-item="${esc(it.id)}" ${coins < it.price || ((it.id === 'potion' || it.id === 'elixir') && my.hp >= my.maxHp) ? 'disabled' : ''}><b>${esc(it.emoji)} ${esc(it.name)}</b><small>${esc(it.desc)}</small><em>🪙 ${Number(it.price).toLocaleString()}</em></button>`).join('')}
+          <button class="btn btn-ghost" type="button" data-act="cancel-switch">もどる</button></div>`
+        : picking ? `<div class="cb-acts"><p class="text-sm" style="grid-column:1/-1">交代するカードをえらんでください</p><button class="btn btn-ghost" type="button" data-act="cancel-switch">もどる</button></div>`
         : `<div class="cb-acts">
           <button class="btn btn-primary btn-lg" type="button" data-act="attack" ${chosen ? 'disabled' : ''}>こうげき</button>
           <button class="btn btn-outline btn-lg" type="button" data-act="guard" ${chosen ? 'disabled' : ''}>ガード</button>
           <button class="btn btn-outline btn-lg cb-skill" type="button" data-act="skill" ${chosen || my.cd ? 'disabled' : ''}>わざ「${esc(skill?.skillName || '')}」${my.cd ? `<small>あと${my.cd}ターン</small>` : `<small>${esc(skill?.skillDesc || '')}</small>`}</button>
           <button class="btn btn-outline btn-lg" type="button" data-act="switch" ${chosen || !canSwitch ? 'disabled' : ''}>こうたい</button>
+          ${items ? (Date.now() >= items.from ? `<button class="btn btn-lg cb-item-btn" type="button" data-act="item" ${chosen ? 'disabled' : ''}>🧪 アイテム<small>コインで回復・眠らせる (🪙 ${Number(coins).toLocaleString()})</small></button>`
+            : `<button class="btn btn-lg cb-item-btn" type="button" disabled>🧪 アイテム<small>${esc(new Date(items.from).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }))} から使えます</small></button>`) : ''}
         </div>`}
       ${ended ? '' : '<button class="btn btn-ghost btn-sm cb-surrender" type="button" id="cb-surrender">こうさんする</button>'}`;
     requestAnimationFrame(() => $$('.cb-hp i[data-to]', box()).forEach((i) => { i.style.width = i.dataset.to + '%'; }));
@@ -3621,9 +3629,11 @@ async function viewBattle(params) {
     $$('[data-act]', box()).forEach((b) => b.addEventListener('click', () => {
       const a = b.dataset.act;
       if (a === 'switch') { picking = true; return render(); }
+      if (a === 'item') { picking = 'item'; return render(); }
       if (a === 'cancel-switch') { picking = false; return render(); }
       choose({ a });
     }));
+    $$('[data-item]', box()).forEach((b) => b.addEventListener('click', () => { picking = false; choose({ a: 'item', item: b.dataset.item }); }));
     $$('[data-switch]', box()).forEach((b) => b.addEventListener('click', () => { picking = false; choose({ a: 'switch', i: Number(b.dataset.switch) }); }));
     $('#cb-surrender')?.addEventListener('click', async () => { if (await confirmDialog({ title: 'こうさんしますか？', body: 'このバトルは負けになります。', ok: 'こうさんする', danger: true })) wsSend({ t: 'surrender' }); });
   }
@@ -3683,7 +3693,8 @@ async function viewBattle(params) {
         }, t);
         t += 700;
       }
-      else if (e.k === 'flinched') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, '😨 怯み！', 'skill flinch'); }, t); t += 400; }
+      else if (e.k === 'item') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.item === 'tea' ? '🧋 アイスティー！' : `${e.item === 'elixir' ? '💖' : '🧪'} +${e.amount}`, e.item === 'tea' ? 'skill' : 'heal'); }, t); t += 450; }
+      else if (e.k === 'flinched') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, e.sleep ? '💤 眠った！' : '😨 怯み！', 'skill flinch'); }, t); t += 400; }
       else if (e.k === 'flinch') { setTimeout(() => { replay(el(e.p), 'shake'); pop(e.p, '怯んで動けない…', 'tag'); }, t); t += 350; }
       else if (e.k === 'morale') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, '🔥 士気UP！', 'skill morale'); }, t); t += 500; }
       else if (e.k === 'meteor') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, `🌠-${e.dmg}`, 'dmg met'); }, t); t += 260; }
@@ -3729,6 +3740,7 @@ async function viewBattle(params) {
       if (m.t === 'error') { box().innerHTML = emptyState({ icon: 'alert', title: m.msg, action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); closedByUs = true; ws.close(); return; }
       if (m.t === 'start') {
         you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました');
+        if (m.items) { items = m.items; coins = m.coins; }
         if (m.board) { fromBoard = true; const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = m.rated ? '📋 レート戦 (掲示板)' : '📋 掲示板の対戦';
           if (!m.resumed && m.vs && you === 1) log.push(`掲示板からのレート戦です (この相手とはこれまで ${m.vs.games} 戦 ${m.vs.wins} 勝 ${m.vs.losses} 敗)`);
           else if (!m.resumed) log.push('掲示板からのレート戦です'); }
@@ -3739,6 +3751,8 @@ async function viewBattle(params) {
         return;
       }
       if (m.t === 'turn') { state = m.state; deadline = Date.now() + (m.deadline - Date.now()); chosen = !!m.chosen; picking = false; render(); clearInterval(tick); tick = setInterval(() => { const t = $('#cb-timer'); if (!t) return clearInterval(tick); if (!chosen && !ended) { const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000)); t.textContent = `のこり ${left}秒`; t.classList.toggle('hurry', left <= 5); } }, 250); return; }
+      if (m.t === 'coins') { coins = m.coins; return; }
+      if (m.t === 'itemError') { chosen = false; picking = false; toast(m.msg, 'error'); render(); return; }
       if (m.t === 'opponentReady') { const t = $('#cb-timer'); if (t && !chosen) t.textContent += ' · 相手は決めました'; return; }
       if (m.t === 'result') { m.events.forEach((e) => { const s = evText(e); if (s) log.push(s); }); state = m.state; render(); animate(m.events); return; }
       if (m.t === 'opponentLeft') { log.push(`相手の接続が切れました。${Math.round(m.ms / 1000)}秒もどらなければ、あなたの勝ちです`); render(); return; }
