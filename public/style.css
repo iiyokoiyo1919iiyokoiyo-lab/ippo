@@ -1884,38 +1884,61 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-gslash, .cb-starfall { border-radius: 16px; z-index: 60; }
 
 /* ===== ハサミ丸の登場演出 ===== */
-.hs-cut { position: fixed; inset: 0; z-index: 200; background: #000; display: grid; place-items: center; overflow: hidden; animation: hs-dark .35s ease both; cursor: pointer; }
+.hs-cut { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, .95); display: grid; place-items: center; overflow: hidden; animation: hs-dark .4s ease both; cursor: pointer; }
 .hs-cut.out { animation: hs-fadeout .3s ease both; }
-@keyframes hs-dark { from { background: rgba(0, 0, 0, 0); } to { background: rgba(0, 0, 0, .94); } }
+@keyframes hs-dark { from { background: rgba(0, 0, 0, 0); } to { background: rgba(0, 0, 0, .95); } }
 @keyframes hs-fadeout { to { opacity: 0; } }
-.hs-decoy { position: absolute; width: min(64vw, 260px); aspect-ratio: 0.72; animation: hs-zoom .9s cubic-bezier(.2, .9, .2, 1) .25s both; }
+/* カプセル (はじめは R の青。開いている) */
+.hs-cap { position: absolute; left: 50%; top: 62%; width: 150px; height: 150px; margin: -75px 0 0 -75px; }
+.hs-cap-top, .hs-cap-bot { position: absolute; left: 0; width: 150px; height: 75px; }
+.hs-cap-top { top: 0; border-radius: 75px 75px 0 0; background: radial-gradient(circle at 35% 30%, #d0ebff, #4dabf7 45%, #1971c2); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .15); transform: translateY(-46px) rotate(-14deg); transition: transform .35s cubic-bezier(.3, 1.4, .5, 1), background .2s; }
+.hs-cap-bot { bottom: 0; border-radius: 0 0 75px 75px; background: radial-gradient(circle at 40% 20%, #fff, #e9ecef 60%, #adb5bd); box-shadow: inset 0 6px 0 rgba(0, 0, 0, .08); }
+.hs-cap-glow { position: absolute; inset: -40px; border-radius: 50%; background: radial-gradient(rgba(116, 192, 252, .55), transparent 65%); }
+.hs-cut .hs-cap { animation: hs-cap-in .5s ease both; }
+@keyframes hs-cap-in { from { opacity: 0; transform: translateY(30px) scale(.8); } to { opacity: 1; transform: none; } }
+/* R のカード: カプセルから出てアップに */
+.hs-decoy { position: absolute; width: min(56vw, 230px); aspect-ratio: 0.72; animation: hs-zoom .9s cubic-bezier(.2, .9, .2, 1) .2s both; }
 .hs-decoy .cb-card { width: 100%; height: 100%; box-shadow: 0 0 40px rgba(77, 171, 247, .6); }
 .hs-half { position: absolute; inset: 0; }
 .hs-half.a { clip-path: polygon(0 0, 100% 0, 100% 39.5%, 0 67.5%); }
 .hs-half.b { clip-path: polygon(0 66%, 100% 38%, 100% 100%, 0 100%); }
-@keyframes hs-zoom { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes hs-zoom { 0% { transform: translateY(120px) scale(.3); opacity: 0; } 60% { transform: translateY(-50px) scale(1.08); opacity: 1; } 100% { transform: translateY(-40px) scale(1); } }
 .hs-cut.cut .hs-half.a { animation: hs-fly-a .7s cubic-bezier(.3, 0, .6, 1) both; }
 .hs-cut.cut .hs-half.b { animation: hs-fly-b .7s cubic-bezier(.3, 0, .6, 1) both; }
-@keyframes hs-fly-a { 0% { transform: none; } 15% { transform: translate(-4px, -4px); } 100% { transform: translate(-120px, -260px) rotate(-28deg); opacity: 0; } }
-@keyframes hs-fly-b { 0% { transform: none; } 15% { transform: translate(4px, 4px); } 100% { transform: translate(120px, 260px) rotate(24deg); opacity: 0; } }
+.hs-cut.cut .hs-decoy { animation: none; transform: translateY(-40px); }
+@keyframes hs-fly-a { 0% { transform: none; } 15% { transform: translate(-4px, -4px); } 100% { transform: translate(-130px, -280px) rotate(-28deg); opacity: 0; } }
+@keyframes hs-fly-b { 0% { transform: none; } 15% { transform: translate(4px, 4px); } 100% { transform: translate(130px, 280px) rotate(24deg); opacity: 0; } }
+/* 緑の斬撃 */
 .hs-slash { position: absolute; inset: 0; pointer-events: none; }
-.hs-slash i { position: absolute; left: 50%; top: 50%; width: 160vmax; height: 12px; margin-left: -80vmax; border-radius: 50%; opacity: 0; background: linear-gradient(90deg, transparent, #c3fae8 20%, #fff 50%, #38d9a9 75%, transparent); box-shadow: 0 0 24px 6px #20c997, 0 0 60px 16px rgba(32, 201, 151, .6); transform: rotate(-24deg) scaleX(0); }
-.hs-slash i:nth-child(2) { height: 6px; margin-top: -40px; transform: rotate(-30deg) scaleX(0); }
-.hs-slash i:nth-child(3) { height: 6px; margin-top: 46px; transform: rotate(-18deg) scaleX(0); }
+.hs-slash i { position: absolute; left: 50%; top: 45%; width: 160vmax; height: 12px; margin-left: -80vmax; border-radius: 50%; opacity: 0; background: linear-gradient(90deg, transparent, #c3fae8 20%, #fff 50%, #38d9a9 75%, transparent); box-shadow: 0 0 24px 6px #20c997, 0 0 60px 16px rgba(32, 201, 151, .6); transform: rotate(-24deg) scaleX(0); }
+.hs-slash i:nth-child(2) { height: 6px; margin-top: -40px; } .hs-slash i:nth-child(3) { height: 6px; margin-top: 46px; }
 .hs-cut.cut .hs-slash i { animation: hs-slash .5s cubic-bezier(.2, .9, .2, 1) both; }
 .hs-cut.cut .hs-slash i:nth-child(1) { --r: -24deg; } .hs-cut.cut .hs-slash i:nth-child(2) { --r: -30deg; animation-delay: .06s; } .hs-cut.cut .hs-slash i:nth-child(3) { --r: -18deg; animation-delay: .1s; }
 @keyframes hs-slash { 0% { transform: rotate(var(--r)) scaleX(0); opacity: 1; } 55% { transform: rotate(var(--r)) scaleX(1); opacity: 1; } 100% { transform: rotate(var(--r)) scaleX(1); opacity: 0; } }
 .hs-flash { position: absolute; inset: 0; background: #e6fcf5; opacity: 0; pointer-events: none; }
-.hs-cut.cut .hs-flash { animation: hs-flash .6s ease .25s both; }
-@keyframes hs-flash { 0% { opacity: 0; } 30% { opacity: .9; } 100% { opacity: 0; } }
+.hs-cut.cut .hs-flash { animation: hs-flash .6s ease .2s both; }
+.hs-cut.hero .hs-flash { animation: hs-flash2 .7s ease both; background: #fff; }
+@keyframes hs-flash { 0% { opacity: 0; } 30% { opacity: .85; } 100% { opacity: 0; } }
+@keyframes hs-flash2 { 0% { opacity: 0; } 20% { opacity: 1; } 100% { opacity: 0; } }
+/* R のカプセルが SSR のカプセルに変わる (閉じて、虹色に光ってゆれる) */
+.hs-cut.ssr .hs-cap { animation: hs-shake .12s linear infinite; }
+.hs-cut.ssr .hs-cap-top { transform: none; background: conic-gradient(from 0deg, #ff6b9d, #ffd43b, #8ce99a, #74c0fc, #b197fc, #ff6b9d); animation: hs-rainbow .6s linear infinite; }
+.hs-cut.ssr .hs-cap-glow { background: radial-gradient(rgba(255, 212, 59, .8), rgba(255, 107, 157, .35) 45%, transparent 68%); animation: cb-throb .25s ease-in-out infinite alternate; }
+@keyframes hs-shake { 0%, 100% { transform: translate(0, 0) rotate(0); } 25% { transform: translate(-5px, 2px) rotate(-4deg); } 75% { transform: translate(5px, -2px) rotate(4deg); } }
+@keyframes hs-rainbow { to { filter: hue-rotate(360deg) brightness(1.15); } }
+/* SSR のカプセルが開いて、ハサミ丸が飛び出す */
+.hs-cut.hero .hs-cap { animation: hs-cap-pop .5s ease both; }
+.hs-cut.hero .hs-cap-top { transform: translateY(-120px) rotate(-40deg); opacity: 0; transition: transform .4s ease, opacity .4s ease; animation: none; }
+@keyframes hs-cap-pop { to { transform: scale(1.3); opacity: 0; } }
 .hs-hero { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; opacity: 0; pointer-events: none; }
-.hs-cut.hero .hs-hero { animation: hs-hero-in .5s ease both; }
-@keyframes hs-hero-in { from { opacity: 0; } to { opacity: 1; } }
-.hs-rays { position: absolute; left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; background: repeating-conic-gradient(rgba(56, 217, 169, .55) 0 8deg, transparent 8deg 16deg); animation: cb-spin 8s linear infinite; }
-.hs-card { position: relative; width: min(60vw, 240px); }
-.hs-cut.hero .hs-card { animation: cb-pop .8s cubic-bezier(.2, 1.6, .4, 1) both; filter: drop-shadow(0 0 30px #38d9a9); }
+.hs-cut.hero .hs-hero { opacity: 1; }
+.hs-rays { position: absolute; left: 50%; top: 50%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; background: repeating-conic-gradient(rgba(56, 217, 169, .55) 0 8deg, transparent 8deg 16deg); opacity: 0; }
+.hs-cut.hero .hs-rays { opacity: 1; transition: opacity .3s; animation: cb-spin 8s linear infinite; }
+.hs-card { position: relative; width: min(58vw, 236px); }
+.hs-cut.hero .hs-card { animation: hs-eject .9s cubic-bezier(.2, 1.5, .4, 1) both; filter: drop-shadow(0 0 30px #38d9a9); }
+@keyframes hs-eject { 0% { transform: translateY(150px) scale(.2) rotate(-20deg); opacity: 0; } 50% { opacity: 1; } 100% { transform: none; opacity: 1; } }
 .hs-title { position: relative; margin: 0; text-align: center; font-size: 34px; font-weight: 900; color: #fff; -webkit-text-stroke: 7px #087f5b; paint-order: stroke fill; text-shadow: 0 0 24px #38d9a9; line-height: 1.15; }
 .hs-title span { display: block; font-size: 20px; color: #c3fae8; }
-.hs-cut.hero .hs-title { animation: cb-shout 2s cubic-bezier(.2, 1.6, .4, 1) .15s both; }
+.hs-cut.hero .hs-title { animation: cb-shout 2.2s cubic-bezier(.2, 1.6, .4, 1) .3s both; }
 .hs-skip { position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; color: rgba(255, 255, 255, .6); font-size: 13px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .hs-cut { display: none; } }
