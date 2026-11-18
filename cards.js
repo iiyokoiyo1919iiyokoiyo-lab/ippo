@@ -62,7 +62,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
-  ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 3%)。パッシブ「士気」
+  ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
 ];
@@ -118,7 +118,7 @@ const RATE_UPS = [
 // テストのときは環境変数 CB_PICKUP_START (ミリ秒の時刻) で上書きできる
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
-  { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 3, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T16:45:00+09:00') }, // タドコロ 1 体で 3% (セールと同じ 11/20 16:45 まで)
+  { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T16:45:00+09:00') }, // タドコロ 1 体で 2% (セールと同じ 11/20 16:45 まで)
 ];
 if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
 if (Number(process.env.CB_PICKUP_END)) PICKUPS[0].end = Number(process.env.CB_PICKUP_END);
