@@ -270,6 +270,24 @@
         ${face(60, 57, { eyes: 'star', brows: true, mouth: 'grin', s: 0.9, iris: '#0b7285' })}
         ${twinkle(98, 24, 7, '#ffe066')}${twinkle(16, 76, 5, '#fff')}${twinkle(110, 108, 4, '#c3fae8')}`;
       },
+      // 星キャンディー (MR): 星の形のキャンディー。両はしにセロハンのつつみ、虹のうずまき、星の目、流れ星のステッキ
+      star: () => {
+        const pts = Array.from({ length: 10 }, (_, i) => { const a = (-90 + i * 36) * Math.PI / 180, r = i % 2 ? 21 : 41; return `${(60 + Math.cos(a) * r).toFixed(1)},${(64 + Math.sin(a) * r).toFixed(1)}`; }).join(' ');
+        const swirl = Array.from({ length: 5 }, (_, i) => `<path d="M60,64Q${60 + Math.cos((i * 72 - 60) * Math.PI / 180) * 30},${64 + Math.sin((i * 72 - 60) * Math.PI / 180) * 30} ${60 + Math.cos((i * 72 - 18) * Math.PI / 180) * 40},${64 + Math.sin((i * 72 - 18) * Math.PI / 180) * 40}" stroke="${['#ff8fd8', '#ffe066', '#8ce99a', '#74c0fc', '#d0a8ff'][i]}" stroke-width="5" fill="none" stroke-linecap="round" opacity=".85"/>`).join('');
+        return `
+        <path d="M30,66L4,52Q0,66 6,82Z" fill="${lg('wl', [[0, '#ffd6f5', 0.95], [1, '#c5b3ff', 0.75]], 1, 0)}" stroke="#ffffff" stroke-width="2"/>
+        <path d="M8,58L24,66M8,74L24,68" stroke="#fff" stroke-width="1.6" opacity=".9"/>
+        <path d="M90,66L116,52Q120,66 114,82Z" fill="${lg('wr', [[0, '#c5f6fa', 0.75], [1, '#ffd6f5', 0.95]], 1, 0)}" stroke="#ffffff" stroke-width="2"/>
+        <path d="M112,58L96,66M112,74L96,68" stroke="#fff" stroke-width="1.6" opacity=".9"/>
+        <polygon points="${pts}" fill="${rg('sc', [[0, '#fffbe6'], [0.45, '#ffd8f3'], [0.8, '#ffa8e2'], [1, '#e599f7']], 0.45, 0.4, 0.75)}" stroke="#ffffff" stroke-width="7" stroke-linejoin="round"/>
+        <polygon points="${pts}" fill="none" stroke="${lg('se', [[0, '#ff6bd6'], [0.33, '#ffd43b'], [0.66, '#63e6be'], [1, '#845ef7']], 1, 1)}" stroke-width="2.6" stroke-linejoin="round"/>
+        <g clip-path="${clip('sx', `<polygon points="${pts}"/>`)}">${swirl}<circle cx="60" cy="64" r="11" fill="#fff" opacity=".55"/></g>
+        ${gloss(44, 40, 7, 4)}<circle cx="78" cy="50" r="2.2" fill="#fff"/><circle cx="40" cy="82" r="1.6" fill="#fff"/>
+        <path d="M84,96L104,72" stroke="${lg('wd', [[0, '#ffe066'], [1, '#f59f00']])}" stroke-width="4" stroke-linecap="round"/>
+        ${twinkle(106, 69, 9, '#ffe066')}${twinkle(106, 69, 4, '#fff')}
+        <path d="M100,40Q108,32 116,22" stroke="#fff" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round" fill="none"/>
+        ${face(60, 62, { eyes: 'star', mouth: 'open', s: 0.95, iris: '#4c2a85' })}`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>

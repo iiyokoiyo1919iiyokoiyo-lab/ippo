@@ -102,6 +102,13 @@ function gachaHtml(n) {
   for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity]) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
   for (const n of GACHA_NOTICES) { const pk = gachaInfo(n).pickups[0]; jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
+  // 絵の抜けがないか確かめる (cards-art.js にないキャラは、えんぴつの絵になってしまう)
+  {
+    const vm = require('vm'), sandbox = { window: {} }; vm.runInNewContext(ART, sandbox);
+    const norm = (id) => sandbox.window.CBArt.svg(id, 'N').replace(/cba\d+/g, '');
+    const missing = cards.CARD_LIST.map((c) => c[0]).filter((id) => id !== 'pencil' && norm(id) === norm('pencil'));
+    if (missing.length) { console.error('絵がないキャラがあります (cards-art.js に追加してください):', missing.join(', ')); process.exit(1); }
+  }
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 1200, height: 675 }, deviceScaleFactor: 1 });
   for (const j of jobs) {
