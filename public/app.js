@@ -3121,10 +3121,10 @@ function cbRateUpBanner(cat, link = true) {
 function cbQuestBanner(q, cat) {
   const r = cat.cards.find((c) => c.id === q.reward);
   const end = new Date(q.end).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
-  return `<a class="card cb-questbn${q.cleared ? ' cleared' : ''}" href="#/games/cards/quest">
+  return `<a class="card cb-questbn${q.cleared ? ' cleared' : ''}${q.hard ? ' hard' : ''}" href="#/games/cards/quest">
     <span class="cb-questbn-sky" aria-hidden="true"><i></i><i></i><i></i></span>
     <span class="cb-questbn-art">${r ? CBArt.svg(r.id, r.rarity, { label: r.name }) : ''}</span>
-    <span class="cb-questbn-text"><span class="cb-questbn-tag">🌠 期間限定クエスト</span><b>${esc(q.name)}</b>
+    <span class="cb-questbn-text"><span class="cb-questbn-tag">${q.hard ? '⚡ 高難易度クエスト' : '🌠 期間限定クエスト'}</span><b>${esc(q.name)}</b>
       <span>${q.cleared ? '✅ クリアずみ · もう一度あそべます' : `クリアで <em class="cb-mr-word">MR</em>「${esc(r?.name || '')}」がもらえる！`}</span><small>${esc(end)} まで</small></span>${icon('chevron', 'chev')}</a>`;
 }
 const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
@@ -3497,9 +3497,9 @@ async function viewQuest() {
   if (!quests.length) { root.innerHTML = emptyState({ icon: 'sparkle', title: 'いま開催中のクエストはありません', text: '次のクエストをお楽しみに！', action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); return; }
   const fmt = (t) => new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
   root.innerHTML = quests.map((q) => `
-    <section class="card cb-quest">
+    <section class="card cb-quest${q.hard ? ' hard' : ''}">
       <div class="cb-quest-sky" aria-hidden="true">${Array.from({ length: 6 }, (_, i) => `<i style="--x:${10 + i * 15}%;--d:${i * 0.7}s"></i>`).join('')}</div>
-      <span class="cb-quest-tag">🌠 期間限定クエスト · ${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</span>
+      <span class="cb-quest-tag">${q.hard ? '⚡ 高難易度クエスト' : '🌠 期間限定クエスト'} · ${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</span>
       <h2>${esc(q.name)}</h2>
       <p>${esc(q.text)}</p>
       <div class="cb-quest-reward">
@@ -3512,7 +3512,8 @@ async function viewQuest() {
     </section>
     <section class="card card-pad"><div class="panel-head"><h3>${esc(q.emoji)} 敵: ${esc(q.boss)}</h3><span class="text-xs muted">3 体を全部たおすとクリア</span></div>
       <div class="cb-deck">${q.enemy.map((c) => cbCard(c, { level: c.lv, small: false })).join('')}</div>
-      <p class="text-xs muted" style="margin:8px 0 0">星キャンディーの「スターライトマーチ」は、5 ターンのあいだ毎ターン流星でダメージを与えてきます。相性 (✂️きる は 📄つつむ に強い) を考えてデッキを組もう！</p></section>
+      ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。Lv18 の SSR・MR デッキで勝率 25% くらいの強さです</p>` : ''}
+      <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
       ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}</a>
          <a class="btn btn-ghost btn-block" href="#/games/cards/collection" style="margin-top:8px">デッキを変える</a>`
@@ -3616,6 +3617,13 @@ async function viewBattle(params) {
         setTimeout(() => {
           replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill sweep');
           overlayFx('cb-gslash' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><i></i><b>疾風斬り！</b>', 1300, e.p === you ? 'top' : 'bottom');
+        }, t);
+        t += 650;
+      }
+      else if (e.k === 'skill' && e.id === 'thunder') { // 落雷: 画面が光って、相手の盤面に稲妻が落ちる
+        setTimeout(() => {
+          replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill thunder');
+          overlayFx('cb-thunder' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><b>⚡ 落雷！</b>', 1300, e.p === you ? 'top' : 'bottom');
         }, t);
         t += 650;
       }

@@ -59,6 +59,7 @@ function charHtml(id, at) {
 // 期間限定クエスト
 function questHtml(q) {
   const r = cards.CARDS[q.reward];
+  if (q.hard) return hardQuestHtml(q, r);
   const meteors = Array.from({ length: 9 }, (_, i) => `<i style="position:absolute;left:${(i * 151 + 80) % 1200}px;top:${(i * 71) % 300 - 40}px;width:5px;height:${120 + (i % 3) * 50}px;border-radius:5px;background:linear-gradient(transparent,#fff 80%,#ffe066);transform:rotate(-38deg);box-shadow:0 0 14px #fff"></i>`).join('');
   return `<div class="bn" style="background:radial-gradient(circle at 25% 55%,#7b4dff,#3b1f8f 45%,#140b3a 80%);">
     <div style="position:absolute;inset:0;background:radial-gradient(circle,rgba(255,255,255,.9) 0 1.5px,transparent 2px) 0 0/46px 46px,radial-gradient(circle,rgba(255,224,102,.9) 0 1.5px,transparent 2px) 23px 17px/61px 61px"></div>
@@ -72,6 +73,25 @@ function questHtml(q) {
       <div style="margin-top:14px;display:inline-block;padding:8px 16px;border-radius:14px;background:rgba(20,11,58,.7);font-size:22px;color:#e5dbff;font-weight:700">敵: ${q.enemy.map(([id, lv]) => `${esc(cards.CARDS[id].name)} Lv${lv}`).join('・')}</div>
     </div>
     <div class="date" style="left:600px;bottom:44px;background:linear-gradient(90deg,#ffe066,#ffa8e2);color:#2a1a6e">${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</div>
+  </div>`;
+}
+
+// 高難易度クエスト: 雷雲と稲妻
+function hardQuestHtml(q, r) {
+  const bolt = (x, y, s, o = 1) => `<svg style="position:absolute;left:${x}px;top:${y}px;width:${90 * s}px;height:${220 * s}px;opacity:${o};filter:drop-shadow(0 0 18px #ffd43b) drop-shadow(0 0 40px #fab005)" viewBox="0 0 90 220"><path d="M50,0L10,110H40L20,220L85,80H52L72,0Z" fill="#fff3bf" stroke="#ffd43b" stroke-width="4"/></svg>`;
+  return `<div class="bn" style="background:radial-gradient(circle at 25% 55%,#4c3aa8,#24164f 45%,#0b0720 80%);">
+    <div style="position:absolute;left:-60px;top:-80px;width:1400px;height:260px;background:radial-gradient(ellipse at 20% 60%,#3d3566 0 30%,transparent 31%),radial-gradient(ellipse at 45% 40%,#2f2857 0 28%,transparent 29%),radial-gradient(ellipse at 75% 60%,#3d3566 0 30%,transparent 31%);opacity:.9"></div>
+    ${bolt(520, -20, 1.4)}${bolt(1080, 10, 1, 0.85)}${bolt(40, -30, 0.9, 0.7)}${sparks(10)}
+    <div class="glow" style="left:60px;top:100px;width:520px;height:520px;background:radial-gradient(rgba(255,236,153,.85),rgba(250,176,5,0))"></div>
+    <div class="art" style="left:40px;top:70px;width:560px;height:560px">%%ART%%</div>
+    <div class="ribbon" style="left:-40px;top:34px;background:linear-gradient(90deg,#e67700,#c92a2a)">⚡ 高難易度クエスト</div>
+    <div style="position:absolute;left:600px;top:120px;width:580px">
+      <div class="stroke" style="--sw:14px;--sc:#3b1d00;font-size:100px;line-height:1.1;color:#ffe066;text-shadow:0 0 34px #fab005;white-space:nowrap">${esc(q.name)}</div>
+      <div style="margin-top:18px;font-size:36px;color:#fff;text-shadow:0 3px 0 #1b1035">クリアで <span style="color:#ff8fd8;font-size:54px;text-shadow:0 0 16px #ff6bd6,0 3px 0 #1b1035">${esc(r.rarity)}</span> ${esc(r.name)} GET!!</div>
+      <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！</div>
+      <div style="margin-top:12px;display:inline-block;padding:8px 16px;border-radius:14px;background:rgba(11,7,32,.75);font-size:22px;color:#fff3bf;font-weight:700">敵: ${q.enemy.map(([id, lv]) => `${esc(cards.CARDS[id].name)} Lv${lv}`).join('・')}</div>
+    </div>
+    <div class="date" style="left:600px;bottom:40px;background:linear-gradient(90deg,#ffe066,#fab005);color:#3b1d00">${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</div>
   </div>`;
 }
 

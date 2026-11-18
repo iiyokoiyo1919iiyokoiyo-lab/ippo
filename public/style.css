@@ -1976,3 +1976,18 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 /* UR のダブり → レベルアップ書 */
 .cb-new.conv { background: linear-gradient(135deg, #8d5a2b, #c9783a); color: #fff; white-space: nowrap; }
 .cb-conv-note { margin: 6px 0 0; text-align: center; font-weight: 700; font-size: .85rem; color: #8d5a2b; }
+
+/* 落雷 (雷神クリりん) */
+.cb-thunder { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; animation: cb-th-flash 1.3s ease both; }
+.cb-thunder.to-foe { top: 0; } .cb-thunder.to-me { bottom: 0; }
+.cb-thunder i { position: absolute; top: -10%; width: 46px; height: 120%; left: calc(50% - 23px); background: #fff3bf; clip-path: polygon(55% 0, 20% 46%, 46% 46%, 28% 100%, 82% 38%, 54% 38%, 76% 0); filter: drop-shadow(0 0 10px #ffd43b) drop-shadow(0 0 22px #fab005); transform-origin: top center; animation: cb-th-bolt .5s cubic-bezier(.2, .9, .2, 1) both; }
+.cb-thunder i:nth-child(2) { left: 22%; width: 26px; animation-delay: .14s; opacity: .85; }
+.cb-thunder b { position: relative; font-size: 30px; font-weight: 900; color: #fff; -webkit-text-stroke: 6px #e67700; paint-order: stroke fill; text-shadow: 0 0 18px #ffd43b; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .2s both; }
+@keyframes cb-th-bolt { 0% { transform: scaleY(0); opacity: 1; } 40% { transform: scaleY(1); opacity: 1; } 60% { opacity: .3; } 70% { opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+@keyframes cb-th-flash { 0% { background: rgba(255, 243, 191, 0); } 12% { background: rgba(255, 249, 219, .85); } 30% { background: rgba(255, 212, 59, .15); } 42% { background: rgba(255, 249, 219, .6); } 100% { background: rgba(255, 243, 191, 0); } }
+.cb-float.skill.thunder { color: #f08c00; }
+@media (prefers-reduced-motion: reduce) { .cb-thunder { display: none; } }
+/* 高難易度クエスト */
+.cb-quest.hard { background: linear-gradient(160deg, #1b1035, #3b2a85 55%, #f59f00 140%); }
+.cb-quest-hard { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; background: #fff4e6; color: #d9480f; font-weight: 700; font-size: .8rem; }
+.cb-questbn.hard .cb-questbn-tag { color: #ffd43b; }

@@ -308,6 +308,39 @@
         ${drop(10, 70, 1.3)}${drop(108, 24, 1.1)}${drop(14, 30, 0.9)}
         ${twinkle(106, 100, 5, '#ffe066')}${twinkle(8, 104, 4, '#fff')}`;
       },
+      // 雷神クリりん (MR・おもい): 雷の魔人。頭のてっぺん〜後頭部はつるっとハゲていて (光る)、横だけ稲妻のギザギザ髪。
+      // 背中に雷太鼓の輪、えんぴつのバチ、クリップのベルト。落雷を呼ぶ
+      raijin: () => {
+        const drum = (a) => { const x = 60 + Math.cos(a * Math.PI / 180) * 49, y = 56 + Math.sin(a * Math.PI / 180) * 45;
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7.5" fill="${lg('dr', [[0, '#495057'], [1, '#212529']])}" stroke="#fcc419" stroke-width="2"/><path d="M${(x - 3).toFixed(1)},${(y - 1).toFixed(1)}a3,3 0 1 1 6,0a3,3 0 0 1 -3,3" stroke="#fcc419" stroke-width="1.6" fill="none"/>`; };
+        const bolt = (x, y, k, c = '#ffe066') => `<path d="M${x},${y}l${-6 * k},${12 * k}h${5 * k}l${-4 * k},${11 * k}l${11 * k},${-15 * k}h${-5 * k}l${4 * k},${-8 * k}z" fill="${c}" stroke="#f08c00" stroke-width="1.2" stroke-linejoin="round"/>`;
+        const hair = lg('wh', [[0, '#ffffff'], [0.6, '#e9ecef'], [1, '#a5b4fc']]);
+        return `
+        <path d="M13,66A48,45 0 0 1 107,66" fill="none" stroke="#fcc419" stroke-width="3"/>
+        ${[185, 215, 245, 295, 325, 355].map(drum).join('')}
+        <path d="M8,106L30,86" stroke="${lg('pc', [[0, '#ffec99'], [1, '#f59f00']], 1, 0)}" stroke-width="6" stroke-linecap="round"/><path d="M30,86l5,-5l-8,1z" fill="#3b3b4f"/>
+        <path d="M112,106L90,86" stroke="${lg('pc2', [[0, '#ffec99'], [1, '#f59f00']], 1, 0)}" stroke-width="6" stroke-linecap="round"/><path d="M90,86l-5,-5l8,1z" fill="#3b3b4f"/>
+        <path d="M30,98Q24,114 42,115H78Q96,114 90,98Z" fill="${lg('bd', [[0, '#343a40'], [1, '#141517']])}" stroke="#fcc419" stroke-width="2"/>
+        <path d="M44,98L60,112L76,98" fill="none" stroke="#fcc419" stroke-width="2.4"/>
+        <path d="M32,104H88" stroke="${lg('cl', [[0, '#e9ecef'], [0.5, '#adb5bd'], [1, '#e9ecef']], 1, 0)}" stroke-width="4"/>
+        <path d="M52,101h16a3,3 0 0 1 0,7h-14a2,2 0 0 1 0,-4h12" fill="none" stroke="#868e96" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M30,52L4,40L18,56L0,60L20,66L6,78L26,76L14,92L34,82Z" fill="${hair}" stroke="#748ffc" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M90,52L116,40L102,56L120,60L100,66L114,78L94,76L106,92L86,82Z" fill="${hair}" stroke="#748ffc" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M44,28Q40,8 32,4Q42,16 38,32Z M76,28Q80,8 88,4Q78,16 82,32Z" fill="${lg('hn', [[0, '#fff9db'], [1, '#f59f00']])}" stroke="#e67700" stroke-width="1.4"/>
+        <ellipse cx="60" cy="60" rx="33" ry="36" fill="${rg('sk', [[0, '#bac8ff'], [0.55, '#748ffc'], [1, '#3b5bdb']], 0.45, 0.3, 0.85)}" stroke="#364fc7" stroke-width="2.2"/>
+        <path d="M27,50Q24,64 32,74Q30,62 36,58Z M93,50Q96,64 88,74Q90,62 84,58Z" fill="${hair}" stroke="#748ffc" stroke-width="1.2"/>
+        <ellipse cx="50" cy="34" rx="12" ry="5.5" fill="#fff" opacity=".8" transform="rotate(-20 50 34)"/>
+        ${twinkle(72, 28, 6, '#fff')}
+        <path d="M38,52L54,57M82,52L66,57" stroke="#141517" stroke-width="3.4" stroke-linecap="round"/>
+        <path d="M40,60Q47,55 54,60Q47,64 40,60Z M80,60Q73,55 66,60Q73,64 80,60Z" fill="#fff3bf" stroke="#141517" stroke-width="1.8"/>
+        <circle cx="48" cy="60" r="2.2" fill="#f59f00"/><circle cx="72" cy="60" r="2.2" fill="#f59f00"/>
+        <ellipse cx="47" cy="60" rx="9" ry="5" fill="#ffe066" opacity=".25"/><ellipse cx="73" cy="60" rx="9" ry="5" fill="#ffe066" opacity=".25"/>
+        <path d="M52,74Q60,79 68,73" stroke="#141517" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <path d="M64,75l2,4l2,-5z" fill="#fff" stroke="#141517" stroke-width="1"/>
+        <path d="M42,80Q50,88 60,84Q70,88 78,80Q72,96 60,94Q48,96 42,80Z" fill="${hair}" stroke="#748ffc" stroke-width="1.2"/>
+        <path d="M58,46l-4,7h4l-3,6l8,-9h-4l3,-4z" fill="#ffe066" stroke="#e67700" stroke-width=".8"/>
+        ${bolt(16, 0, 1)}${bolt(112, 70, 0.9)}${bolt(104, 0, 0.75, '#fff3bf')}${bolt(8, 92, 0.6, '#fff3bf')}`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>

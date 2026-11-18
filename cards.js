@@ -22,6 +22,7 @@ const SKILLS = {
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
   venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
+  thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
@@ -63,6 +64,7 @@ const CARD_LIST = [
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 10:30 (日本時間) 登場。パッシブ「士気」
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
+  ['raijin', '雷神クリりん', '⚡', 'MR', 'heavy', 70, 16, 12, 10, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -71,7 +73,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T10:30:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T10:30:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEASE_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) RELEASES[id] = v; }
 const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
@@ -173,6 +175,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
 const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに 1.4 倍、控えに 0.8 倍
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
+const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const METEOR_TURNS = 5, METEOR_RATE = 0.3; // 流星: 5 ターン、ターンの終わりに相手の場のカードへ最大 HP の 30% (ガード無視)
 function newSide(cards) { return { cards: cards.map((c) => ({ ...c, hp: c.maxHp, cd: 0, poison: 0 })), active: 0, meteor: null }; }
 const alive = (side) => side.cards.filter((c) => c.hp > 0).length;
@@ -233,7 +236,8 @@ function resolveTurn(state, acts, rnd) {
         const o = 1 - p, got = [], act0 = sides[o].active;
         sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
-      } else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
+      } else if (me.skill === 'thunder') hit(p, THUNDER_POWER, { typeless: true }); // 落雷: 2.3 倍の無属性こうげき
+      else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         if (foe.hp > 0) { foe.poison = POISON_TURNS; foe.flinch = 2; ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); ev.push({ k: 'flinched', p: o, card: foe.name }); }
       } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
@@ -390,7 +394,7 @@ CREATE TABLE card_horses (
 CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -427,11 +431,24 @@ ALTER TABLE card_horses ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 // テストのときは環境変数 CB_QUEST_START / CB_QUEST_END (ミリ秒の時刻) で上書きできる
 const QUESTS = [
   { id: 'starlight-2026', name: '星降る夜のクエスト', boss: '流れ星の三騎士', emoji: '🌠', reward: 'star',
+    pr: 'わざ「スターライトマーチ」は 5 ターンのあいだ流星を降らせる！',
     text: '夜空から現れた 3 体のキャラクター。勝てば MR「星キャンディー」が仲間になる！',
+    tip: '星キャンディーの「スターライトマーチ」は、5 ターンのあいだ毎ターン流星でダメージを与えてきます。相性 (✂️きる は 📄つつむ に強い) を考えてデッキを組もう！',
     enemy: [['star', 2], ['leaf', 3], ['gold', 1]],
     start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
+  // 高難易度 (hard): 敵は先を読む強い CPU。能力に boost をかける (Lv18 の SSR・MR デッキで勝率 25% くらい。tools/tune_oni.js で決める)
+  { id: 'raijin-2026', name: '雷神降臨', boss: '雷神クリりん', emoji: '⚡', reward: 'raijin', hard: true, boost: 1,
+    pr: 'わざ「落雷」は、どんな相性でも 2.3 倍の無属性こうげき！ 敵は先を読む強い CPU。挑戦者求む！',
+    text: '雷鳴とともに現れた魔人「雷神クリりん」。落雷はどんな相性でも 2.3 倍！ 勝てば MR「雷神クリりん」が仲間になる',
+    tip: '雷神クリりんの「落雷」は相性に関係なく 2.3 倍。お供は Lv20 の疾風剣士ハサミ丸と黄金えんぴつ王。敵は先を読む強い CPU なので、ガードと交代のタイミングが勝負！',
+    enemy: [['raijin', 20], ['scissors', 20], ['gold', 20]],
+    start: Date.parse('2026-11-19T08:00:00+09:00'), end: Date.parse('2026-11-22T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
+// テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)
+for (const q of QUESTS) { const k = 'CB_QUEST_' + q.id.toUpperCase().replace(/-/g, '_'); if (Number(process.env[k + '_START'])) q.start = Number(process.env[k + '_START']); if (Number(process.env[k + '_END'])) q.end = Number(process.env[k + '_END']); }
+// クエストの敵のカード (高難易度は boost をかける。速さはそのまま)
+const questEnemyStats = (q, boost = q.boost || 1) => q.enemy.map(([id, lv]) => { const s = statsOf(id, lv); return boost === 1 ? s : { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
 const questsNow = (now = Date.now()) => QUESTS.filter((q) => now >= q.start && now < q.end);
 const QUEST_MIGRATION = `
 CREATE TABLE card_quests (
@@ -473,7 +490,7 @@ function install(app, ctx) {
     db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
-  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end,
+  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
     enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     reward: { ...statsOf(q.reward, 1), skillName: SKILLS[CARDS[q.reward].skill].name, skillDesc: SKILLS[CARDS[q.reward].skill].desc },
     cleared: uid ? clearedOf(uid).has(q.id) : false });
@@ -511,7 +528,7 @@ function install(app, ctx) {
     const p = player(uid), o = owned(uid);
     return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
-      quests: questsNow().map((q) => ({ id: q.id, name: q.name, end: q.end, reward: q.reward, cleared: clearedOf(uid).has(q.id) })),
+      quests: questsNow().map((q) => ({ id: q.id, name: q.name, end: q.end, reward: q.reward, hard: !!q.hard, cleared: clearedOf(uid).has(q.id) })),
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
   }
 
@@ -706,7 +723,7 @@ function install(app, ctx) {
       : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } };
     const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
       players: uids.map((u) => (u ? userView(u) : cpuView)),
-      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? quest.enemy.map(([id, lv]) => statsOf(id, lv)) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
+      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
     uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
@@ -733,7 +750,7 @@ function install(app, ctx) {
   function nextTurn(b) {
     if (b.ended) return;
     b.acts = [null, null];
-    if (!b.uids[1]) b.acts[1] = b.mode === 'quest' || b.mode === 'easy' ? cpuAct(b.state, 1, rnd) : smartAct(b.state, 1, rnd); // ふつう・鬼難は先を読む強い CPU (かんたん・クエストの敵は素直な CPU)
+    if (!b.uids[1]) b.acts[1] = (b.mode === 'quest' && !b.quest.hard) || b.mode === 'easy' ? cpuAct(b.state, 1, rnd) : smartAct(b.state, 1, rnd); // ふつう・鬼難は先を読む強い CPU (かんたん・クエストの敵は素直な CPU)
     b.deadline = Date.now() + TURN_MS;
     b.uids.forEach((u) => u && send(u, { t: 'turn', turn: b.state.turn + 1, deadline: b.deadline, ms: TURN_MS, state: publicState(b) }));
     clearTimeout(b.timer);
@@ -871,4 +888,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

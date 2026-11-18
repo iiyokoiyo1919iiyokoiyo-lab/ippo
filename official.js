@@ -94,14 +94,14 @@ function schedule() {
   for (const q of QUESTS) {
     const r = CARDS[q.reward];
     out.push({ key: `quest-start:${q.id}`, at: q.start, until: q.start + D, banner: bannerName('quest', q.id),
-      text: `🌠【期間限定クエスト開始】「${q.name}」が始まりました！
+      text: `${q.hard ? '⚡【高難易度クエスト開始】' : '🌠【期間限定クエスト開始】'}「${q.name}」が始まりました！
 ${q.enemy.map(([id, lv]) => `${CARDS[id].name} Lv${lv}`).join('・')} に勝つと、${r.rarity}「${r.name}」が仲間に！
-わざ「${SKILLS[r.skill].name}」は 5 ターンのあいだ流星を降らせる！
+${q.pr || `わざ「${SKILLS[r.skill].name}」: ${SKILLS[r.skill].desc}`}
 ${fmt(q.end)} まで ${TAG}` });
     out.push({ key: `quest-end-soon:${q.id}`, at: q.end - D, until: q.end,
-      text: `⏰ 期間限定クエスト「${q.name}」は ${fmt(q.end)} までです。クリアすると ${r.rarity}「${r.name}」がもらえます！ ${TAG}` });
+      text: `⏰ ${q.hard ? '高難易度' : '期間限定'}クエスト「${q.name}」は ${fmt(q.end)} までです。クリアすると ${r.rarity}「${r.name}」がもらえます！ ${TAG}` });
     out.push({ key: `quest-end:${q.id}`, at: q.end, until: q.end + 3 * H,
-      text: `期間限定クエスト「${q.name}」は終了しました。挑戦してくれたみなさん、ありがとうございました！ ${TAG}` });
+      text: `${q.hard ? '高難易度' : '期間限定'}クエスト「${q.name}」は終了しました。挑戦してくれたみなさん、ありがとうございました！ ${TAG}` });
   }
   for (const s of SALES) {
     out.push({ key: `sale-start:${s.start}`, at: s.start, until: s.start + 6 * H,
