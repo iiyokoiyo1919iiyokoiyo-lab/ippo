@@ -2097,3 +2097,11 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 
 /* ブリードモンスターズ (ミニゲームの一覧) */
 .mb-art { display: grid; place-items: center; width: 54px; height: 54px; flex: none; font-size: 30px; background: radial-gradient(circle at 40% 35%, #ffe066, #ff922b 45%, #7048e8 100%); border-radius: 12px; }
+/* 期間限定クエストの背景のとき: 白い板の上の文字は、ダークモードでも濃い色に (わざ・ガード・こうたいのボタンが見えなくならないように) */
+.cb-battle.qbg .cb-acts .btn-outline, .cb-battle.qbg .cb-acts .btn-ghost { color: #1b1b3a; border-color: rgba(27, 27, 58, .25); }
+.cb-battle.qbg .cb-acts .btn-outline small, .cb-battle.qbg .cb-acts .btn-ghost small { color: #495057; }
+.cb-battle.qbg .cb-acts .btn:disabled { opacity: .6; }
+.cb-battle.qbg .cb-fighter .cb-meta, .cb-battle.qbg .cb-fighter .cb-hpn { color: #495057; }
+.cb-battle.qbg .cb-log, .cb-battle.qbg .cb-log p, .cb-battle.qbg .cb-log .muted { color: #1b1b3a; }
+.cb-battle.qbg .cb-items .cb-item { color: #1b1b3a; }
+.cb-battle.qbg .cb-items .cb-item small { color: #495057; }
