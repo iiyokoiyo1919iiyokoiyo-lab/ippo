@@ -40,8 +40,19 @@
   const art = (m, cls = '') => MonArt.svg(m.look, m.type, { rank: m.rank, cls, label: m.name });
   const mcard = (m, { href = `#mon/${m.id}`, cls = '', extra = '' } = {}) => `<a class="mcard ${cls}" ${href ? `href="${href}"` : ''} data-id="${esc(m.id)}">
     <span class="rk r-${esc(m.rank)}">${esc(m.rank)}</span><span class="sx ${m.sex === 'm' ? 'm' : 'f'}">${m.sex === 'm' ? '♂' : '♀'}</span>
+    ${m.mutantRarity ? `<span class="mutb mr-${esc(m.mutantRarity)}">🧬変異${esc(m.mutantRarity)}</span>` : ''}
     ${art(m)}<b>${esc(m.name)}</b><span class="meta">${typeTag(m.type)} · 市場価値 <span class="val">${Number(m.score).toLocaleString()}</span></span>
     <div><span class="st ${esc(m.status)}">${m.status === 'training' ? `育成中 あと${m.trainLeft}` : m.isStud ? '種モン' : esc(STATUS[m.status] || m.status)}</span></div>${extra}</a>`;
+  // 変異の表示 (持っている変異・レアリティ・説明・能力への影響・相乗効果・遺伝の情報)
+  const ORIGIN = { new: '突然変異で発現', father: '父から受けついだ', mother: '母から受けついだ' };
+  const mutRow = (x) => `<div class="mut ${x.mode === 'latent' ? 'latent' : ''}"><div class="mut-h"><span class="mutb mr-${esc(x.rarity)}">変異${esc(x.rarity)}</span><b>${esc(x.name)}</b><span class="mut-cat">${esc(x.catName)}</span></div>
+    <p class="small" style="margin:2px 0">${esc(x.desc)}</p>${x.mode === 'latent' ? '<p class="small muted" style="margin:0">潜在形質: 表には出ていない (効果なし)。子に受けつがれることがある</p>' : `<p class="mut-fx">${x.effects.map(esc).join(' · ')}</p>`}
+    <p class="small muted" style="margin:0">遺伝: ${esc(ORIGIN[x.origin] || '')}${x.mode === 'latent' ? ' (潜在)' : ''}</p></div>`;
+  const mutCard = (m) => `<div class="card mutcard"><h2>🧬 突然変異 <span class="small muted">${m.mutations.filter((x) => x.mode === 'direct').length} 種類</span></h2>
+    ${m.mutations.map(mutRow).join('')}
+    ${(m.synergies || []).length ? `<div class="syn"><b>✨ 相乗効果</b>${m.synergies.map((s) => `<div><b>${esc(s.name)}</b> <span class="small">${esc(s.desc)}</span></div>`).join('')}</div>` : ''}
+    ${m.baseStats ? `<p class="small muted" style="margin:6px 0 0">変異なしの能力: HP ${m.baseStats.hp} 攻 ${m.baseStats.atk} 魔 ${m.baseStats.mag} 防 ${m.baseStats.def} 速 ${m.baseStats.spd} (子に受けつがれるのはこちら)</p>` : ''}
+    ${m.initScore ? `<p class="small muted" style="margin:2px 0 0">誕生時の市場価値: ${Number(m.initScore).toLocaleString()} (変異の初期値。種モンの条件には数えない)</p>` : ''}</div>`;
   const skillRow = (s, extra = '') => `<div class="skl"><span class="kd ${esc(s.kind)}">${esc(KIND[s.kind])}</span><b>${esc(s.name)}${extra}</b>${s.type ? typeTag(s.type) : '<span class="ty muted">本人の属性</span>'}<span class="cmd">${arrows(s.cmd)}</span><span class="small muted">威力${s.power}</span></div>`;
   const head = (title, back = '#') => `<div class="mb-head">${back ? `<a class="btn sm" href="${back}">←</a>` : ''}<h1>${title}</h1><span class="mb-coins">🪙 ${me ? Number(me.coins).toLocaleString() : '-'}</span></div>`;
   async function refresh() { me = await api('/mon/me'); return me; }
@@ -64,6 +75,7 @@
       if (parts[0] === 'board') return viewBoard();
       if (parts[0] === 'shop') return viewShop();
       if (parts[0] === 'ranking') return viewRanking();
+      if (parts[0] === 'dex') return viewDex();
       if (parts[0] === 'help') return viewHelp();
       return viewHome();
     } catch (e) { app.innerHTML = `${head('ブリードモンスターズ', '')}<div class="card empty">${esc(e.message)}</div>`; }
@@ -96,6 +108,7 @@
         <a class="btn" href="#board">📋 募集掲示板<small>対戦相手を探す</small></a>
         <a class="btn" href="#shop">🛒 メスショップ<small>毎朝 7 時・先着順</small></a>
         <a class="btn" href="#ranking">🏆 ランキング<small>市場価値</small></a>
+        <a class="btn" href="#dex">📕 変異図鑑<small>発見されたものだけ</small></a>
         <a class="btn" href="#help">📖 あそびかた<small>ルールと相性</small></a>
       </div>
       <div class="card"><h2>🐾 わたしのモンスター <span class="small muted">${ms.length} 体</span></h2>
@@ -115,6 +128,7 @@
         <p class="small" style="margin:0"><span class="st ${esc(m.status)}">${m.status === 'training' ? `育成中 あと${m.trainLeft}ターン` : m.isStud ? `種モン (種付け料 ${m.studFee} コイン)` : esc(STATUS[m.status])}</span> 市場価値 <span class="val">${Number(m.score).toLocaleString()}</span> · ${m.wins}勝${m.losses}敗 (対人 ${m.pvpWins}勝${m.pvpLosses}敗)${m.sex === 'f' ? ` · 産んだ子 ${m.children}/${catalog.rules.maxChildren}` : ''}</p>
         ${mine ? '' : `<p class="small muted">持ち主: ${esc(owner.displayName)}</p>`}</div>
       ${mine ? `<div class="card" id="acts"></div>` : ''}
+      ${(m.mutations || []).length ? mutCard(m) : ''}
       <div class="card"><h2>📊 能力</h2><div class="stats">${st('hp', 'HP', 500)}${st('atk', '攻撃', 150)}${st('mag', '魔力', 150)}${st('def', '防御', 150)}${st('spd', '素早さ', 150)}</div></div>
       <div class="card"><h2>🎮 技とコマンド <span class="small muted">${m.skills.length}/${catalog.rules.maxSkills}</span></h2>${m.skills.map((s) => skillRow(s, inh.has(s.id) ? '<span class="inh">受けついだ</span>' : '')).join('')}</div>
       <div class="card"><h2>🧬 血統</h2><div class="lin">${parent(m.father, '父')}${parent(m.mother, '母')}</div>
@@ -184,22 +198,55 @@
       $$('[data-pick]').forEach((el) => el.onclick = (e) => { e.preventDefault(); if (el.dataset.pick === 'mo') mo = el.dataset.id; else fa = el.dataset.id; draw(); });
       $('#go')?.addEventListener('click', async (e) => {
         e.target.disabled = true;
+        const requestId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
         try {
-          const r = await api('/mon/breed', { method: 'POST', body: { mother: mo, father: fa } });
-          await refresh(); hatch(r.child, F, M);
+          const r = await api('/mon/breed', { method: 'POST', body: { mother: mo, father: fa, requestId } });
+          await refresh(); hatch(r.child, F, M, r.mutation);
         } catch (err) { toast(err.message, true); e.target.disabled = false; }
       });
     };
     draw();
   }
-  function hatch(c, F, M) {
+  function hatch(c, F, M, mut) {
     app.innerHTML = `${head('💞 配合', '#')}<div class="card center"><div class="lin" style="margin-bottom:8px">${mcard(F, { href: '' })}${mcard(M, { href: '' })}</div><span class="egg">🥚</span><p class="shout">タマゴが…！？</p></div>`;
+    if (mut && (mut.new.length || mut.discoveries.length)) return setTimeout(() => mutantBirth(c, mut), 1400);
     setTimeout(() => {
       app.innerHTML = `${head('💞 配合', '#')}<div class="card center"><p class="shout">🎉 ${esc(c.name)} が生まれた！</p>
         <div class="reveal">${art(c, 'big-art')}</div><p><span class="rk r-${esc(c.rank)}" style="position:static;padding:2px 10px">${esc(c.rank)}</span> ${c.sex === 'm' ? '♂ オス' : '♀ メス'} · ${typeTag(c.type)} · 第${c.gen}世代</p>
         <p>${(c.inherited || []).length ? (c.inherited).map((x) => `<span class="inh" style="font-size:13px">${esc(x.from)}から「${esc(c.skills.find((s) => s.id === x.skill)?.name || '')}」</span>`).join(' ') : '<span class="small muted">今回は親の技を受けつげなかった…</span>'}</p>
         <a class="btn gold block" href="#train/${c.id}">🏋️ 育成する (10 ターン)</a><a class="btn block" href="#mon/${c.id}" style="margin-top:8px">くわしく見る</a></div>`;
     }, 2000);
+  }
+
+  // 突然変異の誕生 (専用の演出。スキップできる)
+  function mutantBirth(c, mut) {
+    const top = c.mutantRarity || mut.new[0]?.rarity || 'N';
+    const first = mut.discoveries.length > 0;
+    const shareText = `🧬 突然変異が誕生！ ${c.name} に「${(mut.new.length ? mut.new : c.mutations || []).map((x) => x.name).join('・')}」が発現した${first ? '。だれも見たことのない変異を発見！' : '！'} #ブリードモンスターズ`;
+    app.innerHTML = `<div class="mutfx mr-${esc(top)}" id="mutfx"><div class="mutfx-dna">${Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>
+      <div class="mutfx-in"><p class="mutfx-t1">⚠️ 突然変異 ⚠️</p>
+        <div class="mutfx-art reveal">${art(c, 'big-art')}</div>
+        ${mut.new.map((x) => `<div class="mutfx-name"><span class="mutb mr-${esc(x.rarity)}">変異${esc(x.rarity)}</span><b>${esc(x.name)}</b><small>${esc(x.catName)}</small></div>`).join('')}
+        ${first ? `<div class="mutfx-first">🏆 第一発見！ ${mut.discoveries.map((d) => `<span>${esc(d.kind === 'combo' ? '新しい組み合わせ「' + d.name + '」' : '「' + d.name + '」')}</span>`).join('')}${mut.title ? `<em>称号「${esc(mut.title)}」</em>` : ''}</div>` : ''}
+        <div class="lin" style="margin-top:12px"><a class="btn gold" href="#mon/${esc(c.id)}">くわしく見る</a><button class="btn" id="mshare">📣 タイムラインに投稿</button></div>
+        <a class="btn block" href="#train/${esc(c.id)}" style="margin-top:8px">🏋️ 育成する</a></div>
+      <button class="btn sm mutfx-skip" id="mskip">スキップ ▶</button></div>`;
+    const fx = $('#mutfx');
+    $('#mskip').onclick = () => fx.classList.add('skip');
+    setTimeout(() => fx.classList.add('done'), 3200);
+    $('#mshare').onclick = () => { if (inFrame) parent.postMessage({ source: 'ippo-monster', type: 'share', text: shareText }, location.origin); else toast('IppO の中で開くと投稿できます'); };
+  }
+
+  // ---------- 変異図鑑 (発見されたものだけ) ----------
+  async function viewDex() {
+    const [d, r] = await Promise.all([api('/mon/dex'), api('/mon/discoverers')]);
+    const when = (t) => new Date(t).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' });
+    const who = (x) => esc(x.discoverer?.displayName || '-');
+    app.innerHTML = `${head('📕 変異図鑑', '#')}
+      <div class="card"><h2>🧬 発見された変異</h2>${d.mutations.length ? d.mutations.map((x) => { const m = x.mutations[0]; return `<div class="mut"><div class="mut-h"><b>${esc(m.name)}</b><span class="mut-cat">${esc(m.catName)}</span>${x.owned ? '<span class="small" style="color:#2f9e44;font-weight:800">✅ 持っている</span>' : ''}</div>
+        <p class="small" style="margin:2px 0">${esc(m.desc)}</p><p class="small muted" style="margin:0">第一発見者: <b>${who(x)}</b> (${when(x.at)}・変異${esc(x.rarity || '')} で発現)</p></div>`; }).join('') : '<p class="empty">まだ何も発見されていません</p>'}</div>
+      ${d.combos.length ? `<div class="card"><h2>🔗 発見された組み合わせ</h2>${d.combos.map((x) => `<div class="mut"><b>${x.mutations.map((m) => esc(m.name)).join(' × ')}</b><p class="small muted" style="margin:0">第一発見者: <b>${who(x)}</b> (${when(x.at)})</p></div>`).join('')}</div>` : ''}
+      <div class="card"><h2>🏆 発見者ランキング</h2>${r.top.length ? r.top.map((t) => `<div class="row" style="border-top:1px solid var(--line);padding:6px 0"><b style="width:26px;text-align:center">${t.rank}</b><span style="flex:1">${esc(t.user.displayName)}</span><span class="small">変異 ${t.mutations} · 組み合わせ ${t.count - t.mutations}</span></div>`).join('') : '<p class="empty">まだいません</p>'}</div>`;
   }
 
   // ---------- バトル: モンスターと相手をえらぶ ----------
@@ -489,7 +536,8 @@
       const lotCard = (m) => `<div class="card"><div class="row">${MonArt.svg(m.look, m.type, { rank: m.rank, cls: '' }).replace('class="ma-svg', 'style="width:120px;height:120px" class="ma-svg')}<div style="flex:1;min-width:0"><b style="font-size:17px">${esc(m.name)}</b> <span class="rk r-${esc(m.rank)}" style="position:static;padding:0 6px">${esc(m.rank)}</span><br>${m.sex === 'm' ? '♂' : '♀'} ${typeTag(m.type)} · 第${m.gen}世代 · ${m.status === 'training' || m.trainLeft ? `育成あと${m.trainLeft}` : '育成ずみ'}<br><span class="small">出品: ${esc(m.seller?.displayName || '')}</span></div></div>
         <div class="lin" style="margin-top:6px">${['father', 'mother'].map((k) => { const p = m[k]; return p ? `<div class="small"><b>${k === 'father' ? '父' : '母'} ${esc(p.name)}</b> (${esc(p.rank)})<br>市場価値 <span class="val">${Number(p.score).toLocaleString()}</span><br>${p.wins}勝${p.losses}敗・対人 ${p.pvpWins}勝${p.pvpLosses}敗</div>` : '<div></div>'; }).join('')}</div>
         <p class="small" style="margin:6px 0 0">受けついだ技: ${(m.inherited || []).length ? m.inherited.map((x) => `<span class="inh">${esc(x.from)}「${esc(m.skills.find((s) => s.id === x.skill)?.name || '')}」</span>`).join(' ') : 'なし'}</p>
-        <p class="small" style="margin:4px 0 0">技: ${m.skills.map((s) => esc(s.name)).join('・')}</p></div>`;
+        <p class="small" style="margin:4px 0 0">技: ${m.skills.map((s) => esc(s.name)).join('・')}</p>
+        ${(m.mutations || []).length ? `<p class="small" style="margin:4px 0 0">🧬 変異: ${m.mutations.map((x) => `<span class="mutb mr-${esc(x.rarity)}">${x.mode === 'latent' ? '潜在 ' : ''}${esc(x.name)} ${esc(x.rarity)}</span>`).join(' ')}</p>` : ''}</div>`;
       if (state.live && state.lot) {
         const L = state.lot, left = Math.max(0, Math.ceil((L.endsAt - Date.now()) / 1000));
         root.innerHTML = `<div class="card auc-live center"><b>🔴 セリ開催中！ (${state.index + 1}/${state.total})</b><div class="auc-price">🪙 ${Number(L.price).toLocaleString()}</div>

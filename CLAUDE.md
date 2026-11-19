@@ -36,6 +36,10 @@
 - 技は `monster.js` の `SKILL_LIST` に足す (コマンドは全部ちがう並びにする。重なると起動時にエラー)。新技は `release` の時刻から使える
 - 新技は、それを持った公式の種モンを `OFFICIAL_STUDS` に足して配る (登場時刻つき)。だれでも種付け料で配合できる
 - メスモンスターショップ: 毎朝 7 時に 6 体 (B 3・A 2・S 1)・先着順・1 人 1 日 1 体 (`SHOP_LEVELS` / `SHOP_RANKS`)。共通の種モンは属性ごとに 1 体・種付け料 30 (`COMMON_STUDS`)
+- 突然変異: データと計算は `monster-mutation.js` (変異の一覧 `MUTATIONS`・相乗効果 `SYNERGIES`・確率 `DEFAULT_CONFIG`。環境変数 `MON_MUTATION_CONFIG` で上書き、上限 2%)。変異は id を変えずに足していく
+  - 未発見の変異は画面に一切出さない (変異の一覧をクライアントに送らない・絵のコードにも名前を入れない)。発見の記録 `mon_discoveries` は書きかえ・削除できない
+  - 変異の能力は保存した能力値に足さず、表示とバトルで計算する (配合で子に渡すのは変異なしの能力)。R 以上の変異で生まれたら市場価値 1000 (`init_score`。種モンの条件には数えない)
+  - テストで必ず変異させるときは `MON_MUTATION_FORCE=1` (本番では設定しない)
 - セリは毎時 5 分 (テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
 
 ## そのほか

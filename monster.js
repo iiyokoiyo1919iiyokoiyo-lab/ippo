@@ -14,6 +14,7 @@
 // =====================================================================
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const MUT = require('./monster-mutation'); // 突然変異 (データと計算)
 
 // ---------- 属性と相性 ----------
 // 火 > 草 > 水 > 火 (1.5 倍 / 逆は 0.7 倍)、光 ⇄ 闇 (おたがい 1.5 倍)、王は光と闇に強い (1.3 倍)・火水草からは少し多く受ける (1.2 倍)
@@ -109,10 +110,13 @@ function newMonster({ type = pick(TYPE_IDS), sex = rnd() < 0.5 ? 'm' : 'f', leve
 // 先攻の 1 つ目 → 後攻の 1 つ目 → 先攻の 2 つ目 … と交互に出す (片方が多ければ、残りはそのあと続けて出す)
 function matchSkill(mon, keys) { return mon.skills.map((id) => SKILLS[id]).find((s) => s && s.cmd === keys) || null; }
 function damage(att, def, skill, r) {
-  const type = skill.kind === 'punch' ? att.type : skill.type;
+  let type = skill.kind === 'punch' ? att.type : skill.type;
+  // キメラ種: 直殴りは、自分の属性と 2 つ目の属性のうち有利な方
+  if (skill.kind === 'punch' && att.fx?.type2 && typeMult(att.fx.type2, def.type) > typeMult(type, def.type)) type = att.fx.type2;
   const a = skill.kind === 'punch' ? att.atk : att.mag;
   const mult = typeMult(type, def.type);
-  const dmg = Math.max(1, Math.round(skill.power * (a / Math.max(20, def.def)) * mult * (0.9 + r() * 0.2)));
+  const fx = (att.fx?.[skill.kind] || 1) * (def.fx?.taken || 1);
+  const dmg = Math.max(1, Math.round(skill.power * (a / Math.max(20, def.def)) * mult * fx * (0.9 + r() * 0.2)));
   return { dmg, mult, type };
 }
 function resolveRound(state, cmds, r = rnd) {
@@ -186,6 +190,43 @@ CREATE TABLE mon_escrow (user_id INTEGER NOT NULL, amount INTEGER NOT NULL, mons
 CREATE TABLE mon_battles (id INTEGER PRIMARY KEY AUTOINCREMENT, mode TEXT NOT NULL, p1 INTEGER, p2 INTEGER, m1 TEXT, m2 TEXT, winner INTEGER, rounds INTEGER NOT NULL, created_at INTEGER NOT NULL);
 `;
 
+// 突然変異 (2026-11-20): 個体の変異・発見の記録 (書きかえ・削除できない)・変異と遺伝の履歴・配合の二重実行の防止
+const MUTATION_MIGRATION = `
+ALTER TABLE mon_monsters ADD COLUMN init_score INTEGER NOT NULL DEFAULT 0;   -- 生まれたときの市場価値 (変異の初期値)。種モンの条件には数えない
+CREATE TABLE mon_mutations (
+  monster_id TEXT NOT NULL REFERENCES mon_monsters(id) ON DELETE CASCADE,
+  mutation_id TEXT NOT NULL,
+  rarity TEXT NOT NULL,                  -- N / R / SR / SSR / UR / MR
+  mode TEXT NOT NULL,                    -- direct (表に出ている) / latent (潜在)
+  origin TEXT NOT NULL,                  -- new (突然変異) / father / mother
+  param TEXT,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (monster_id, mutation_id)  -- 同じ変異の重複登録を防ぐ
+);
+CREATE TABLE mon_discoveries (
+  key TEXT PRIMARY KEY,                  -- m:<変異 id> / c:<id+id…> (組み合わせ)
+  kind TEXT NOT NULL,                    -- mutation / combo
+  mutation_ids TEXT NOT NULL,            -- JSON
+  rarity TEXT,
+  user_id INTEGER,                       -- 初発見者 (退会しても数字は残す)
+  monster_id TEXT NOT NULL, father_id TEXT, mother_id TEXT,
+  lineage TEXT NOT NULL,                 -- 血統 (JSON)
+  first INTEGER NOT NULL DEFAULT 1,
+  discovered_at INTEGER NOT NULL
+);
+CREATE TRIGGER mon_discoveries_no_update BEFORE UPDATE ON mon_discoveries BEGIN SELECT RAISE(ABORT, '発見の記録は変更できません'); END;
+CREATE TRIGGER mon_discoveries_no_delete BEFORE DELETE ON mon_discoveries BEGIN SELECT RAISE(ABORT, '発見の記録は削除できません'); END;
+CREATE TABLE mon_mutation_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  monster_id TEXT NOT NULL, event TEXT NOT NULL, mutation_id TEXT, rarity TEXT, detail TEXT, created_at INTEGER NOT NULL
+);
+CREATE INDEX mon_mutation_log_monster ON mon_mutation_log(monster_id);
+CREATE TABLE mon_breed_requests (
+  user_id INTEGER NOT NULL, request_id TEXT NOT NULL, monster_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, request_id)
+);
+`;
+
 // 公式の種モン (新技を持って登場。だれでも配合に使える)
 const OFFICIAL_STUDS = [
   { id: 'stud-nova', name: 'ソルフレア', type: 'fire', skills: ['ult_nova', 'ult_fire', 'inferno', 'upper'], fee: 300, release: '2026-11-20T08:00:00+09:00', look: { body: 3, eyes: 2, horn: 4, wing: 2, tail: 3, mark: 2, crest: 3, h1: 18, h2: 48 } },
@@ -220,6 +261,7 @@ CREATE TABLE mon_shop (
 module.exports = function install(app, ctx) {
   const { db, requireAuth, rateLimit, publicUser } = ctx;
   db.migrate('2026-11-20-monster-breeders', MIGRATION);
+  db.migrate('2026-11-20-monster-mutations', MUTATION_MIGRATION);
   // テスト中: 遊べるのはテスターだけ (環境変数 MON_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413)。ほかの人には API もバトルも開かない
   const TESTERS = new Set(String(process.env.MON_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
   const isTester = (u) => !!u && (TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase()));
@@ -229,7 +271,15 @@ module.exports = function install(app, ctx) {
   const writeLimit = rateLimit({ windowMs: 60_000, max: 90, key: (req) => 'mon' + req.user.id });
   const newId = () => crypto.randomBytes(6).toString('hex');
   const qMon = db.prepare('SELECT * FROM mon_monsters WHERE id = ?');
-  const parse = (row) => row && { ...row, look: JSON.parse(row.look), skills: JSON.parse(row.skills), inherited: row.inherited ? JSON.parse(row.inherited) : null };
+  const qMuts = db.prepare('SELECT mutation_id AS id, rarity, mode, origin, param FROM mon_mutations WHERE monster_id = ? ORDER BY created_at, mutation_id');
+  const parse = (row) => {
+    if (!row) return row;
+    const m = { ...row, look: JSON.parse(row.look), skills: JSON.parse(row.skills), inherited: row.inherited ? JSON.parse(row.inherited) : null };
+    m.base = { hp: row.hp, atk: row.atk, mag: row.mag, def: row.def, spd: row.spd }; // 配合で子に渡すのは、変異の分を入れない能力
+    m.mutations = qMuts.all(row.id);
+    if (m.mutations.length) { const e = MUT.effectsOf(m.mutations, m.type); Object.assign(m, MUT.applyStats(m.base, e.stat)); m.fx = e.fx; m.syn = e.syn; }
+    return m;
+  };
   const getMon = (id) => parse(qMon.get(String(id || '')));
   const userView = (id) => { if (!id) return { id: 0, username: '', displayName: 'IppO 公式', avatar: { kind: 'emoji', emoji: '🏛️', color: '#4b55f0' } }; const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, verified: u.verified, titles: u.titles || [] }; };
   const skillView = (id) => SKILLS[id] && { id, name: SKILLS[id].name, kind: SKILLS[id].kind, type: SKILLS[id].type, cmd: SKILLS[id].cmd, power: SKILLS[id].power };
@@ -239,6 +289,8 @@ module.exports = function install(app, ctx) {
     hp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: m.skills.map(skillView).filter(Boolean),
     score: m.score, wins: m.wins, losses: m.losses, pvpWins: m.pvp_wins, pvpLosses: m.pvp_losses, children: m.children, isStud: !!m.is_stud, studFee: m.stud_fee,
     listPrice: m.list_price, rank: rankOf(m), power: powerOf(m), inherited: m.inherited, ownerId: m.owner_id, createdAt: m.created_at,
+    ...(m.mutations?.length ? { mutations: m.mutations.map((x) => MUT.viewOf(x, TYPES)).filter(Boolean), synergies: (m.syn || []).map((s) => ({ name: s.name, desc: s.desc })),
+      mutantRarity: MUT.topRarity(m.mutations), look: { ...m.look, viz: MUT.vizOf(m.mutations) }, baseStats: m.base, initScore: m.init_score } : {}),
     ...(full ? { father: m.father_id ? parentBrief(m.father_id) : null, mother: m.mother_id ? parentBrief(m.mother_id) : null } : {}),
   };
   function insertMon(m, owner, extra = {}) {
@@ -336,7 +388,7 @@ module.exports = function install(app, ctx) {
   app.post('/api/mon/monster/:id/stud', requireAuth, writeLimit, (req, res) => {
     const m = owned(req.user.id, req.params.id); if (!m) return res.status(404).json({ error: 'そのモンスターは持っていません' });
     if (m.sex !== 'm') return res.status(400).json({ error: '種モンになれるのはオスだけです' });
-    if (m.score < STUD_SCORE) return res.status(400).json({ error: `種モンになるには市場価値 ${STUD_SCORE} 以上が必要です (いま ${m.score})` });
+    if (m.score - (m.init_score || 0) < STUD_SCORE) return res.status(400).json({ error: `種モンになるには、対戦で上げた市場価値が ${STUD_SCORE} 以上必要です (いま ${m.score - (m.init_score || 0)})` });
     if (!['active', 'breeding'].includes(m.status)) return res.status(400).json({ error: 'このモンスターは種モンにできません' });
     const fee = clamp(Math.round(Number(req.body?.fee) || 0), 0, 100000);
     db.prepare("UPDATE mon_monsters SET status = 'breeding', is_stud = 1, stud_fee = ? WHERE id = ?").run(fee, m.id);
@@ -404,9 +456,12 @@ module.exports = function install(app, ctx) {
     if (fa.id === mo.father_id || fa.id === mo.id) return res.status(400).json({ error: '親子では配合できません' });
     if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status != 'breeding'").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです (セリに出すか繁殖入りさせてください)` });
     const fee = fa.owner_id === uid ? 0 : fa.stud_fee;
+    // 二重実行の防止: 同じリクエスト ID なら、さっき生まれた子を返す (コインもう一度は払わない)
+    const reqId = String(req.body?.requestId || '').slice(0, 64);
+    if (reqId) { const done = db.prepare('SELECT monster_id FROM mon_breed_requests WHERE user_id = ? AND request_id = ?').get(uid, reqId); if (done) return res.json({ child: monView(getMon(done.monster_id), { full: true }), fee: 0, coins: coins.get(uid), repeated: true }); }
     // 子を作る: 属性は父か母 (まれに別の属性)、能力は両親の平均 + ばらつき、技は両親のいちばん強い技を 70% ずつ
     const type = rnd() < 0.06 ? pick(TYPE_IDS) : rnd() < 0.5 ? fa.type : mo.type;
-    const avg = (k) => Math.round(((fa[k] + mo[k]) / 2) * (0.94 + rnd() * 0.14));
+    const avg = (k) => Math.round(((fa.base[k] + mo.base[k]) / 2) * (0.94 + rnd() * 0.14)); // 変異の分は入れない (無限に強くならない)
     const inherited = [];
     for (const [who, p] of [['父', fa], ['母', mo]]) { const best = strongestSkill(p.skills); if (best && rnd() < INHERIT_RATE) inherited.push({ from: who, skill: best.id }); }
     const punches = Object.values(SKILLS).filter((s) => s.kind === 'punch' && s.cmd.length === 2).map((s) => s.id);
@@ -415,21 +470,62 @@ module.exports = function install(app, ctx) {
     const child = { name: randomName(), sex: rnd() < 0.5 ? 'm' : 'f', type, gen: Math.max(fa.gen, mo.gen) + 1, father_id: fa.id, mother_id: mo.id, look: mixLook(fa.look, mo.look, type),
       hp: avg('hp'), atk: avg('atk'), mag: avg('mag'), def: avg('def'), spd: avg('spd'), skills, inherited };
     db.exec('BEGIN');
-    let id;
+    let id, found = { newOnes: [], discoveries: [] };
     try {
       if (fee && !coins.spend(uid, fee)) throw Object.assign(new Error(`コインが足りません (種付け料 ${fee} コイン)`), { user: true });
       if (fee && fa.owner_id) coins.add(fa.owner_id, fee);
       if (!db.prepare('UPDATE mon_monsters SET children = children + 1 WHERE id = ? AND children < ?').run(mo.id, MAX_CHILDREN).changes) throw Object.assign(new Error('この母はもう産めません'), { user: true });
       id = insertMon(child, uid, { status: 'training', trainLeft: TRAIN_TURNS });
+      if (reqId && !db.prepare('INSERT OR IGNORE INTO mon_breed_requests (user_id, request_id, monster_id, created_at) VALUES (?, ?, ?, ?)').run(uid, reqId, id, Date.now()).changes) throw Object.assign(new Error('この配合はもう処理しました'), { user: true });
+      found = mutateChild(id, child, fa, mo, uid);     // 突然変異と遺伝 (同じトランザクションの中で)
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); if (e.user) return res.status(400).json({ error: e.message }); throw e; }
-    console.log(`[mon] @${req.user.username} 配合 ${fa.name}×${mo.name} → ${child.name}`);
-    res.json({ child: monView(getMon(id), { full: true }), fee, coins: coins.get(uid) });
+    console.log(`[mon] @${req.user.username} 配合 ${fa.name}×${mo.name} → ${child.name}${found.newOnes.length ? ` (突然変異 ${found.newOnes.length})` : ''}`);
+    res.json({ child: monView(getMon(id), { full: true }), fee, coins: coins.get(uid), mutation: found.newOnes.length || found.discoveries.length ? { new: found.newOnes.map((x) => MUT.viewOf(x, TYPES)), discoveries: found.discoveries, title: found.title } : null });
+  });
+
+  // ---------- 突然変異 (配合のトランザクションの中で呼ぶ) ----------
+  const lineageOf = (fa, mo) => { const brief = (p) => p && { id: p.id, name: p.name, gen: p.gen, father: p.father_id, mother: p.mother_id, mutations: (p.mutations || []).map((x) => ({ id: x.id, rarity: x.rarity, mode: x.mode })) }; return { father: brief(fa), mother: brief(mo), gen: Math.max(fa.gen, mo.gen) + 1 }; };
+  function mutateChild(id, child, fa, mo, uid) {
+    // テストのときだけ (MON_MUTATION_FORCE=1) 必ず突然変異させる。本番の確率は MUT.CONFIG (上限 2%)
+    const r = MUT.rollChild(fa, mo, rnd, TYPE_IDS, process.env.MON_MUTATION_FORCE === '1' ? { ...MUT.CONFIG, base: 1, max: 1 } : MUT.CONFIG);
+    const now = Date.now(), ins = db.prepare('INSERT OR IGNORE INTO mon_mutations (monster_id, mutation_id, rarity, mode, origin, param, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    for (const x of r.list) ins.run(id, x.id, x.rarity, x.mode, x.origin, x.param || null, now);
+    const lg = db.prepare('INSERT INTO mon_mutation_log (monster_id, event, mutation_id, rarity, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+    for (const e of r.log) lg.run(id, e.event, e.id, e.rarity || null, JSON.stringify({ ...e, chance: e.event === 'mutation' ? r.chance : undefined }), now);
+    // 市場価値の初期値: R 以上の変異を (表に) 1 つでも持って生まれたら 1000 (生まれたときに 1 回だけ。サーバーで決める)
+    const direct = r.list.filter((x) => x.mode === 'direct');
+    if (direct.some((x) => MUT.rarityRank(x.rarity) >= MUT.rarityRank(MUT.CONFIG.initScoreMin))) db.prepare('UPDATE mon_monsters SET score = ?, init_score = ? WHERE id = ?').run(MUT.CONFIG.initScore, MUT.CONFIG.initScore, id);
+    // 発見の記録: 変異 1 種類ごと (はじめて出たとき) と、新しい組み合わせ (表の変異 2 つ以上)
+    const discoveries = [], lineage = JSON.stringify(lineageOf(fa, mo));
+    const disc = db.prepare('INSERT OR IGNORE INTO mon_discoveries (key, kind, mutation_ids, rarity, user_id, monster_id, father_id, mother_id, lineage, discovered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const x of r.newOnes) if (disc.run('m:' + x.id, 'mutation', JSON.stringify([x.id]), x.rarity, uid, id, fa.id, mo.id, lineage, now).changes) discoveries.push({ kind: 'mutation', name: MUT.BY_ID[x.id].name, cat: MUT.CATEGORIES[MUT.BY_ID[x.id].cat], rarity: x.rarity });
+    const ck = MUT.comboKey(r.list);
+    if (ck && disc.run('c:' + ck, 'combo', JSON.stringify(ck.split('+')), MUT.topRarity(r.list), uid, id, fa.id, mo.id, lineage, now).changes) discoveries.push({ kind: 'combo', name: ck.split('+').map((k) => MUT.BY_ID[k].name).join(' × ') });
+    let title = null;
+    if (discoveries.length) { // 発見者の称号 (はじめて発見したとき 1 回だけ)
+      title = '🧬変異の第一発見者';
+      try { db.prepare('INSERT OR IGNORE INTO user_titles (user_id, title, source, granted_at) VALUES (?, ?, ?, ?)').run(uid, title, 'mon:discoverer', now); } catch {}
+    }
+    void child;
+    return { newOnes: r.newOnes, discoveries, title };
+  }
+  // 図鑑: 発見ずみの変異と組み合わせだけ (総数・未発見のものは出さない)
+  app.get('/api/mon/dex', (req, res) => {
+    const rows = db.prepare('SELECT * FROM mon_discoveries ORDER BY discovered_at').all();
+    const mine = req.user ? new Set(db.prepare("SELECT DISTINCT mu.mutation_id AS id FROM mon_mutations mu JOIN mon_monsters m ON m.id = mu.monster_id WHERE m.owner_id = ?").all(req.user.id).map((x) => x.id)) : new Set();
+    const item = (d) => { const ids = JSON.parse(d.mutation_ids); return { kind: d.kind, rarity: d.rarity, at: d.discovered_at, monsterId: d.monster_id, discoverer: d.user_id ? (userView(d.user_id) || { displayName: '退会したブリーダー' }) : null, lineage: JSON.parse(d.lineage),
+      mutations: ids.map((k) => MUT.BY_ID[k] && { id: k, name: MUT.BY_ID[k].name, cat: MUT.BY_ID[k].cat, catName: MUT.CATEGORIES[MUT.BY_ID[k].cat], desc: MUT.BY_ID[k].desc, viz: MUT.BY_ID[k].viz }).filter(Boolean), owned: ids.every((k) => mine.has(k)) }; };
+    res.json({ mutations: rows.filter((d) => d.kind === 'mutation').map(item), combos: rows.filter((d) => d.kind === 'combo').map(item) });
+  });
+  app.get('/api/mon/discoverers', (req, res) => {
+    const rows = db.prepare('SELECT user_id, COUNT(*) AS n, SUM(kind = \'mutation\') AS muts, MIN(discovered_at) AS first FROM mon_discoveries WHERE user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first LIMIT 30').all();
+    res.json({ top: rows.map((r, i) => ({ rank: i + 1, user: userView(r.user_id) || { displayName: '退会したブリーダー' }, count: r.n, mutations: r.muts })) });
   });
 
   // ---------- ランキング (市場価値) ----------
   app.get('/api/mon/ranking', (req, res) => {
-    const rows = db.prepare('SELECT * FROM mon_monsters WHERE owner_id IS NOT NULL AND score > 0 ORDER BY score DESC, pvp_wins DESC LIMIT 30').all().map(parse);
+    const rows = db.prepare('SELECT * FROM mon_monsters WHERE owner_id IS NOT NULL AND score > 0 AND wins + losses > 0 ORDER BY score DESC, pvp_wins DESC LIMIT 30').all().map(parse);
     res.json({ top: rows.map((m, i) => ({ rank: i + 1, monster: monView(m), owner: userView(m.owner_id) })) });
   });
 
@@ -534,7 +630,7 @@ module.exports = function install(app, ctx) {
   let queue = null; const rooms = new Map();
   const sendTo = (uid, msg) => { const ws = conns.get(uid); if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); };
   const boardText = (s) => String(s ?? '').replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
-  const fighter = (m) => ({ id: m.id, name: m.name, type: m.type, sex: m.sex, look: m.look, rank: rankOf(m), hp: m.hp, maxHp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: [...m.skills] });
+  const fighter = (m) => ({ id: m.id, name: m.name, type: m.type, sex: m.sex, look: m.mutations?.length ? { ...m.look, viz: MUT.vizOf(m.mutations) } : m.look, rank: rankOf(m), hp: m.hp, maxHp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: [...m.skills], ...(m.fx ? { fx: m.fx } : {}) });
   const pub = (b) => ({ round: b.state.round, first: b.state.first, mons: b.state.mons.map((f) => ({ ...f, skills: f.skills.map(skillView).filter(Boolean) })) });
   function cpuMonster(m) { // 自分と同じくらいの強さの CPU
     const lv = clamp(powerOf(m) / 300, 0.8, 1.8);
@@ -672,6 +768,8 @@ module.exports = function install(app, ctx) {
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
     for (const e of db.prepare('SELECT * FROM mon_escrow WHERE user_id = ?').all(uid)) void e; // 預かりコインは、コインごと消える
     db.prepare('DELETE FROM mon_escrow WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM mon_mutations WHERE monster_id IN (SELECT id FROM mon_monsters WHERE owner_id = ?)').run(uid);
+    db.prepare('DELETE FROM mon_breed_requests WHERE user_id = ?').run(uid);
     db.prepare('DELETE FROM mon_monsters WHERE owner_id = ?').run(uid);
     db.prepare('DELETE FROM mon_players WHERE user_id = ?').run(uid);
     db.prepare('UPDATE mon_battles SET p1 = NULL WHERE p1 = ?').run(uid);

@@ -32,10 +32,11 @@
     const hsl = (h, s, l) => `hsl(${Math.round(h)},${s}%,${l}%)`;
     // 体の色は遺伝子の色 (h1) を属性の色へ少し寄せる (家系の色は残しつつ、属性が見た目でわかる)
     const mixH = (a, b, t) => { const d = ((b - a + 540) % 360) - 180; return (a + d * t + 360) % 360; };
+    const V = (L.viz && typeof L.viz === 'object') ? L.viz : {}; // 突然変異の見た目 (部品の名前だけが来る)
     const h1 = mixH(Number(L.h1) || 0, T.h, 0.35), h2 = Number(L.h2) || 0;
     // 黄色は暗くするとオリーブ色 (にごった緑) になるので、影はオレンジ寄りにずらす
     const yel = (h) => h > 32 && h < 80, sh = (h, k) => (yel(h) ? h - k : h);
-    const C = { hi: hsl(h1, 85, yel(h1) ? 86 : 80), base: hsl(h1, yel(h1) ? 88 : 68, yel(h1) ? 62 : 58), mid: hsl(sh(h1, 12), yel(h1) ? 78 : 60, yel(h1) ? 50 : 46), dark: hsl(sh(h1, 22), 60, 32), ink: hsl(sh(h1, 28), 55, 18),
+    const C = V.tint === 'white' ? { hi: '#ffffff', base: '#eef1f6', mid: '#cfd6e2', dark: '#9aa5b8', ink: '#4a5368', acc: hsl(h2, 82, 60), accL: hsl(h2, 90, 80), accD: hsl(h2, 65, 36) } : { hi: hsl(h1, 85, yel(h1) ? 86 : 80), base: hsl(h1, yel(h1) ? 88 : 68, yel(h1) ? 62 : 58), mid: hsl(sh(h1, 12), yel(h1) ? 78 : 60, yel(h1) ? 50 : 46), dark: hsl(sh(h1, 22), 60, 32), ink: hsl(sh(h1, 28), 55, 18),
       acc: hsl(h2, 82, 60), accL: hsl(h2, 90, 80), accD: hsl(sh(h2, 18), 65, 36) };
     const skin = rg('sk', [[0, C.hi], [0.45, C.base], [1, yel(h1) ? C.mid : C.dark]]);
     const belly = lg('bl', [[0, hsl(h1, 60, 92)], [1, hsl(h1, 45, 76)]]);
@@ -157,6 +158,26 @@
     if (MK === 3) front.push(`<path d="M${fxx},${fy - 16} l2.4,5 l5.6,.8 l-4,4 l1,5.6 l-5,-2.6 l-5,2.6 l1,-5.6 l-4,-4 l5.6,-.8z" fill="${C.accL}" stroke="#fff" stroke-width=".8"/>`);
     if (MK === 4) front.push(`<path d="M30,${A.sh + 14} l6,-8 l6,8 M78,${A.sh + 14} l6,-8 l6,8" stroke="${T.fx}" stroke-width="2.2" fill="none" opacity=".9"/>`);
 
+    // ---------- 突然変異の部品 ----------
+    const vb = [], vf = [];
+    if (V.aura) vb.push(V.aura === 'rainbow' ? `<circle cx="60" cy="64" r="58" fill="none" stroke="${lg('va', [[0, '#ff6b6b'], [0.25, '#ffd43b'], [0.5, '#69db7c'], [0.75, '#4dabf7'], [1, '#9775fa']], 0, 0, 1, 1)}" stroke-width="8" opacity=".55" class="ma-halo"/>`
+      : `<circle cx="60" cy="64" r="56" fill="${rg('vau', [[0, V.aura, 0.55], [1, V.aura, 0]], 0.5, 0.5, 0.5)}" class="ma-pulse"/>`);
+    if (V.twin) vb.push(`<g opacity=".35" transform="translate(14 -6) scale(.92)"><path d="M60,20 C88,20 98,50 96,80 C94,104 80,112 60,112 C40,112 26,104 24,80 C22,50 32,20 60,20Z" fill="${C.ink}"/></g>`);
+    if (V.wings6) vb.push(`<g class="ma-flap">${[-1, 1].map((k) => [0, 1, 2].map((i) => `<path d="M${60 + k * 22},${50 + i * 12} C${60 + k * (50 + i * 6)},${30 + i * 14} ${60 + k * (58 - i * 4)},${56 + i * 14} ${60 + k * (40 - i * 4)},${62 + i * 12}Z" fill="#fff" stroke="${C.accL}" stroke-width="1.4" opacity="${0.95 - i * 0.15}"/>`).join('')).join('')}</g>`);
+    if (V.spikes) vb.push(`<path d="M30,52 L18,30 L38,46 L44,22 L52,44 L60,14 L68,44 L76,22 L82,46 L102,30 L90,52Z" fill="${lg('vs', [[0, '#fff'], [0.4, T.light], [1, T.fx]])}" stroke="#fff" stroke-width="1.2"/>`);
+    if (V.tail2) vb.push(`<path d="M${A.tail[0] - 8},${A.tail[1] + 2} C${A.tail[0] + 14},${A.tail[1] + 14} ${A.tail[0] + 24},${A.tail[1] - 2} ${A.tail[0] + 18},${A.tail[1] - 18}" stroke="${C.mid}" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M${120 - A.tail[0] + 8},${A.tail[1] + 2} C${120 - A.tail[0] - 14},${A.tail[1] + 14} ${120 - A.tail[0] - 24},${A.tail[1] - 2} ${120 - A.tail[0] - 18},${A.tail[1] - 18}" stroke="${C.mid}" stroke-width="6" fill="none" stroke-linecap="round"/>`);
+    if (V.arms) vf.push(`<path d="M${A.arm[0][0] + 2},${A.arm[0][1] - 14} C${A.arm[0][0] - 16},${A.arm[0][1] - 26} ${A.arm[0][0] - 20},${A.arm[0][1] - 8} ${A.arm[0][0] - 10},${A.arm[0][1] - 4} M${A.arm[1][0] - 2},${A.arm[1][1] - 14} C${A.arm[1][0] + 16},${A.arm[1][1] - 26} ${A.arm[1][0] + 20},${A.arm[1][1] - 8} ${A.arm[1][0] + 10},${A.arm[1][1] - 4}" stroke="${C.base}" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="${A.arm[0][0] - 10}" cy="${A.arm[0][1] - 4}" r="4.4" fill="${C.mid}" ${thin}/><circle cx="${A.arm[1][0] + 10}" cy="${A.arm[1][1] - 4}" r="4.4" fill="${C.mid}" ${thin}/>`);
+    if (V.horns) vf.push(`<path d="M${A.hl},${A.top + 6} C${A.hl - 10},${A.top - 8} ${A.hl - 4},${A.top - 18} ${A.hl - 12},${A.top - 24} C${A.hl + 4},${A.top - 16} ${A.hl + 8},${A.top - 4} ${A.hl + 8},${A.top + 4}Z M${A.hr},${A.top + 6} C${A.hr + 10},${A.top - 8} ${A.hr + 4},${A.top - 18} ${A.hr + 12},${A.top - 24} C${A.hr - 4},${A.top - 16} ${A.hr - 8},${A.top - 4} ${A.hr - 8},${A.top + 4}Z" fill="${lg('vh', [[0, '#fff9db'], [1, '#495057']])}" ${thin}/>`);
+    if (V.halo) vf.push(`<ellipse cx="60" cy="${A.top - 14}" rx="18" ry="4.5" fill="none" stroke="#fff3bf" stroke-width="3" class="ma-glow"/>`);
+    if (V.eye3) vf.push(`<g class="ma-eye" style="transform-origin:60px ${A.fy - 14}px"><ellipse cx="60" cy="${A.fy - 14}" rx="4" ry="5.6" fill="#fff" stroke="${C.ink}" stroke-width="1.4"/><ellipse cx="60" cy="${A.fy - 14}" rx="2" ry="3.4" fill="${T.fx}"/></g>`);
+    if (V.core) vf.push(`<circle cx="60" cy="${A.sh + 16}" r="7" fill="${rg('vc', [[0, '#fff'], [0.5, '#b197fc'], [1, '#5f3dc4', 0]], 0.5, 0.5, 0.5)}" class="ma-pulse"/>`);
+    if (V.pattern === 'crystal') vf.push([[40, A.sh + 6], [80, A.sh + 4], [48, A.sh + 22], [74, A.sh + 20]].map(([x, y]) => `<path d="M${x},${y - 5} l4,5 l-4,5 l-4,-5Z" fill="#fff" stroke="${T.fx}" stroke-width=".8" opacity=".9"/>`).join(''));
+    if (V.pattern === 'stars') vf.push([[38, A.sh + 4, 3], [82, A.sh + 8, 2.6], [50, A.sh + 20, 2], [72, A.sh + 22, 2.4], [60, A.sh - 2, 1.8]].map(([x, y, r]) => twinkle(x, y, r, '#fff9db')).join(''));
+    if (V.pattern === 'plates') vf.push(`<path d="M36,${A.sh + 6} h14 v8 h-14Z M70,${A.sh + 6} h14 v8 h-14Z M52,${A.sh + 18} h16 v8 h-16Z" fill="${lg('vp', [[0, '#f1f3f5'], [1, '#868e96']])}" ${thin} opacity=".9"/>`);
+    if (V.pattern === 'runes') vf.push(`<path d="M38,${A.sh + 6} l4,8 l4,-8 M74,${A.sh + 6} v8 h6 M54,${A.sh + 20} l6,-6 l6,6" stroke="${T.glow}" stroke-width="1.8" fill="none" class="ma-glow"/>`);
+    if (V.speedLines) vb.push(`<path d="M6,50 h22 M2,62 h26 M8,74 h18 M92,50 h22 M92,62 h26 M94,74 h18" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".7"/>`);
+    if (V.split) vf.push(`<path d="M60,${A.top} V112" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 3" opacity=".7"/>`);
+
     // ---------- 顔 (まばたきするよう、目は ma-eye にまとめる) ----------
     const E = Number(L.eyes) || 0, s = A.s, ex = 12.5 * s;
     const eye = (x) => {
@@ -168,6 +189,7 @@
       return `<ellipse cx="${x}" cy="${fy}" rx="${6.2 * s}" ry="${7.6 * s}" fill="#1b1b3a"/><ellipse cx="${x}" cy="${fy + 3.4 * s}" rx="${4 * s}" ry="${2.8 * s}" fill="${T.fx}" opacity=".55"/>${twinkle(x - 1.6 * s, fy - 2.4 * s, 3.2 * s, '#fff')}<circle cx="${x + 2.2 * s}" cy="${fy + 2.8 * s}" r="${1.2 * s}" fill="#fff"/>`;
     };
     front.push(`<g class="${E === 3 || A.visor ? '' : 'ma-eye'}" style="transform-origin:60px ${fy}px">${eye(fxx - ex)}${eye(fxx + ex)}</g>`);
+    if (V.glowEyes) front.push(`<circle cx="${fxx - ex}" cy="${fy}" r="${9 * s}" fill="${V.glowEyes}" opacity=".35" class="ma-glow"/><circle cx="${fxx + ex}" cy="${fy}" r="${9 * s}" fill="${V.glowEyes}" opacity=".35" class="ma-glow"/>`);
     if (E === 1 && !A.visor) front.push(`<path d="M${fxx - ex - 8},${fy - 10} L${fxx - ex + 6},${fy - 6} M${fxx + ex + 8},${fy - 10} L${fxx + ex - 6},${fy - 6}" stroke="#1b1b3a" stroke-width="2.6" stroke-linecap="round"/>`);
     if (E !== 1 && !A.visor) front.push(`<ellipse cx="${fxx - ex - 7}" cy="${fy + 8}" rx="${4.6 * s}" ry="${2.6 * s}" fill="#ff6b9d" opacity=".45"/><ellipse cx="${fxx + ex + 7}" cy="${fy + 8}" rx="${4.6 * s}" ry="${2.6 * s}" fill="#ff6b9d" opacity=".45"/>`);
     if (A.mouth !== false && !A.visor) front.push(E === 1 ? `<path d="M${fxx - 6},${fy + 11} L${fxx + 6},${fy + 11} Q${fxx + 4},${fy + 17} ${fxx},${fy + 17} Q${fxx - 4},${fy + 17} ${fxx - 6},${fy + 11}Z" fill="#fff" stroke="#1b1b3a" stroke-width="1.4"/>`
@@ -185,7 +207,8 @@
 
     defs.push(`<filter id="${u}stk" x="-20%" y="-20%" width="140%" height="140%"><feMorphology in="SourceAlpha" operator="dilate" radius="2.2" result="d"/><feFlood flood-color="#fff"/><feComposite in2="d" operator="in" result="o"/><feDropShadow in="o" dx="0" dy="2.4" stdDeviation="1.8" flood-color="#1b1b3a" flood-opacity=".28" result="os"/><feMerge><feMergeNode in="os"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
     const ground = A.float ? `<ellipse cx="60" cy="116" rx="18" ry="3" fill="#1b1b3a" opacity=".12" class="ma-gshadow"/>` : `<ellipse cx="60" cy="113" rx="34" ry="4.5" fill="#1b1b3a" opacity=".18"/>`;
-    return `<defs>${defs.join('')}</defs>${aura.join('')}${ground}<g class="ma-idle${A.float ? ' float' : ''}"><g filter="url(#${u}stk)">${back.join('')}${body.join('')}${front.join('')}</g></g>${fx.join('')}`;
+    const sc = Number(V.scale) > 0 ? Math.min(1.15, Number(V.scale)) : 1;
+    return `<defs>${defs.join('')}</defs>${aura.join('')}${vb.join('')}${ground}<g class="ma-idle${A.float ? ' float' : ''}"><g transform="translate(60 112) scale(${sc}) translate(-60 -112)"${V.ghost ? ' opacity=".78"' : ''}><g filter="url(#${u}stk)">${back.join('')}${body.join('')}${front.join('')}${vf.join('')}</g></g></g>${fx.join('')}`;
   }
 
   // 読めなかったとき (データの欠けなど) の代わりの絵: 属性の色の丸と「?」

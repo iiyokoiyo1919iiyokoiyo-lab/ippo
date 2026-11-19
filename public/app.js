@@ -2884,6 +2884,8 @@ window.addEventListener('message', (e) => {
   const mf = $('#mon-frame');
   if (!mf || e.source !== mf.contentWindow || e.origin !== location.origin) return;
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-monster' && e.data.type === 'login') openAuth();
+  // 突然変異を発見したときの投稿: 投稿の画面を開くだけ (公開範囲などはいつもの投稿と同じ。自動では投稿しない)
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-monster' && e.data.type === 'share') openCompose({ prefill: String(e.data.text || '').slice(0, 400) });
 });
 window.addEventListener('message', (e) => {
   const frame = $('#horse-frame');
