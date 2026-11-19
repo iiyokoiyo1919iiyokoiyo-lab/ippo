@@ -367,24 +367,33 @@
       // ウォーターミッドナイト (MR・つつむ・説教): 真夜中色の水筆ペン。しずく形の水タンクの中に夜の海と星、
       // 頭に三日月のキャップ、まるメガネ、指し棒をかまえて説教する
       watermid: () => {
-        const drop = `M60,8 C78,34 100,52 100,76 C100,100 82,114 60,114 C38,114 20,100 20,76 C20,52 42,34 60,8Z`;
-        return `
-        <path d="M96,40 L116,8" stroke="#8d5a2b" stroke-width="4" stroke-linecap="round"/><circle cx="116" cy="8" r="4" fill="#e03131"/>
-        <path d="${drop}" fill="${lg('wm', [[0, '#4dabf7'], [0.45, '#1c3d8f'], [1, '#0b1238']])}" stroke="#0b1238" stroke-width="2.4"/>
+        const drop = `M60,10 C78,34 98,52 98,76 C98,100 81,112 60,112 C39,112 22,100 22,76 C22,52 42,34 60,10Z`;
+        const ring = (r, w, o, dash) => `<circle cx="60" cy="72" r="${r}" fill="none" stroke="${lg('rg' + r, [[0, '#74c0fc'], [0.5, '#e5dbff'], [1, '#3bc9db']], 1, 1)}" stroke-width="${w}" opacity="${o}" stroke-dasharray="${dash}"/>`;
+        const splash = (x, y, a, s) => `<path transform="translate(${x} ${y}) rotate(${a}) scale(${s})" d="M0,0 C-6,-10 -2,-22 0,-28 C2,-22 6,-10 0,0Z" fill="${lg('sp', [[0, '#e7f5ff'], [1, '#4dabf7']])}" stroke="#fff" stroke-width="1"/>`;
+        return `<g transform="translate(60 66) scale(.96) translate(-60 -60)">
+        <path d="M14,104 C30,92 44,108 60,100 C76,92 90,108 106,98 C102,112 86,118 60,118 C34,118 18,112 14,104Z" fill="${lg('wv', [[0, '#a5d8ff'], [1, '#1c7ed6']])}" stroke="#fff" stroke-width="2"/>
+        ${splash(18, 100, -38, 0.9)}${splash(102, 98, 38, 0.9)}${splash(30, 92, -18, 0.6)}${splash(90, 90, 18, 0.6)}
+        <path d="M100,44 L120,6" stroke="${lg('pt', [[0, '#8d5a2b'], [1, '#e8b57a']])}" stroke-width="4.5" stroke-linecap="round"/>
+        ${twinkle(120, 6, 9, '#ffe066')}${twinkle(120, 6, 4, '#fff')}
+        <path d="${drop}" fill="${lg('wm', [[0, '#74c0fc'], [0.4, '#1c4fbf'], [1, '#0b1238']])}" stroke="#fff" stroke-width="3"/>
+        <path d="${drop}" fill="none" stroke="#3bc9db" stroke-width="1.2" opacity=".8" transform="translate(60 61) scale(.93) translate(-60 -61)"/>
         <g clip-path="${clip('wc', `<path d="${drop}"/>`)}">
-          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76 V120 H14Z" fill="${lg('sea', [[0, '#1971c2', 0.9], [1, '#0b1238', 1]])}"/>
-          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76" stroke="#a5d8ff" stroke-width="2" fill="none" opacity=".8"/>
-          ${[[34, 96, 2.2], [50, 104, 1.6], [76, 98, 2], [88, 90, 1.4], [62, 92, 1.2]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#e7f5ff" opacity=".9"/>`).join('')}
-          <circle cx="42" cy="50" r="12" fill="#fff" opacity=".12"/>
+          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76 V120 H14Z" fill="${lg('sea', [[0, '#3bc9db', 0.9], [0.4, '#1971c2', 0.95], [1, '#0b1238', 1]])}"/>
+          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76" stroke="#e3fafc" stroke-width="2.6" fill="none"/>
+          ${[[34, 96, 2.4], [50, 104, 1.8], [76, 98, 2.2], [88, 90, 1.6], [62, 92, 1.4], [44, 88, 1.2]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#e7f5ff"/>`).join('')}
+          ${twinkle(70, 104, 3.4, '#ffe066')}${twinkle(40, 34, 2.6, '#fff')}${twinkle(82, 40, 2, '#fff')}
+          <path d="M30,30 C36,22 44,18 50,16" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".55"/>
+          <ellipse cx="38" cy="52" rx="6" ry="10" fill="#fff" opacity=".18" transform="rotate(20 38 52)"/>
         </g>
-        <path d="M44,22 C50,14 56,10 60,8" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/>
-        <path d="M46,6 C52,-4 66,-4 70,4 C64,0 56,2 54,10 C52,6 48,6 46,6Z" fill="#ffe066" stroke="#f59f00" stroke-width="1.4"/>
-        ${twinkle(78, 4, 4, '#fff3bf')}${twinkle(34, 14, 3, '#fff')}
-        <circle cx="48" cy="58" r="10" fill="#e7f5ff" opacity=".25" stroke="#fff" stroke-width="2.4"/><circle cx="72" cy="58" r="10" fill="#e7f5ff" opacity=".25" stroke="#fff" stroke-width="2.4"/><path d="M58,58 h4" stroke="#fff" stroke-width="2.4"/>
-        ${face(60, 58, { eyes: 'cool', mouth: 'o', s: 0.85, iris: '#fff', blush: false })}
-        <path d="M40,46 L54,50 M80,46 L66,50" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
-        <path d="M92,62 C104,56 106,46 98,40" stroke="#1c3d8f" stroke-width="6" stroke-linecap="round" fill="none"/>
-        <rect x="88" y="98" width="30" height="20" rx="8" fill="#fff" stroke="#1c7ed6" stroke-width="2"/><text x="103" y="112" font-size="10" font-weight="900" text-anchor="middle" fill="#1864ab" font-family="sans-serif">コラ!</text>`;
+        <path d="M44,8 C50,-6 68,-6 74,4 C66,-2 56,0 54,10 C52,6 48,6 44,8Z" fill="${lg('mn', [[0, '#fff9db'], [1, '#fab005']])}" stroke="#e67700" stroke-width="1.4"/>
+        ${twinkle(80, 0, 5, '#fff3bf')}${twinkle(30, 8, 3.4, '#fff')}${twinkle(8, 56, 4, '#c5f6fa')}${twinkle(112, 70, 3.4, '#fff')}
+        <circle cx="47" cy="58" r="11" fill="#e7f5ff" fill-opacity=".22" stroke="#fcc419" stroke-width="3.2"/><circle cx="73" cy="58" r="11" fill="#e7f5ff" fill-opacity=".22" stroke="#fcc419" stroke-width="3.2"/><path d="M58,58 h4" stroke="#fab005" stroke-width="2.6"/>
+        <path d="M42,59 Q47,54 52,59 Q47,62 42,59Z M68,59 Q73,54 78,59 Q73,62 68,59Z" fill="#c5f6fa"/><circle cx="47" cy="58.5" r="2" fill="#0b1238"/><circle cx="73" cy="58.5" r="2" fill="#0b1238"/><circle cx="46" cy="57.5" r=".8" fill="#fff"/><circle cx="72" cy="57.5" r=".8" fill="#fff"/>
+        <path d="M38,46 L54,51 M82,46 L66,51" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <path d="M54,72 Q60,68 66,72" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        <path d="M94,62 C106,56 108,46 100,40" stroke="#1c4fbf" stroke-width="6.5" stroke-linecap="round" fill="none"/><path d="M94,62 C106,56 108,46 100,40" stroke="#74c0fc" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <g transform="rotate(-8 18 26)"><rect x="2" y="16" width="38" height="22" rx="10" fill="#fff" stroke="#1c7ed6" stroke-width="2.4"/><path d="M26,38 l6,8 l-1,-9z" fill="#fff" stroke="#1c7ed6" stroke-width="2"/><text x="19" y="31.5" font-size="11" font-weight="900" text-anchor="middle" fill="#e03131" font-family="sans-serif">コラ!!</text></g>
+        </g>`;
       },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
