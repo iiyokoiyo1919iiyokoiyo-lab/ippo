@@ -639,6 +639,12 @@ function install(app, ctx) {
 
   // はじめて遊ぶ人には、コインとはじめの 3 枚を渡す
   const qPlayer = db.prepare('SELECT * FROM card_players WHERE user_id = ?');
+  // ほかのミニゲーム (ブリードモンスターズ) とコインを共用する
+  ctx.cbCoins = {
+    get: (uid) => player(uid).coins,
+    add: (uid, n) => { player(uid); db.prepare('UPDATE card_players SET coins = coins + ? WHERE user_id = ?').run(Math.round(n), uid); },
+    spend: (uid, n) => { player(uid); return db.prepare('UPDATE card_players SET coins = coins - ? WHERE user_id = ? AND coins >= ?').run(Math.round(n), uid, Math.round(n)).changes > 0; },
+  };
   function player(uid) {
     let p = qPlayer.get(uid);
     if (!p) {

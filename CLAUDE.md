@@ -29,6 +29,12 @@
 - 高難易度クエストでは、開始 30 分後からアイテム (`cards.js` の `ITEMS`: 回復薬・全回復薬・アイスティー) をコインで買って使える
 - 高難易度クエスト (`QUESTS` の `hard: true`) も同じ: 敵は先を読む CPU、`boost` は `node tools/tune_oni.js` の `quest:<id>` の結果を入れる
 
+## ブリードモンスターズ (monster.js・public/games/monster/)
+- IppO の中の iframe で開くミニアプリ (`#/monster` → `/games/monster/`)。コインはぶんぼうぐバトラーズと共用 (`ctx.cbCoins`)
+- 技は `monster.js` の `SKILL_LIST` に足す (コマンドは全部ちがう並びにする。重なると起動時にエラー)。新技は `release` の時刻から使える
+- 新技は、それを持った公式の種モンを `OFFICIAL_STUDS` に足して配る (登場時刻つき)。だれでも種付け料で配合できる
+- セリは毎時 5 分 (テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
+
 ## そのほか
 - 既存の機能を消さない・データベースの構造を勝手に変えない (表の追加・列の追加は `db.migrate` で)・認証やアクセス制御を弱めない
 - 利用者の書いた文字は必ずエスケープして表示する (innerHTML に生のまま入れない)
