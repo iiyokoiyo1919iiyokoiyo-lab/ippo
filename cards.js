@@ -137,7 +137,10 @@ for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEA
 const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
-const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => isReleased(id, now));
+// 期間限定キャラの排出終了 (この時刻からガチャに出ない。図鑑・持っているカード・デッキはそのまま)
+const GACHA_ENDS = { tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
+const inGacha = (id, now = Date.now()) => isReleased(id, now) && !(GACHA_ENDS[id] && now >= GACHA_ENDS[id]);
+const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => inGacha(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
 // レベル: Lv15 までは、同じカードを引くか、レベルアップ書 (今のレベルと同じ枚数) で上がる。
 // Lv16〜20 はレベルアップ書だけで上がり、1 つにつき 50 枚 (同じカードを引いても Lv15 より上には上がらない)
@@ -182,11 +185,11 @@ const RATE_UPS = [
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
   { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ 1 体で 2% (11/20 8:29 まで。8:30 から筆の剣士)
-  { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:30:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:30〜11/21 8:30)
+  { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:35:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:35〜11/21 8:30。8:30 開始から 8:35 に変更)
 ];
 if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
 if (Number(process.env.CB_PICKUP_END)) PICKUPS[0].end = Number(process.env.CB_PICKUP_END);
-const pickupsNow = (now = Date.now()) => PICKUPS.filter((x) => now >= x.start && (!x.end || now < x.end) && isReleased(x.id, now));
+const pickupsNow = (now = Date.now()) => PICKUPS.filter((x) => now >= x.start && (!x.end || now < x.end) && inGacha(x.id, now));
 if (process.env.CB_RATEUP_START) Object.assign(RATE_UPS[0], { start: Number(process.env.CB_RATEUP_START), end: Number(process.env.CB_RATEUP_END) || null });
 const rateUpsNow = (now = Date.now()) => RATE_UPS.filter((x) => now >= x.start && (!x.end || now < x.end));
 const weightOf = (id, now = Date.now()) => rateUpsNow(now).reduce((w, x) => (x.ids.includes(id) ? w * x.mult : w), 1);
@@ -680,7 +683,7 @@ function install(app, ctx) {
       ...(CARD_PASSIVE[id] ? { passiveName: PASSIVES[CARD_PASSIVE[id]].name, passiveDesc: PASSIVES[CARD_PASSIVE[id]].desc } : {}), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}),
       ...(lrEligible(id) ? { lrStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, 'LR')) } : {}) })),
-    newCards: releasedIds().filter((id) => RELEASES[id] && !BULK_IDS.has(id) && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
+    newCards: releasedIds().filter((id) => RELEASES[id] && !BULK_IDS.has(id) && RARITY[CARDS[id].rarity] && inGacha(id) && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     newBulk: BULK_RELEASES.filter((g) => Date.now() >= g.at && Date.now() - g.at < NEW_DAYS * 86400_000).map((g) => ({ id: g.id, name: g.name, at: g.at, ids: g.ids, count: Object.fromEntries(['R', 'SR', 'SSR'].map((r) => [r, g.ids.filter((id) => CARDS[id].rarity === r).length])) })),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
@@ -1100,4 +1103,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { GACHA_ENDS, inGacha, LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
