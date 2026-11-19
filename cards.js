@@ -116,7 +116,7 @@ const CARD_LIST = [
   ['hyoketsu', '氷結万年筆', '❄️', 'SSR', 'wrap', 70, 18, 11, 11, 'pierce'],
   ['sakura', '桜吹雪の筆', '🌸', 'SSR', 'wrap', 67, 17, 13, 11, 'barrier'],
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
-  ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:30 から)。体力と防御が高く、攻撃が低い
+  ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:00 から)。体力と防御が高く、攻撃が低い
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
@@ -126,7 +126,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:30:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -561,7 +561,7 @@ const QUESTS = [
     tip: '紙属性クエスト: 敵は 3 体とも 📄つつむ。✂️きる (ハサミ丸・筆の剣士など) が有利！ ウォーターミッドナイトの「説教」で攻撃力が 0.6 倍に下がる (1 枚につき 1 回) うえ、毒も治される。毒より一気に削るのがコツ。敵は先を読む強い CPU',
     enemy: [['watermid', 20], ['star', 20], ['case', 20]],
     titles: { 1: '水深夜最速クリア🌊', 2: '水深夜準最速クリア🌊' },
-    start: Date.parse('2026-11-20T08:30:00+09:00'), end: Date.parse('2026-11-23T08:30:00+09:00') },
+    start: Date.parse('2026-11-20T08:00:00+09:00'), end: Date.parse('2026-11-23T08:30:00+09:00') }, // 8:30 開始 → 8:00 に前倒し (終わりはそのまま)
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)
