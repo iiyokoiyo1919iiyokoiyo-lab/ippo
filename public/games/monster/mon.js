@@ -482,7 +482,6 @@
       const before = mySkills().find((s) => s.cmd === keys);
       updateInput();
       keyFx(k, before);
-      if (before && k !== 'X') pachiCut(before, true, you);
     }
     // キーを押すたびのエフェクト: ボタンから光の輪・入力枠に火花と矢印が飛びこむ・どの技に近づいているか・合わなくなったらゆれる
     const KEY_COL = { U: '#ffe066', D: '#74c0fc', L: '#ff8787', R: '#8ce99a', X: '#ced4da' };
@@ -504,7 +503,8 @@
       else if (!near) slots.classList.add('kmiss');
     }
     // 決定: 確定した技は順番にならび、時間があるあいだは続けて何個でも打てる
-    function submit() { if (closed || ended || !keys) return; wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; updateInput(); }
+    // 決定で確定したときに、成立した技ならパチンコ風カットイン (打っている途中では出さない)
+    function submit() { if (closed || ended || !keys) return; const sk = mySkills().find((s) => s.cmd === keys); wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; updateInput(); if (sk) pachiCut(sk, true, you); }
     const onKey = (e) => { const k = { ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', Backspace: 'X' }[e.key]; if (k) { e.preventDefault(); press(k); } else if (e.key === 'Enter') submit(); };
     document.addEventListener('keydown', onKey);
     function cutin(s, preview = false, who = you) {
@@ -530,7 +530,7 @@
       el.className = `pc k-${kind}${preview ? ' pre' : ''}`; el.style.setProperty('--ms', ms + 'ms'); el.style.setProperty('--c', col);
       el.style.setProperty('--fs', (len > 9 ? 22 : len > 7 ? 26 : len > 5 ? 30 : 34) + 'px'); // 長い技名は小さく (1 行におさめる)
       el.innerHTML = `<div class="pc-flash"></div><div class="pc-rays"></div><div class="pc-band"><div class="pc-stripe"></div></div><div class="pc-kanji">${esc(kanji)}</div>
-        <div class="pc-txt"><small>${esc(preview ? 'コマンド成立！' : `${who === you ? 'あなた' : '相手'}の${KIND[kind] || ''}`)}</small><span class="pc-lab">${esc(lab)}</span><b data-t="${esc(s.name)}">${esc(s.name)}</b></div>
+        <div class="pc-txt"><small>${esc(preview ? 'コマンド確定！' : `${who === you ? 'あなた' : '相手'}の${KIND[kind] || ''}`)}</small><span class="pc-lab">${esc(lab)}</span><b data-t="${esc(s.name)}">${esc(s.name)}</b></div>
         <div class="pc-sp">${sparks}</div>${kind === 'ult' ? '<div class="pc-frame"></div><div class="pc-stamp">確定</div>' : ''}`;
       bt.append(el); setTimeout(() => el.remove(), ms + 120);
       return ms;
