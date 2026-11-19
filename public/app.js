@@ -2866,7 +2866,9 @@ function viewHorse() {
   viewCleanup = () => window.removeEventListener('resize', fit);
 }
 // ブリードモンスターズ (/games/monster/ を iframe で開く。競走馬版と同じ形)
-function viewMonster() {
+async function viewMonster() {
+  let ok = false; try { ok = (await api('/mon/access', { noAuthPrompt: true })).ok; } catch {}
+  if (!ok) { main.innerHTML = pageHead({ title: 'ブリードモンスターズ', sub: 'ミニゲーム', back: '#/games' }) + `<div class="content">${emptyState({ icon: 'sparkle', title: 'ただいま準備中です', text: 'もうしばらくお待ちください' })}</div>`; return; }
   main.innerHTML = pageHead({ title: 'ブリードモンスターズ', sub: 'ミニゲーム · 配合・コマンドバトル・セリ' }) +
     `<div class="horse-wrap"><iframe class="horse-frame" id="mon-frame" src="/games/monster/" title="ブリードモンスターズ"></iframe></div>`;
   const frame = $('#mon-frame');
@@ -2909,7 +2911,7 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
-    <a class="card game-card game-card-new" href="#/monster">
+    <a class="card game-card game-card-new" href="#/monster" id="mon-game" style="display:none">
       <span class="game-card-art mb-art" aria-hidden="true">🧬</span>
       <span class="game-card-body"><b>ブリードモンスターズ <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>モンスターを配合して強い子を作り、十字キーのコマンドを打ちこんで戦う。毎時 5 分にはリアルタイムのセリも</span>
         <span class="chip chip-accent">🧬 配合・コマンドバトル・セリ</span></span>${icon('chevron', 'chev')}</a>
@@ -2923,6 +2925,8 @@ function viewGames() {
         <span class="chip chip-accent">🏇 図鑑の馬でレース・レート</span></span>${icon('chevron', 'chev')}</a>
   </div>`;
   loadEventBanners();
+  // ブリードモンスターズはテスト中 (テスターにだけ一覧に出す)
+  if (me) api('/mon/access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#mon-game')) $('#mon-game').style.display = ''; }).catch(() => {});
 }
 
 // =====================================================================

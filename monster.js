@@ -187,6 +187,11 @@ const OFFICIAL_STUDS = [
 module.exports = function install(app, ctx) {
   const { db, requireAuth, rateLimit, publicUser } = ctx;
   db.migrate('2026-11-20-monster-breeders', MIGRATION);
+  // テスト中: 遊べるのはテスターだけ (環境変数 MON_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413)。ほかの人には API もバトルも開かない
+  const TESTERS = new Set(String(process.env.MON_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const isTester = (u) => !!u && (TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase()));
+  app.get('/api/mon/access', (req, res) => res.json({ ok: isTester(req.user) }));
+  app.use('/api/mon', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'ブリードモンスターズはまだ準備中です' })));
   const coins = ctx.cbCoins;
   const writeLimit = rateLimit({ windowMs: 60_000, max: 90, key: (req) => 'mon' + req.user.id });
   const newId = () => crypto.randomBytes(6).toString('hex');
@@ -571,7 +576,7 @@ module.exports = function install(app, ctx) {
       }
     });
   });
-  ctx.monUpgrade = (req, socket, head, user) => wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
+  ctx.monUpgrade = (req, socket, head, user) => !isTester(user) ? (socket.write('HTTP/1.1 403 Forbidden\r\n\r\n'), socket.destroy()) : wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
   ctx.eraseMon = (uid) => {
     leave(uid);
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
