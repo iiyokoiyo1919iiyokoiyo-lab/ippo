@@ -60,7 +60,7 @@ const STAT_CAP = { min: -0.3, max: 0.6 }; // 能力の変化の上限 (変異と
 const FX_CAP = { dealMax: 1.45, takenMin: 0.72 };
 
 const DEFAULT_CONFIG = {
-  base: 0.005, max: 0.02,                          // 発生率: 基本 0.5%・上限 2.0%
+  base: 0.10, max: 0.12,                           // 発生率: 基本 10%・上限 12% (2026-11-20 に 0.5%・2% から変更)
   bonus: { parentDirect: 0.004, parentLatent: 0.003, bothParents: 0.003, deepLine: 0.002 }, // 補正 (それぞれ 1 回だけ数える)
   deepLineGen: 5,                                  // この世代以上の血統で補正
   count: [[1, 0.85], [2, 0.12], [3, 0.025], [4, 0.005]],   // 発生したときの変異の数
@@ -72,7 +72,7 @@ const DEFAULT_CONFIG = {
 function loadConfig() {
   let o = {}; try { o = JSON.parse(process.env.MON_MUTATION_CONFIG || '{}'); } catch {}
   const c = { ...DEFAULT_CONFIG, ...o, bonus: { ...DEFAULT_CONFIG.bonus, ...(o.bonus || {}) }, inherit: { ...DEFAULT_CONFIG.inherit, ...(o.inherit || {}) }, inheritLatent: { ...DEFAULT_CONFIG.inheritLatent, ...(o.inheritLatent || {}) } };
-  c.max = Math.min(0.02, Math.max(0, Number(c.max) || 0.02)); // 最終確率は 2.0% を超えない
+  c.max = Math.min(0.12, Math.max(0, Number(c.max) || 0.12)); // 最終確率は 12% を超えない
   return c;
 }
 const CONFIG = loadConfig();
