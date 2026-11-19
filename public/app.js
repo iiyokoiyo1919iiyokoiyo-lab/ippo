@@ -2564,7 +2564,20 @@ async function viewDmThread(username) {
 function requireLogin() { if (me) return true; openAuth(); location.hash = '#/'; return false; }
 function setActiveNav(key) { $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === key)); }
 let lastHash = null;
+// ---------- 更新の確認: サーバーの画面ファイルが新しくなっていたら、画面を移るときに読み込み直す ----------
+// (開きっぱなしの画面は古い絵やプログラムのままなので、新キャラが鉛筆の絵になるなどのずれが出る)
+let assetVersion = null, versionCheckedAt = 0, reloadPending = false;
+async function checkVersion() {
+  if (Date.now() - versionCheckedAt < 60_000) return; versionCheckedAt = Date.now();
+  try { const r = await fetch('/api/version', { cache: 'no-store' }); const { v } = await r.json();
+    if (!assetVersion) assetVersion = v; else if (v && v !== assetVersion) reloadPending = true; } catch {}
+}
+checkVersion();
+setInterval(checkVersion, 5 * 60_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { versionCheckedAt = 0; checkVersion(); } });
 function route() {
+  // 新しい版があれば、対戦中以外の画面に移るときに読み込み直す
+  if (reloadPending && !/\/battle|\/table/.test(location.hash)) { reloadPending = false; location.reload(); return; }
   if (viewCleanup) { viewCleanup(); viewCleanup = null; }
   closeMenu();
   // 画面を移ったら、開いたままのウィンドウ (QR・確認など) を閉じる (ログイン画面は除く)
@@ -3375,7 +3388,7 @@ async function viewCollection() {
         <p class="text-xs muted">レベルを上げたいカードをタップ (何レベルかまとめて上げられます)。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。<b>Lv${cat.dupMaxLevel || 15} → ${cat.maxLevel} は 1 つにつき ${cat.highLevelCost || 50} 枚</b> (同じカードを引いても Lv${cat.dupMaxLevel || 15} より上には上がりません)。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
       <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
-          : '<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>'}</section>
+          : `<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>`}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)。UR のあとのダブりは 📜 レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換</p>
         <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]

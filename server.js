@@ -31,6 +31,9 @@ app.use((req, res, next) => {
 });
 
 app.get('/healthz', (req, res) => res.json({ ok: true }));
+// 画面のファイルの版 (index.html の中身から作る)。開きっぱなしの画面が、更新されたら読み込み直すのに使う
+const ASSET_VERSION = require('crypto').createHash('sha1').update(require('fs').readFileSync(path.join(__dirname, 'public', 'index.html'))).digest('hex').slice(0, 12);
+app.get('/api/version', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ v: ASSET_VERSION }); });
 app.use(express.json({ limit: '32kb' }));
 // 更新がすぐ反映されるよう、毎回サーバーに変更有無を確認させる (変更がなければ 304 で軽く済む)
 app.use(express.static(path.join(__dirname, 'public'), { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }));
