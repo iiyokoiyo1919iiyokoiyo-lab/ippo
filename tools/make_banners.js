@@ -117,6 +117,26 @@ function awardHtml(q, rank) {
   </div>`;
 }
 
+// まとめて追加した新キャラ (SSR を大きく並べ、SR を小さく)
+function bulkHtml(g) {
+  const n = (r) => g.ids.filter((id) => cards.CARDS[id].rarity === r).length;
+  const ssrN = n('SSR'), pos = [];
+  for (let i = 0; i < ssrN; i++) { const row = i < 5 ? 0 : 1, col = i % 5; pos.push([40 + col * 150 + row * 75, 150 + row * 170, 190]); }
+  for (let i = 0; i < 6; i++) pos.push([830 + (i % 3) * 120, 452 + Math.floor(i / 3) * 100, 110]);
+  return `<div class="bn" style="background:radial-gradient(circle at 40% 45%,#fff9db,#ffd43b 30%,#ff6b6b 65%,#7048e8 100%);--r1:rgba(255,255,255,.55);--r2:transparent">
+    <div class="rays" style="left:40%"></div>${confetti(56, ['#fff', '#ffd43b', '#74c0fc', '#b197fc', '#8ce99a', '#ff8787'])}${sparks(18)}
+    ${pos.map(([x, y, s]) => `<div class="art" style="left:${x}px;top:${y}px;width:${s}px;height:${s}px"></div>`).join('')}
+    <div class="ribbon" style="left:-40px;top:30px;background:linear-gradient(90deg,#e03131,#7048e8)">🎉 大型アップデート</div>
+    <div style="position:absolute;left:700px;top:40px;width:480px;text-align:center">
+      <div class="stroke" style="--sw:14px;--sc:#5c1a1a;font-size:76px;line-height:1.05;color:#fff;white-space:nowrap">新キャラ</div>
+      <div class="stroke" style="--sw:16px;--sc:#5c1a1a;font-size:150px;line-height:1;color:#ffe066;white-space:nowrap;text-shadow:0 0 30px #fff3bf">${g.ids.length}<span style="font-size:80px">体</span></div>
+      <div class="stroke" style="--sw:12px;--sc:#5c1a1a;font-size:56px;color:#fff;white-space:nowrap">大量追加！！</div>
+      <div style="margin-top:8px;display:inline-block;padding:8px 20px;border-radius:999px;background:rgba(60,10,40,.75);color:#fff;font-size:26px">R ${n('R')}・SR ${n('SR')}・SSR ${n('SSR')}・すべて恒常</div>
+    </div>
+    <div class="date" style="left:40px;bottom:30px;background:#fff;color:#c2255c;box-shadow:0 6px 0 rgba(120,0,60,.25)">${esc(fmt(g.at))}〜 ガチャに登場</div>
+  </div>`;
+}
+
 // ガチャの告知 (セール・ピックアップ・確率アップ)
 function gachaHtml(n) {
   const g = gachaInfo(n), pk = g.pickups[0];
@@ -142,7 +162,8 @@ function gachaHtml(n) {
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const jobs = [];
-  for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity]) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
+  for (const g of cards.BULK_RELEASES) jobs.push({ name: bannerName('bulk', g.id), html: bulkHtml(g), art: null, arts: g.ids.filter((id) => cards.CARDS[id].rarity === 'SSR').concat(g.ids.filter((id) => cards.CARDS[id].rarity === 'SR').slice(0, 6)).map((id) => [id, cards.CARDS[id].rarity]) });
+  for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity] && !cards.BULK_IDS.has(id)) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
   for (const q of cards.QUESTS) for (const rank of Object.keys(q.titles || {})) jobs.push({ name: bannerName('award', `${q.id}-${rank}`), html: awardHtml(q, Number(rank)), art: [q.reward, cards.CARDS[q.reward].rarity] });
   for (const n of GACHA_NOTICES) { const pk = gachaInfo(n).pickups[0]; jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
@@ -160,7 +181,8 @@ function gachaHtml(n) {
     if (fs.existsSync(file) && !force) { console.log('あり:', j.name); continue; }
     await p.setContent(`<!doctype html><meta charset="utf-8"><style>${BASE}</style><body>${j.html}</body>`);
     await p.addScriptTag({ content: ART });
-    await p.evaluate(([id, r]) => { document.querySelector('.art').innerHTML = window.CBArt.svg(id, r); document.querySelectorAll('*').forEach((e) => { e.style.animation = 'none'; }); }, j.art);
+    if (j.arts) await p.evaluate((arts) => { document.querySelectorAll('.art').forEach((e, i) => { if (arts[i]) e.innerHTML = window.CBArt.svg(arts[i][0], arts[i][1]); }); document.querySelectorAll('*').forEach((e) => { e.style.animation = 'none'; }); }, j.arts);
+    else await p.evaluate(([id, r]) => { document.querySelector('.art').innerHTML = window.CBArt.svg(id, r); document.querySelectorAll('*').forEach((e) => { e.style.animation = 'none'; }); }, j.art);
     await p.screenshot({ path: file, type: 'jpeg', quality: 88 });
     console.log('作った:', path.relative(process.cwd(), file), fs.statSync(file).size, 'bytes');
   }

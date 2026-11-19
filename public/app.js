@@ -3099,8 +3099,14 @@ function cbMine(c, mine) {
 // 新キャラ登場のバナー (登場から 7 日間。登場前のキャラはサーバーが送ってこないので、ここには出ない)
 function cbNewBanner(cat, link = true) {
   const list = (cat.newCards || []).map((id) => cat.cards.find((c) => c.id === id)).filter(Boolean);
-  if (!list.length) return '';
-  return list.map((c) => `<${link ? 'a href="#/games/cards/gacha"' : 'div'} class="card cb-newchar">
+  // まとめて追加したキャラは 1 枚のバナーにまとめる (図鑑で全員見られる)
+  const bulk = (cat.newBulk || []).map((g) => { const cs = g.ids.map((id) => cat.cards.find((c) => c.id === id)).filter(Boolean), top = cs.filter((c) => c.rarity === 'SSR');
+    return `<a href="#/games/cards/collection" class="card cb-newchar cb-newbulk">
+      <span class="cb-newbulk-arts">${top.slice(0, 5).map((c) => CBArt.svg(c.id, c.rarity, { label: c.name })).join('')}</span>
+      <span class="cb-newchar-text"><span class="cb-newchar-tag">🎉 ${esc(g.name)}！</span><b>新キャラ ${cs.length} 体がガチャに登場</b>
+        <span>R ${g.count.R} 体・SR ${g.count.SR} 体・SSR ${g.count.SSR} 体 (すべて恒常)。SSR: ${top.map((c) => esc(c.name)).join('・')}</span><small>図鑑で全員を見る ›</small></span></a>`; }).join('');
+  if (!list.length) return bulk;
+  return bulk + list.map((c) => `<${link ? 'a href="#/games/cards/gacha"' : 'div'} class="card cb-newchar">
       <span class="cb-newchar-art">${CBArt.svg(c.id, c.rarity, { label: c.name })}</span>
       <span class="cb-newchar-text"><span class="cb-newchar-tag">🆕 新キャラ登場！</span><b>${esc(c.name)}</b>
         ${(cat.pickups || []).some((x) => x.id === c.id) ? `<span class="cb-pickup">🎯 ピックアップ中！ 出る確率 <em>${Number((cat.pickups.find((x) => x.id === c.id).rate).toFixed(2))}%</em></span>` : ''}
@@ -3410,34 +3416,39 @@ async function viewCollection() {
         <div class="cb-lvup-stats" id="cb-lvstats"></div>
         <p class="text-sm" id="cb-lvcost"></p>
         <p class="text-xs muted" style="margin:0">Lv${cat.dupMaxLevel || 15} までは今のレベルと同じ枚数、Lv${cat.dupMaxLevel || 15} → ${cat.maxLevel} は 1 つにつき ${cat.highLevelCost || 50} 枚</p>
-        <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button>
+        <div class="modal-actions cb-lvup-acts" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button>
+          <button class="btn btn-outline" type="button" id="cb-lvcoin"></button>
           <button class="btn btn-primary" type="button" id="cb-lvgo"></button></div></div>`, (root, close) => {
       let done = false;
       const show = () => {
         const cost = costTo(lv, to), enough = mine.scrolls >= cost, a = at(lv), b = at(to);
         $('#cb-lvto', root).textContent = `Lv${to}`;
         $('#cb-lvstats', root).innerHTML = `<span>HP ${a.maxHp} → <b>${b.maxHp}</b></span><span>攻 ${a.atk} → <b>${b.atk}</b></span><span>防 ${a.def} → <b>${b.def}</b></span>`;
-        $('#cb-lvcost', root).innerHTML = `📜 レベルアップ書を <b>${cost}</b> 枚使います (持っている: ${mine.scrolls} 枚)`;
-        const go = $('#cb-lvgo', root); go.disabled = !enough; go.textContent = enough ? (to - lv > 1 ? `Lv${to} まで一気に上げる！` : 'レベルアップ！') : `あと ${cost - mine.scrolls} 枚たりません`;
+        const cc = cost * (cat.coinsPerScroll || 50), coinOk = mine.coins >= cc;
+        $('#cb-lvcost', root).innerHTML = `📜 レベルアップ書 <b>${cost}</b> 枚 (持っている: ${mine.scrolls} 枚)<br>または 🪙 コイン <b>${cc.toLocaleString()}</b> (持っている: ${Number(mine.coins).toLocaleString()} · 書 1 枚 = ${cat.coinsPerScroll || 50} コイン)`;
+        const go = $('#cb-lvgo', root); go.disabled = !enough; go.textContent = enough ? (to - lv > 1 ? `📜 書で Lv${to} まで上げる！` : '📜 書でレベルアップ！') : `書があと ${cost - mine.scrolls} 枚たりません`;
+        const cg = $('#cb-lvcoin', root); cg.disabled = !coinOk; cg.textContent = coinOk ? `🪙 ${cc.toLocaleString()} コインで上げる` : `コインがあと ${(cc - mine.coins).toLocaleString()} たりません`;
         $('[data-step="-1"]', root).disabled = to <= lv + 1; $('[data-step="1"]', root).disabled = to >= cat.maxLevel;
       };
       show();
       $$('[data-step]', root).forEach((b) => b.addEventListener('click', () => { to = Math.min(cat.maxLevel, Math.max(lv + 1, to + Number(b.dataset.step))); show(); }));
       $$('[data-to]', root).forEach((b) => b.addEventListener('click', () => { to = Number(b.dataset.to); show(); }));
-      $('#cb-lvgo', root).addEventListener('click', async (e) => {
+      const doLevel = async (e, pay) => {
         if (done) return close(); // 2 回目のタップは「OK」(とじるだけ)
         e.target.disabled = true;
         try {
-          const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id, to } });
+          const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id, to, pay } });
           mine = res;
           $('.cb-lvup-card', root).innerHTML = cbCard(res.card.horse ? res.card : C2(res.card.id), { level: res.to, cls: 'lv-flash' });
           $('.cb-lvup-pick', root).innerHTML = `<p class="cb-lvup-lv"><span class="cb-lvup-shout">Lv${res.to} にレベルアップ！</span></p>`;
           $$('.cb-lvup-quick, #cb-lvstats, #cb-lvcost, .cb-lvup > p.text-xs', root).forEach((x) => x.remove());
-          done = true; e.target.textContent = 'OK'; e.target.disabled = false;
+          done = true; $('#cb-lvcoin', root)?.remove(); $('#cb-lvgo', root).textContent = 'OK'; $('#cb-lvgo', root).disabled = false;
           cbConfetti(root, res.to - res.from > 1 ? 90 : 40, ['#ffd43b', '#74c0fc', '#8ce99a', '#fff']);
           render();
         } catch (err) { toast(err.message, 'error'); close(); }
-      });
+      };
+      $('#cb-lvgo', root).addEventListener('click', (e) => doLevel(e, 'scrolls'));
+      $('#cb-lvcoin', root).addEventListener('click', (e) => doLevel(e, 'coins'));
     });
   }
   const C2 = (id) => { const c = cat.cards.find((x) => x.id === id); return c ? cbMine(c, mine) : mine.horses.find((x) => x.id === id); };

@@ -63,6 +63,57 @@ const CARD_LIST = [
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
+  // ---- 2026-11-19 大量追加: R 20 体・SR 20 体・SSR 10 体 (すべて恒常。能力は既存カードと 1 対 1 で勝率 50% 前後に合わせた) ----
+  ['crayon', 'クレヨン坊や', '🖍️', 'R', 'cut', 59, 16, 10, 12, 'power'],
+  ['cutter', 'カッター少年', '🔪', 'R', 'cut', 68, 17, 10, 11, 'pierce'],
+  ['sharpener', 'えんぴつけずりん', '⚙️', 'R', 'heavy', 58, 13, 9, 10, 'power'],
+  ['binder', 'バインダー兵', '📁', 'R', 'wrap', 64, 17, 12, 14, 'barrier'],
+  ['envelope', 'ふうとうポスト', '✉️', 'R', 'wrap', 84, 18, 13, 10, 'drain'],
+  ['stamp', 'はんこ親分', '🔴', 'R', 'heavy', 57, 14, 10, 9, 'power'],
+  ['inkpad', 'スタンプ台ちゃん', '🟣', 'R', 'wrap', 77, 20, 13, 11, 'heal'],
+  ['clipboard', 'クリップボード番長', '📋', 'R', 'heavy', 72, 14, 12, 7, 'barrier'],
+  ['highlighter', '蛍光ペンガール', '🖊️', 'R', 'cut', 54, 17, 9, 14, 'drain'],
+  ['brush', '筆の剣士', '🖌️', 'R', 'cut', 63, 18, 10, 12, 'pierce'],
+  ['palette', 'パレット画伯', '🎨', 'R', 'wrap', 79, 19, 14, 12, 'heal'],
+  ['calc', '電卓ロボ', '🧮', 'R', 'heavy', 67, 13, 12, 5, 'pierce'],
+  ['notecard', '単語カード', '🗂️', 'R', 'wrap', 79, 18, 12, 12, 'drain'],
+  ['masking', 'マステちゃん', '🎀', 'R', 'wrap', 79, 20, 13, 11, 'heal'],
+  ['ballpen', 'ボールペン兵', '🖊️', 'R', 'cut', 54, 16, 8, 14, 'power'],
+  ['punch', '穴あけパンチ王', '🕳️', 'R', 'heavy', 60, 15, 12, 4, 'pierce'],
+  ['bookmark', 'しおりの妖精', '🔖', 'R', 'wrap', 85, 18, 13, 11, 'heal'],
+  ['lead', 'シャー芯ブラザーズ', '✏️', 'R', 'cut', 54, 17, 10, 14, 'pierce'],
+  ['dust', 'けしかす小僧', '🌫️', 'R', 'heavy', 68, 14, 11, 9, 'drain'],
+  ['tapecut', 'テープカッター将軍', '🎞️', 'R', 'heavy', 57, 13, 11, 9, 'power'],
+  ['fudebako', '筆箱ガーディアン', '🧰', 'SR', 'heavy', 61, 15, 12, 8, 'barrier'],
+  ['drafting', '製図ペンの魔導士', '✒️', 'SR', 'cut', 54, 14, 8, 17, 'pierce'],
+  ['colors', '色えんぴつ戦隊', '🌈', 'SR', 'cut', 51, 15, 9, 15, 'power'],
+  ['sketch', 'スケッチブック仙人', '📔', 'SR', 'wrap', 79, 20, 14, 9, 'heal'],
+  ['magnet', 'マグネット番長', '🧲', 'SR', 'heavy', 60, 15, 11, 10, 'drain'],
+  ['whiteboard', 'ホワイトボード騎士', '⬜', 'SR', 'heavy', 63, 15, 11, 7, 'barrier'],
+  ['abacus', 'そろばん師範', '🧮', 'SR', 'heavy', 64, 14, 12, 6, 'pierce'],
+  ['inkbottle', 'インク瓶の魔女', '🫙', 'SR', 'wrap', 75, 18, 13, 14, 'drain'],
+  ['quill', '羽ペンの吟遊詩人', '🪶', 'SR', 'cut', 54, 18, 11, 16, 'heal'],
+  ['label', 'ラベルライター博士', '🏷️', 'SR', 'wrap', 74, 18, 12, 11, 'pierce'],
+  ['gluestick', 'スティックのり大将', '🧴', 'SR', 'wrap', 64, 16, 11, 15, 'barrier'],
+  ['calendar', '卓上カレンダー', '📅', 'SR', 'wrap', 79, 19, 12, 13, 'heal'],
+  ['lamp', 'デスクライト', '💡', 'SR', 'heavy', 64, 14, 12, 4, 'power'],
+  ['clock', '目覚まし時計', '⏰', 'SR', 'heavy', 63, 15, 11, 7, 'drain'],
+  ['setsquare', '三角定規コンビ', '📐', 'SR', 'cut', 66, 16, 11, 12, 'pierce'],
+  ['origami', '折り紙ドラゴン', '🐲', 'SR', 'wrap', 65, 17, 11, 14, 'power'],
+  ['seal', '封蝋の伯爵', '🧧', 'SR', 'heavy', 61, 15, 11, 7, 'barrier'],
+  ['diary', '日記帳の姫', '📖', 'SR', 'wrap', 78, 19, 15, 11, 'heal'],
+  ['sensu', '扇子の舞姫', '🪭', 'SR', 'cut', 54, 17, 10, 13, 'drain'],
+  ['gem', '宝石ペーパーウェイト', '💠', 'SR', 'heavy', 65, 15, 12, 7, 'heal'],
+  ['rainbowpen', '七色ボールペン覇王', '🌈', 'SSR', 'cut', 60, 15, 10, 13, 'power'],
+  ['meteorruler', '流星定規', '☄️', 'SSR', 'cut', 56, 14, 10, 16, 'pierce'],
+  ['sumiryu', '墨龍の大筆', '🐉', 'SSR', 'wrap', 76, 17, 15, 14, 'drain'],
+  ['crystal', '水晶コンパス', '💎', 'SSR', 'cut', 66, 19, 11, 11, 'heal'],
+  ['gyokuji', '皇帝の玉璽', '👑', 'SSR', 'heavy', 67, 15, 12, 6, 'barrier'],
+  ['phoenix', '不死鳥の羽ペン', '🔥', 'SSR', 'cut', 67, 19, 11, 11, 'heal'],
+  ['galaxy', '銀河儀', '🌌', 'SSR', 'heavy', 65, 14, 12, 10, 'heal'],
+  ['raimei', '雷鳴ホチキス', '⚡', 'SSR', 'heavy', 64, 15, 10, 5, 'power'],
+  ['hyoketsu', '氷結万年筆', '❄️', 'SSR', 'wrap', 70, 18, 11, 11, 'pierce'],
+  ['sakura', '桜吹雪の筆', '🌸', 'SSR', 'wrap', 67, 17, 13, 11, 'barrier'],
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
 ];
@@ -74,6 +125,12 @@ const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIS
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
 const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+// まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
+const BULK_RELEASES = [
+  { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
+];
+for (const g of BULK_RELEASES) { const v = Number(process.env['CB_BULK_' + g.id.toUpperCase().replace(/-/g, '_')]); if (Number.isFinite(v) && v > 0) g.at = v; for (const id of g.ids) RELEASES[id] = g.at; }
+const BULK_IDS = new Set(BULK_RELEASES.flatMap((g) => g.ids));
 for (const id of Object.keys(RELEASES)) { const v = Number(process.env['CB_RELEASE_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) RELEASES[id] = v; }
 const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出す
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
@@ -436,6 +493,8 @@ const HORSE_UR_MIGRATION = `ALTER TABLE card_horses ADD COLUMN rarity TEXT NOT N
 // レベルアップ書: 試合をこなすともらえる (3 ターン以上戦った試合だけ。勝ち 2 枚・負けと引き分け 1 枚、こうさんした側は 0)。
 // レベル n → n+1 に n 枚使う。同じカードを引いて上がるレベル (枚数) と合わせて最大 Lv15
 const SCROLL_REWARD = { win: 2, lose: 1, draw: 1 }, SCROLL_MIN_TURNS = 3;
+const HARD_QUEST_SCROLLS = 4; // 高難易度クエストで勝つと、レベルアップ書 4 冊
+const COINS_PER_SCROLL = 50;  // コインでもレベルを上げられる: レベルアップ書 1 冊ぶん = 50 コイン
 // Lv15 より上に上げた分 (レベルアップ書だけで上がる。同じカードを引いた分とは別に数える)
 const HIGH_LEVEL_MIGRATION = `ALTER TABLE card_owned ADD COLUMN lv_high INTEGER NOT NULL DEFAULT 0;`;
 // 称号 (高難易度クエストの最速クリアなど)。title は表示する名前、source はどこでもらったか
@@ -586,11 +645,12 @@ function install(app, ctx) {
     cards: releasedIds().map((id) => ({ ...statsOf(id, 1), ...(RARITY[CARDS[id].rarity] ? {} : { questOnly: true }),
       ...(CARD_PASSIVE[id] ? { passiveName: PASSIVES[CARD_PASSIVE[id]].name, passiveDesc: PASSIVES[CARD_PASSIVE[id]].desc } : {}), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}) })),
-    newCards: releasedIds().filter((id) => RELEASES[id] && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
+    newCards: releasedIds().filter((id) => RELEASES[id] && !BULK_IDS.has(id) && RARITY[CARDS[id].rarity] && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
+    newBulk: BULK_RELEASES.filter((g) => Date.now() >= g.at && Date.now() - g.at < NEW_DAYS * 86400_000).map((g) => ({ id: g.id, name: g.name, at: g.at, ids: g.ids, count: Object.fromEntries(['R', 'SR', 'SSR'].map((r) => [r, g.ids.filter((id) => CARDS[id].rarity === r).length])) })),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    urPromote: UR_PROMOTE, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, hardQuestScrolls: HARD_QUEST_SCROLLS, coinsPerScroll: COINS_PER_SCROLL, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
   // 鬼難のデッキ (CPU が使う 5 種類)
@@ -694,15 +754,17 @@ function install(app, ctx) {
     const to = req.body?.to == null ? level + 1 : Number(req.body.to);
     if (!Number.isInteger(to) || to <= level || to > MAX_LEVEL) return res.status(400).json({ error: `Lv${level + 1}〜${MAX_LEVEL} のあいだで選んでください` });
     let cost = 0; for (let l = level; l < to; l++) cost += levelCost(l);
-    if (p.scrolls < cost) return res.status(400).json({ error: `レベルアップ書が足りません (あと ${cost - p.scrolls} 枚)` });
+    const byCoins = req.body?.pay === 'coins', coinCost = cost * COINS_PER_SCROLL; // pay: 'coins' ならコインで (書 1 冊 = 50 コイン)
+    if (byCoins ? p.coins < coinCost : p.scrolls < cost) return res.status(400).json({ error: byCoins ? `コインが足りません (あと ${coinCost - p.coins} コイン)` : `レベルアップ書が足りません (あと ${cost - p.scrolls} 枚)` });
     db.exec('BEGIN');
     try {
-      if (!db.prepare('UPDATE card_players SET scrolls = scrolls - ? WHERE user_id = ? AND scrolls >= ?').run(cost, uid, cost).changes) throw new Error('scrolls');
+      if (byCoins) { if (!db.prepare('UPDATE card_players SET coins = coins - ? WHERE user_id = ? AND coins >= ?').run(coinCost, uid, coinCost).changes) throw new Error('coins'); }
+      else if (!db.prepare('UPDATE card_players SET scrolls = scrolls - ? WHERE user_id = ? AND scrolls >= ?').run(cost, uid, cost).changes) throw new Error('scrolls');
       for (let l = level; l < to; l++) apply(l);
       db.exec('COMMIT');
-    } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: 'レベルアップ書が足りません' }); }
+    } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: byCoins ? 'コインが足りません' : 'レベルアップ書が足りません' }); }
     const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, to, urOf(uid).includes(id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
-    res.json({ card, from: level, to, used: cost, ...me(uid) });
+    res.json({ card, from: level, to, used: cost, paid: byCoins ? { coins: coinCost } : { scrolls: cost }, ...me(uid) });
   });
 
   // デッキ (持っているカード 3 枚。同じカードは 1 枚まで)
@@ -868,7 +930,7 @@ function install(app, ctx) {
         if (title) db.prepare('INSERT OR IGNORE INTO user_titles (user_id, title, source, granted_at) VALUES (?, ?, ?, ?)').run(u, title, `quest:${b.quest.id}:${rank}`, Date.now());
         if (rank >= 1 && rank <= QUEST_AWARD_RANKS) ctx.officialAward?.({ title: title || null, quest: b.quest, rank, user: db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(u), turns: b.state.turn, at: Date.now() });
       }
-      const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : SCROLL_REWARD[res];
+      const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : b.quest?.hard && res === 'win' ? HARD_QUEST_SCROLLS : SCROLL_REWARD[res];
       if (scrolls) db.prepare('UPDATE card_players SET scrolls = scrolls + ? WHERE user_id = ?').run(scrolls, u);
       db.prepare(`UPDATE card_players SET coins = coins + ?, rating = rating + ?, reward_day = ?, reward_count = ?,
         wins = wins + ?, losses = losses + ?, draws = draws + ? WHERE user_id = ?`).run(coins, delta[i], today, count + (capped && coins ? 1 : 0),
@@ -995,4 +1057,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

@@ -88,8 +88,16 @@ const jstDay = (t) => new Date(t + 9 * H).toISOString().slice(0, 10);
 function schedule() {
   const { CARDS, SKILLS, RELEASES, QUESTS, PICKUPS, SALES } = cards;
   const out = [...UPDATES];
+  for (const g of cards.BULK_RELEASES) { // まとめて追加したキャラは、1 回だけお知らせする
+    const n = (r) => g.ids.filter((id) => CARDS[id].rarity === r).length;
+    const ssr = g.ids.filter((id) => CARDS[id].rarity === 'SSR').map((id) => CARDS[id].name);
+    out.push({ key: `bulk:${g.id}`, at: g.at, until: g.at + D, banner: bannerName('bulk', g.id),
+      text: `🎉【大型アップデート】新キャラ ${g.ids.length} 体がガチャに登場しました！ (R ${n('R')}・SR ${n('SR')}・SSR ${n('SSR')}、すべて恒常)
+🌟 SSR: ${ssr.join('・')}
+📜 高難易度クエストで勝つとレベルアップ書 4 冊・🪙 コインでもレベルを上げられるように！ ${TAG}` });
+  }
   for (const [id, at] of Object.entries(RELEASES)) {
-    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity]) continue;        // ガチャに出ないキャラ (クエストの報酬) はクエストの投稿で知らせる
+    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity] || cards.BULK_IDS.has(id)) continue;        // ガチャに出ないキャラ (クエストの報酬) はクエストの投稿で知らせる
     const pk = PICKUPS.find((x) => x.id === id);
     out.push({ key: `release:${id}`, at, until: at + D, banner: bannerName('char', id),
       text: `🆕【新キャラ登場】${c.rarity}「${c.name}」がガチャに登場しました！
@@ -136,8 +144,14 @@ function banners(now = Date.now()) {
       tag: live ? '🌠 期間限定クエスト 開催中' : `🌠 ${jstDay(q.start) === jstDay(now) ? '本日' : fmt(q.start).replace(/ .*/, '')} ${hm(q.start)} から 期間限定クエスト`,
       title: q.name, text: `クリアで ${r.rarity}「${r.name}」が仲間に！`, sub: live ? `${fmt(q.end)} まで` : `${fmt(q.start)} 開始`, start: q.start, end: q.end });
   }
+  for (const g of cards.BULK_RELEASES) {
+    if (now < g.at - D || now >= g.at + 7 * D) continue;
+    const live = now >= g.at, top = g.ids.find((id) => CARDS[id].rarity === 'SSR') || g.ids[0];
+    out.push({ id: 'bulk:' + g.id, kind: 'char', live, image: bannerFile(bannerName('bulk', g.id)) ? `/banners/${bannerName('bulk', g.id)}.jpg` : null, href: '#/games/cards/gacha', art: { id: top, rarity: CARDS[top].rarity },
+      tag: live ? '🎉 新キャラ大量追加！' : `🎉 ${fmt(g.at)} 新キャラ大量追加！`, title: g.name, text: `R・SR・SSR あわせて ${g.ids.length} 体がガチャに登場`, sub: live ? 'すべて恒常 · ガチャに登場中' : `${fmt(g.at)} 登場`, start: g.at, end: g.at + 7 * D });
+  }
   for (const [id, at] of Object.entries(RELEASES)) {
-    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity]) continue;
+    const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity] || cards.BULK_IDS.has(id)) continue;
     const pk = PICKUPS.find((x) => x.id === id), end = pk?.end || at + 7 * D;
     if (now < at - D || now >= end) continue;
     const live = now >= at;
