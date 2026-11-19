@@ -27,6 +27,7 @@
 - 高難易度クエストは、1 番目・2 番目にクリアした人を公式アカウントが自動で表彰する (`cards.js` の `QUEST_AWARD_RANKS`、文章は `official.js` の `ctx.officialAward`)
 - クエストの `titles: { 1: '称号名', 2: ... }` で、その順位でクリアした人に称号を贈る (表 `user_titles`。プロフィールと対戦の名前の横に出る)
 - 高難易度クエストでは、開始 30 分後からアイテム (`cards.js` の `ITEMS`: 回復薬・全回復薬・アイスティー) をコインで買って使える
+- 高難易度クエストの報酬キャラは勝つたびに 1 枚もらえ、25 枚で LR に昇格 (`cards.js` の `LR_PROMOTE`。能力 +35%・虹色のデザイン)
 - 高難易度クエスト (`QUESTS` の `hard: true`) も同じ: 敵は先を読む CPU、`boost` は `node tools/tune_oni.js` の `quest:<id>` の結果を入れる
 
 ## ブリードモンスターズ (monster.js・public/games/monster/)

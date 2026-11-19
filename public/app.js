@@ -3102,7 +3102,7 @@ function viewMath() {
 // =====================================================================
 let cbCatalogCache = null;
 async function cbCatalog() { if (!cbCatalogCache) cbCatalogCache = await api('/cards/catalog', { noAuthPrompt: true }); return cbCatalogCache; }
-const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR: '#e03131', MR: '#7048e8' };
+const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR: '#e03131', MR: '#7048e8', LR: '#ff6bd6' };
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
@@ -3118,7 +3118,14 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
 }
 // 自分のカード: ガチャ限定 SR を 3 枚引いて UR に昇格していたら、UR の姿と能力にする
 function cbMine(c, mine) {
+  if (mine?.lr?.includes(c.id) && c.lrStats) return { ...c, ...c.lrStats, rarity: 'LR', baseRarity: c.rarity, promoted: true };
   return mine?.ur?.includes(c.id) && c.urStats ? { ...c, ...c.urStats, rarity: 'UR', baseRarity: c.rarity, promoted: true } : c;
+}
+// LR まであと何枚か (高難易度クエストの報酬キャラ)
+function cbLrCounter(id, mine, cat) {
+  if (!mine?.lrCount || !(id in mine.lrCount)) return '';
+  const n = mine.lrCount[id], need = cat.lrPromote?.copies || 25, done = n >= need;
+  return `<span class="cb-lrc${done ? ' done' : ''}"><span>${done ? '🌈 LR 昇格ずみ！' : `🌈 LR まで ${n}/${need}`}</span><i style="width:${Math.min(100, (n / need) * 100)}%"></i></span>`;
 }
 // カードを指 (マウス) でなぞると傾いて、ホロの光が動く
 (() => {
@@ -3418,9 +3425,10 @@ async function viewCollection() {
           : `<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>`}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)。UR のあとのダブりは 📜 レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換</p>
-        <div class="cb-grid">${cat.cards.map((c) => mine.owned[c.id]
+        <p class="text-xs muted" style="margin:0 0 8px">高難易度クエストの報酬キャラは、クエストに勝つたびに 1 枚もらえて、<b>${cat.lrPromote?.copies || 25} 枚</b>で <b class="cb-lr-word">LR</b> に昇格！ (能力 +${cat.lrPromote?.bonus || 35}%)</p>
+        <div class="cb-grid">${cat.cards.map((c) => (mine.owned[c.id]
           ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}${c.passiveName ? ` / パッシブ ${esc(c.passiveName)}: ${esc(c.passiveDesc)}` : ''}"` })
-          : cbCard(c, { locked: true, attrs: c.questOnly ? 'title="期間限定クエストのクリア報酬"' : '' })).join('')}</div></section>`;
+          : cbCard(c, { locked: true, attrs: c.questOnly ? 'title="期間限定クエストのクリア報酬"' : '' })).replace(/<\/div>\s*$/, `${cbLrCounter(c.id, mine, cat)}</div>`)).join('')}</div></section>`;
     $$('[data-mode]', root).forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
     $$('[data-card]', root).forEach((el) => el.addEventListener('click', () => {
       const id = el.dataset.card;
@@ -3587,6 +3595,7 @@ async function viewQuest() {
   let cat, quests;
   try { cat = await cbCatalog(); ({ quests } = await api('/cards/quests', { noAuthPrompt: true })); } catch (e) { $('#cbq').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   const root = $('#cbq'); if (!root) return;
+  const cbMineCache = me ? await api('/cards/me', { noAuthPrompt: true }).catch(() => null) : null; // LR までのカウンター用
   if (!quests.length) { root.innerHTML = emptyState({ icon: 'sparkle', title: 'いま開催中のクエストはありません', text: '次のクエストをお楽しみに！', action: '<a class="btn btn-primary" href="#/games/cards">もどる</a>' }); return; }
   const fmt = (t) => new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' });
   root.innerHTML = quests.map((q) => `
@@ -3599,7 +3608,7 @@ async function viewQuest() {
         <div class="cb-quest-rcard">${cbCard(q.reward, { level: 1, cls: 'tilt' })}</div>
         <div class="cb-quest-rtext"><span class="cb-quest-label">クリア報酬</span><b><em class="cb-mr-word">MR</em> ${esc(q.reward.name)}</b>
           <span>わざ「${esc(q.reward.skillName)}」</span><small>${esc(q.reward.skillDesc)}</small>
-          <small>MR は能力 +${cat.rarityBonus.MR}%。報酬のカードは、はじめてクリアしたときに 1 枚もらえます</small></div>
+          <small>${q.hard ? `高難易度クエストは勝つたびに 1 枚もらえて、${cat.lrPromote?.copies || 25} 枚集めると <b class="cb-lr-word">LR</b> に昇格 (能力 +${cat.lrPromote?.bonus || 35}%)！` : `MR は能力 +${cat.rarityBonus.MR}%。報酬のカードは、はじめてクリアしたときに 1 枚もらえます`}</small>${q.hard ? cbLrCounter(q.reward.id, cbMineCache, cat) : ''}</div>
       </div>
       ${q.cleared ? '<p class="cb-quest-done">✅ クリアずみ！ 何度でも挑戦できます (コインとレベルアップ書はもらえます)</p>' : ''}
     </section>
@@ -3784,9 +3793,11 @@ async function viewBattle(params) {
     box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
       <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
       <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
+      ${m.questCopy ? (m.questCopy.lrUp ? `<div class="cb-lrup"><p class="cb-lr-shout">🌈 LR に昇格！！ 🌈</p><div class="cb-qreward-card">${cbCard(m.questCopy.lr, { level: 1, cls: 'tilt' })}</div><p>${esc(m.questCopy.name)} が <b class="cb-lr-word">LR</b> になった！ (能力 +${cbCatalogCache?.lrPromote?.bonus || 35}%)</p></div>`
+        : `<p class="cb-lr-get">🎴 ${esc(m.questCopy.name)} を 1 枚ゲット！ <span>${m.questCopy.copies >= m.questCopy.need ? '🌈 LR 昇格ずみ' : `🌈 LR まで ${m.questCopy.copies}/${m.questCopy.need}`}</span></p>`) : ''}
       ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
         <p><em class="cb-mr-word">MR</em>「${esc(m.questReward.name)}」が仲間になった！<br><small>わざ「${esc(m.questReward.skillName)}」${esc(m.questReward.skillDesc)}</small></p></div>`
-        : m.quest && m.result === 'win' ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
+        : m.quest && m.result === 'win' && !m.questCopy ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
       <div class="md-actions">${fromBoard ? '<a class="btn btn-primary" href="#/games/cards/board">掲示板にもどる</a><a class="btn btn-ghost" href="#/games/cards">ゲームのホーム</a>' : `<a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${mode === 'oni' && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : '#/games/cards'}">もどる</a>`}</div></div>`);
     if (m.questReward) { cbCatalogCache = null; const q = box().querySelector('.cb-qreward'); if (q) { cbConfetti(q, 140, ['#ff6bd6', '#ffd43b', '#63e6be', '#4dabf7', '#b197fc', '#fff']); setTimeout(() => cbConfetti(q, 90, ['#ffe066', '#fff', '#d0a8ff']), 700); } }
   }

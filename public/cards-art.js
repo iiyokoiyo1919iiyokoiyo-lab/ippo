@@ -553,6 +553,15 @@
         + stars.map(([x, y, r], i) => twinkle(x, y, r * 2, i % 3 ? '#fff' : '#ffe066', 'cb-tw' + (i % 3 ? ' d' + (i % 3 + 1) : ''))).join('')
         + [[0, 30, 34, 0], [70, 0, 36, 1], [86, 86, 26, 2]].map(([x, y, l, i]) => `<g class="cb-meteor m${i}"><path d="M${x},${y}l${l},${l * 0.55}" stroke="${lg('mt' + i, [[0, '#fff', 0], [1, '#fff', 1]], 1, 0.55)}" stroke-width="2.4" stroke-linecap="round"/>${twinkle(x + l, y + l * 0.55, 4, '#fff')}</g>`).join('');
     }
+    if (rarity === 'LR') { // LR: 虹色の光線が回り、虹の輪が 2 重・星がいっぱい
+      const RB = ['#ff6b6b', '#ffa94d', '#ffe066', '#69db7c', '#4dabf7', '#9775fa', '#f783ac'];
+      const rays = Array.from({ length: 14 }, (_, i) => `<path d="M60,60L${60 + Math.cos((i * 25.7 - 6) * Math.PI / 180) * 95},${60 + Math.sin((i * 25.7 - 6) * Math.PI / 180) * 95}L${60 + Math.cos((i * 25.7 + 6) * Math.PI / 180) * 95},${60 + Math.sin((i * 25.7 + 6) * Math.PI / 180) * 95}Z" fill="${RB[i % RB.length]}" opacity=".55"/>`).join('');
+      back = `<circle cx="60" cy="60" r="62" fill="${rg('lrb', [[0, '#fff', 1], [0.35, '#fff0f6', 0.9], [0.7, '#e5dbff', 0.5], [1, '#d0ebff', 0]], 0.5, 0.5, 0.5)}"/><g class="cb-rays">${rays}</g>`
+        + `<circle cx="60" cy="60" r="44" fill="${rg('lrc', [[0, '#fff', 0.95], [0.6, '#fff', 0.4], [1, '#fff', 0]], 0.5, 0.5, 0.5)}"/>`
+        + `<circle class="cb-halo" cx="60" cy="60" r="55" fill="none" stroke="${lg('lr1', RB.map((c, i) => [i / (RB.length - 1), c]), 1, 1)}" stroke-width="4" stroke-dasharray="10 5"/>`
+        + `<circle class="cb-halo rev" cx="60" cy="60" r="49" fill="none" stroke="${lg('lr2', RB.slice().reverse().map((c, i) => [i / (RB.length - 1), c]), 1, 0)}" stroke-width="2" stroke-dasharray="3 6"/>`
+        + [[10, 14, 8, '#fff'], [110, 18, 7, '#ffe066'], [6, 100, 6, '#c5f6fa'], [112, 104, 8, '#ffd6f5'], [60, 0, 6, '#fff'], [0, 58, 5, '#ffe066'], [120, 58, 5, '#d0bfff']].map(([x, y, r, c], i) => twinkle(x, y, r, c, 'cb-tw' + (i % 3 ? ' d' + (i % 3 + 1) : ''))).join('');
+    }
     if (rarity === 'SSR' || rarity === 'UR') {
       const ur = rarity === 'UR';
       const rays = Array.from({ length: 12 }, (_, i) => `<path d="M60,60L${60 + Math.cos((i * 30 - 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 - 6) * Math.PI / 180) * 90}L${60 + Math.cos((i * 30 + 6) * Math.PI / 180) * 90},${60 + Math.sin((i * 30 + 6) * Math.PI / 180) * 90}Z" fill="${ur ? (i % 2 ? '#ffd43b' : '#ff6b6b') : (i % 2 ? '#ffe066' : '#ffa8d9')}" opacity="${ur ? 0.55 : 0.45}"/>`).join('');
