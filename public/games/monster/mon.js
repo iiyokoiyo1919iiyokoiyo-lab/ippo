@@ -533,7 +533,6 @@
         <div class="pc-txt"><small>${esc(preview ? 'コマンド成立！' : `${who === you ? 'あなた' : '相手'}の${KIND[kind] || ''}`)}</small><span class="pc-lab">${esc(lab)}</span><b data-t="${esc(s.name)}">${esc(s.name)}</b></div>
         <div class="pc-sp">${sparks}</div>${kind === 'ult' ? '<div class="pc-frame"></div><div class="pc-stamp">確定</div>' : ''}`;
       bt.append(el); setTimeout(() => el.remove(), ms + 120);
-      if (preview && navigator.vibrate) { try { navigator.vibrate(kind === 'ult' ? [30, 40, 70] : 20); } catch {} }
       return ms;
     }
     function connect() {
