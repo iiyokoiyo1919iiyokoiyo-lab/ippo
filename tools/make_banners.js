@@ -121,7 +121,8 @@ function awardHtml(q, rank) {
 function bulkHtml(g) {
   const n = (r) => g.ids.filter((id) => cards.CARDS[id].rarity === r).length;
   const ssrN = n('SSR'), pos = [];
-  for (let i = 0; i < ssrN; i++) { const row = i < 5 ? 0 : 1, col = i % 5; pos.push([40 + col * 150 + row * 75, 150 + row * 170, 190]); }
+  const per = Math.ceil(ssrN / 2), gap = Math.min(150, 700 / per), size = Math.min(190, gap + 40);
+  for (let i = 0; i < ssrN; i++) { const row = i < per ? 0 : 1, col = row ? i - per : i; pos.push([30 + col * gap + row * gap / 2, 150 + row * 170, size]); }
   for (let i = 0; i < 6; i++) pos.push([830 + (i % 3) * 120, 452 + Math.floor(i / 3) * 100, 110]);
   return `<div class="bn" style="background:radial-gradient(circle at 40% 45%,#fff9db,#ffd43b 30%,#ff6b6b 65%,#7048e8 100%);--r1:rgba(255,255,255,.55);--r2:transparent">
     <div class="rays" style="left:40%"></div>${confetti(56, ['#fff', '#ffd43b', '#74c0fc', '#b197fc', '#8ce99a', '#ff8787'])}${sparks(18)}

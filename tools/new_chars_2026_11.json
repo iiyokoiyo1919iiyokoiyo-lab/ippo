@@ -8,7 +8,7 @@
   ["inkpad", "スタンプ台ちゃん", "🟣", "R", "wrap", "heal", ["box", "pad", "#9775fa", "#5f3dc4", "bow", "wink", "smile"]],
   ["clipboard", "クリップボード番長", "📋", "R", "heavy", "barrier", ["box", "clip", "#c9a26b", "#8d5a2b", "", "cool", "grin"]],
   ["highlighter", "蛍光ペンガール", "🖊️", "R", "cut", "drain", ["stick", "marker", "#c0eb75", "#5c940d", "bow", "sparkle", "open"]],
-  ["brush", "筆の剣士", "🖌️", "R", "cut", "pierce", ["stick", "brush", "#a9744f", "#6b3d1f", "headband", "brave", "smile"]],
+  ["brush", "筆の剣士", "🖌️", "SSR", "cut", "sweep", ["stick", "brush", "#a9744f", "#6b3d1f", "headband", "brave", "smile"]],
   ["palette", "パレット画伯", "🎨", "R", "wrap", "heal", ["round", "palette", "#ffe8cc", "#d9480f", "beret", "happy", "smile"]],
   ["calc", "電卓ロボ", "🧮", "R", "heavy", "pierce", ["box", "calc", "#868e96", "#343a40", "antenna", "sparkle", "o"]],
   ["notecard", "単語カード", "🗂️", "R", "wrap", "drain", ["box", "cards", "#ffffff", "#adb5bd", "", "sparkle", "smile"]],
