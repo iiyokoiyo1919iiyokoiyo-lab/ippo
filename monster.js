@@ -192,6 +192,31 @@ const OFFICIAL_STUDS = [
   { id: 'stud-ragna', name: 'ラグナヴォルグ', type: 'dark', skills: ['ult_ragnarok', 'ult_dark', 'abyss', 'kneekick'], fee: 300, release: '2026-11-20T08:00:00+09:00', look: { body: 1, eyes: 4, horn: 5, wing: 3, tail: 2, mark: 4, crest: 2, h1: 270, h2: 320 } },
 ];
 
+// 共通の種モン (属性ごとに 1 体。いつでも、だれでも、安い種付け料で配合に使える)
+const COMMON_STUD_FEE = 30;
+const COMMON_STUDS = [
+  { id: 'common-fire', name: 'ヒノコ', type: 'fire', look: { body: 1, eyes: 0, horn: 2, wing: 0, tail: 3, mark: 1, crest: 0, h1: 14, h2: 44 } },
+  { id: 'common-water', name: 'アクアン', type: 'water', look: { body: 0, eyes: 2, horn: 0, wing: 2, tail: 2, mark: 2, crest: 0, h1: 204, h2: 180 } },
+  { id: 'common-grass', name: 'モリノ', type: 'grass', look: { body: 2, eyes: 0, horn: 0, wing: 1, tail: 0, mark: 0, crest: 2, h1: 118, h2: 70 } },
+  { id: 'common-light', name: 'ヒカリン', type: 'light', look: { body: 5, eyes: 2, horn: 1, wing: 2, tail: 0, mark: 3, crest: 3, h1: 50, h2: 20 } },
+  { id: 'common-dark', name: 'ヨルノ', type: 'dark', look: { body: 1, eyes: 1, horn: 3, wing: 1, tail: 1, mark: 4, crest: 0, h1: 268, h2: 300 } },
+  { id: 'common-king', name: 'オウサマ', type: 'king', look: { body: 3, eyes: 0, horn: 5, wing: 3, tail: 1, mark: 3, crest: 0, h1: 40, h2: 0 } },
+];
+// メスモンスターショップ: 毎朝 7 時に 6 体が並ぶ。先着順 (売り切れたら終わり)・1 人 1 日 1 体まで
+const SHOP_LEVELS = [1, 1, 1, 1.16, 1.16, 1.34], SHOP_RANKS = ['B', 'B', 'B', 'A', 'A', 'S'], SHOP_OPEN_HOUR = 7;
+const shopDay = (now = Date.now()) => new Date(now + (9 - SHOP_OPEN_HOUR) * 3600_000).toISOString().slice(0, 10);
+const nextShopAt = (now = Date.now()) => Date.parse(shopDay(now) + `T0${SHOP_OPEN_HOUR}:00:00+09:00`) + 86400_000;
+const SHOP_MIGRATION = `
+CREATE TABLE mon_shop (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  day TEXT NOT NULL, slot INTEGER NOT NULL,
+  data TEXT NOT NULL,                          -- 売るモンスター (JSON)
+  price INTEGER NOT NULL,
+  buyer_id INTEGER REFERENCES users(id) ON DELETE SET NULL, monster_id TEXT, bought_at INTEGER,
+  UNIQUE (day, slot)
+);
+`;
+
 module.exports = function install(app, ctx) {
   const { db, requireAuth, rateLimit, publicUser } = ctx;
   db.migrate('2026-11-20-monster-breeders', MIGRATION);
@@ -230,6 +255,12 @@ module.exports = function install(app, ctx) {
     insertMon({ ...base, name: s.name, look: s.look, skills: s.skills }, null, { id: s.id, status: 'breeding', isStud: true, fee: s.fee });
     db.prepare('UPDATE mon_monsters SET score = ? WHERE id = ?').run(1500, s.id);
   }
+  for (const s of COMMON_STUDS) {
+    if (qMon.get(s.id)) continue;
+    const base = newMonster({ type: s.type, sex: 'm', level: 1.02 });
+    insertMon({ ...base, name: s.name, look: s.look }, null, { id: s.id, status: 'breeding', isStud: true, fee: COMMON_STUD_FEE });
+  }
+  const isCommon = (id) => COMMON_STUDS.some((s) => s.id === id);
   const studReleased = (m, now = Date.now()) => { const s = OFFICIAL_STUDS.find((x) => x.id === m.id); return !s || now >= Date.parse(s.release); };
   const mine = (uid) => db.prepare('SELECT * FROM mon_monsters WHERE owner_id = ? ORDER BY created_at').all(uid).map(parse);
   const owned = (uid, id) => { const m = getMon(id); return m && m.owner_id === uid ? m : null; };
@@ -313,7 +344,54 @@ module.exports = function install(app, ctx) {
   });
   app.get('/api/mon/studs', (req, res) => {
     const list = db.prepare("SELECT * FROM mon_monsters WHERE is_stud = 1 AND status = 'breeding' ORDER BY score DESC LIMIT 60").all().map(parse).filter((m) => studReleased(m));
-    res.json({ studs: list.map((m) => ({ ...monView(m), owner: userView(m.owner_id), official: !m.owner_id })) });
+    const common = db.prepare("SELECT * FROM mon_monsters WHERE id LIKE 'common-%'").all().map(parse);
+    res.json({ studs: [...common, ...list.filter((m) => !isCommon(m.id))].map((m) => ({ ...monView(m), owner: userView(m.owner_id), official: !m.owner_id, common: isCommon(m.id) })) });
+  });
+
+  // ---------- メスモンスターショップ (先着順) ----------
+  db.migrate('2026-11-20-monster-shop', SHOP_MIGRATION);
+  function ensureShop(day) {
+    if (db.prepare('SELECT 1 FROM mon_shop WHERE day = ? LIMIT 1').get(day)) return;
+    db.exec('BEGIN');
+    try {
+      SHOP_LEVELS.forEach((lv, slot) => {
+        const want = SHOP_RANKS[slot]; let m;
+        for (let i = 0; i < 40; i++) { m = newMonster({ sex: 'f', level: lv }); if (rankOf(m) === want) break; } // B 3 体・A 2 体・S 1 体になるように
+        const price = Math.max(50, Math.round((powerOf(m) * 0.6 * lv) / 10) * 10);
+        db.prepare('INSERT OR IGNORE INTO mon_shop (day, slot, data, price) VALUES (?, ?, ?, ?)').run(day, slot, JSON.stringify(m), price);
+      });
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+  }
+  app.get('/api/mon/shop', (req, res) => {
+    const day = shopDay(); ensureShop(day);
+    const rows = db.prepare('SELECT * FROM mon_shop WHERE day = ? ORDER BY slot').all(day);
+    const bought = req.user ? rows.find((r) => r.buyer_id === req.user.id) : null;
+    res.json({ day, next: nextShopAt(), bought: !!bought, items: rows.map((r) => {
+      const m = JSON.parse(r.data);
+      return { id: r.id, price: r.price, sold: !!r.buyer_id, mine: !!req.user && r.buyer_id === req.user.id, buyer: r.buyer_id ? userView(r.buyer_id) : null,
+        monster: { name: m.name, sex: m.sex, type: m.type, gen: 0, look: m.look, hp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: m.skills.map(skillView).filter(Boolean), rank: rankOf(m), power: powerOf(m) } };
+    }) });
+  });
+  app.post('/api/mon/shop/:id/buy', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, day = shopDay(); ensureShop(day);
+    const row = db.prepare('SELECT * FROM mon_shop WHERE id = ? AND day = ?').get(Number(req.params.id), day);
+    if (!row) return res.status(404).json({ error: 'その商品は見つかりません (品ぞろえが入れかわったかも)' });
+    if (row.buyer_id) return res.status(409).json({ error: 'ざんねん！ ひと足先に売り切れました' });
+    if (db.prepare('SELECT 1 FROM mon_shop WHERE day = ? AND buyer_id = ?').get(day, uid)) return res.status(400).json({ error: '今日はもう 1 体買いました (明日の 7 時にまた並びます)' });
+    if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status != 'breeding'").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです` });
+    let id;
+    db.exec('BEGIN');
+    try {
+      if (!coins.spend(uid, row.price)) throw Object.assign(new Error(`コインが足りません (${row.price} コイン)`), { user: 400 });
+      // 先着順: まだだれも買っていないときだけ買える (同時に押しても 1 人だけ)
+      if (!db.prepare('UPDATE mon_shop SET buyer_id = ?, bought_at = ? WHERE id = ? AND buyer_id IS NULL').run(uid, Date.now(), row.id).changes) throw Object.assign(new Error('ざんねん！ ひと足先に売り切れました'), { user: 409 });
+      id = insertMon(JSON.parse(row.data), uid, { status: 'active' });
+      db.prepare('UPDATE mon_shop SET monster_id = ? WHERE id = ?').run(id, row.id);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); if (e.user) return res.status(e.user).json({ error: e.message }); throw e; }
+    console.log(`[mon] @${req.user.username} がショップでメスを買った (${row.price} コイン)`);
+    res.json({ monster: monView(getMon(id)), coins: coins.get(uid) });
   });
 
   // ---------- 配合 ----------

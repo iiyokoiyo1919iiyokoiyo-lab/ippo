@@ -62,6 +62,7 @@
       if (parts[0] === 'fight') return viewFightPick(params);
       if (parts[0] === 'auction') return viewAuction();
       if (parts[0] === 'board') return viewBoard();
+      if (parts[0] === 'shop') return viewShop();
       if (parts[0] === 'ranking') return viewRanking();
       if (parts[0] === 'help') return viewHelp();
       return viewHome();
@@ -93,6 +94,7 @@
         <a class="btn gold" href="#breed">💞 配合<small>強い子を作る</small></a>
         <a class="btn" href="#auction">🔨 セリ<small>次は ${esc(fmtTime(next))}</small></a>
         <a class="btn" href="#board">📋 募集掲示板<small>対戦相手を探す</small></a>
+        <a class="btn" href="#shop">🛒 メスショップ<small>毎朝 7 時・先着順</small></a>
         <a class="btn" href="#ranking">🏆 ランキング<small>市場価値</small></a>
         <a class="btn" href="#help">📖 あそびかた<small>ルールと相性</small></a>
       </div>
@@ -175,7 +177,7 @@
         <div class="card"><h2>♀ 母をえらぶ <span class="small muted">繁殖入りした自分のメス (生涯 ${catalog.rules.maxChildren} 体まで)</span></h2>
           ${mothers.length ? `<div class="grid">${mothers.map((m) => mcard(m, { href: '', cls: m.id === mo ? 'sel' : '', extra: `<span class="small">あと ${catalog.rules.maxChildren - m.children} 体</span>` }).replace('class="mcard', 'data-pick="mo" class="mcard')).join('')}</div>` : '<p class="empty">繁殖入りしたメスがいません。メスのモンスターの画面から「繁殖入り」させよう</p>'}</div>
         <div class="card"><h2>♂ 父をえらぶ <span class="small muted">自分の繁殖オス・みんなの種モン</span></h2>
-          ${fathers.length ? `<div class="grid">${fathers.map((m) => mcard(m, { href: '', cls: m.id === fa ? 'sel' : '', extra: `<span class="small">${m.own ? '自分のオス' : `${m.official ? '🏛️ 公式' : esc(m.owner?.displayName || '')} · 種付け料 ${m.fee}🪙`}</span>` }).replace('class="mcard', 'data-pick="fa" class="mcard')).join('')}</div>` : '<p class="empty">父になれるオスがいません</p>'}</div>
+          ${fathers.length ? `<div class="grid">${fathers.map((m) => mcard(m, { href: '', cls: m.id === fa ? 'sel' : '', extra: `<span class="small">${m.own ? '自分のオス' : `${m.common ? '🤝 共通の種モン' : m.official ? '🏛️ 公式' : esc(m.owner?.displayName || '')} · 種付け料 ${m.fee}🪙`}</span>` }).replace('class="mcard', 'data-pick="fa" class="mcard')).join('')}</div>` : '<p class="empty">父になれるオスがいません</p>'}</div>
         ${M && F ? `<div class="card"><h2>🧬 この組み合わせだと…</h2>
           <p class="small">父「${esc(F.name)}」のいちばん強い技 <b>${esc(best(F)?.name || '-')}</b> と、母「${esc(M.name)}」のいちばん強い技 <b>${esc(best(M)?.name || '-')}</b> を、それぞれ <b>${Math.round(catalog.rules.inheritRate * 100)}%</b> の確率で受けつぎます。属性は ${typeTag(F.type)} か ${typeTag(M.type)}。見た目は両親をまぜた子になります。</p>
           <button class="btn gold block" id="go" style="font-size:18px">💞 配合する！${F.fee ? ` (種付け料 ${F.fee} コイン)` : ''}</button></div>` : ''}`;
@@ -500,6 +502,31 @@
     const load = async () => { try { draw((await api('/mon/board')).posts); } catch (e) { toast(e.message, true); } };
     await load();
     const iv = setInterval(() => { if (!$('#cm') || document.activeElement === $('#cm')) return; load(); }, 6000);
+    cleanup = () => clearInterval(iv);
+  }
+
+  // ---------- メスモンスターショップ (毎朝 7 時に 6 体・先着順・1 人 1 日 1 体) ----------
+  async function viewShop() {
+    const draw = async () => {
+      const s = await api('/mon/shop');
+      const left = Math.max(0, s.next - Date.now()), hh = Math.floor(left / 3600000), mm = Math.floor(left / 60000) % 60;
+      app.innerHTML = `${head('🛒 メスショップ', '#')}
+        <div class="card center"><b>本日の品ぞろえ</b><p class="small" style="margin:4px 0">先着順！ 売り切れたら終わり。1 人 1 日 1 体まで · 次の入れかえは 7:00 (あと ${hh}時間${mm}分)</p>${s.bought ? '<p class="small" style="margin:0;color:#e67700;font-weight:800">✅ 今日はもう買いました</p>' : ''}</div>
+        <div class="grid">${s.items.map((it) => { const m = { ...it.monster, id: 'shop' + it.id, score: 0, status: 'active' };
+          return `<div class="mcard ${it.sold ? 'dim' : ''}" style="cursor:default"><span class="rk r-${esc(m.rank)}">${esc(m.rank)}</span><span class="sx f">♀</span>${MonArt.svg(m.look, m.type, { rank: m.rank })}
+            <b>${esc(m.name)}</b><span class="meta">${typeTag(m.type)} · 技 ${m.skills.length} 個</span>
+            <div class="small" style="margin:4px 0">HP ${m.hp} 攻 ${m.atk} 魔 ${m.mag} 防 ${m.def}</div>
+            ${it.sold ? `<span class="st">${it.mine ? '✅ あなたが購入' : `売り切れ (${esc(it.buyer?.displayName || '')})`}</span>`
+              : `<button class="btn gold sm block" data-buy="${it.id}" data-price="${it.price}" ${s.bought ? 'disabled' : ''}>🪙 ${Number(it.price).toLocaleString()} で買う</button>`}</div>`; }).join('')}</div>`;
+      $$('[data-buy]').forEach((b) => b.onclick = async () => {
+        if (!confirm(`${b.dataset.price} コインで買いますか？`)) return;
+        b.disabled = true;
+        try { const r = await api(`/mon/shop/${b.dataset.buy}/buy`, { method: 'POST' }); await refresh(); toast(`${r.monster.name} がなかまになった！`); location.hash = '#mon/' + r.monster.id; }
+        catch (e) { toast(e.message, true); draw(); }
+      });
+    };
+    await draw();
+    const iv = setInterval(() => { if (location.hash.startsWith('#shop')) draw().catch(() => {}); }, 8000);
     cleanup = () => clearInterval(iv);
   }
 

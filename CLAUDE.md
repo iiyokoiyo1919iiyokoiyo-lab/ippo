@@ -35,6 +35,7 @@
 - IppO の中の iframe で開くミニアプリ (`#/monster` → `/games/monster/`)。コインはぶんぼうぐバトラーズと共用 (`ctx.cbCoins`)
 - 技は `monster.js` の `SKILL_LIST` に足す (コマンドは全部ちがう並びにする。重なると起動時にエラー)。新技は `release` の時刻から使える
 - 新技は、それを持った公式の種モンを `OFFICIAL_STUDS` に足して配る (登場時刻つき)。だれでも種付け料で配合できる
+- メスモンスターショップ: 毎朝 7 時に 6 体 (B 3・A 2・S 1)・先着順・1 人 1 日 1 体 (`SHOP_LEVELS` / `SHOP_RANKS`)。共通の種モンは属性ごとに 1 体・種付け料 30 (`COMMON_STUDS`)
 - セリは毎時 5 分 (テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
 
 ## そのほか
