@@ -31,7 +31,7 @@
 - 高難易度クエスト (`QUESTS` の `hard: true`) も同じ: 敵は先を読む CPU、`boost` は `node tools/tune_oni.js` の `quest:<id>` の結果を入れる
 
 ## ブリードモンスターズ (monster.js・public/games/monster/)
-- 2026-11-20 8:45 (日本時間) に一般解放 (`monster.js` の `OPEN_AT`。環境変数 `MON_OPEN_AT` で上書き)。それまでは環境変数 `MON_TESTERS` のユーザーだけ (未設定なら RCN413。`*` で全員に解放)。ほかの人は API・接続とも 403、一覧にも出ない
+- 2026-11-20 8:25 (日本時間) に一般解放 (予定の 8:45 から前倒し) (`monster.js` の `OPEN_AT`。環境変数 `MON_OPEN_AT` で上書き)。それまでは環境変数 `MON_TESTERS` のユーザーだけ (未設定なら RCN413。`*` で全員に解放)。ほかの人は API・接続とも 403、一覧にも出ない
 - IppO の中の iframe で開くミニアプリ (`#/monster` → `/games/monster/`)。コインはぶんぼうぐバトラーズと共用 (`ctx.cbCoins`)
 - 防御 (`GUARD`・↓↓): どのモンスターも使える。相手が同じラウンドの同じ回に撃った技を無効にする (撃ってこなければ空振り)。技のコマンドは ↓↓ と重ねない
 - 技は `monster.js` の `SKILL_LIST` に足す (コマンドは全部ちがう並びにする。重なると起動時にエラー)。新技は `release` の時刻から使える

@@ -278,7 +278,7 @@ module.exports = function install(app, ctx) {
   // テスト中: 遊べるのはテスターだけ (環境変数 MON_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413)。ほかの人には API もバトルも開かない
   const TESTERS = new Set(String(process.env.MON_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
   // 一般解放: 2026-11-20 8:45 (日本時間) からはログインしている全員が遊べる (環境変数 MON_OPEN_AT = ミリ秒の時刻で上書き)
-  const OPEN_AT = Number(process.env.MON_OPEN_AT) || Date.parse('2026-11-20T08:45:00+09:00');
+  const OPEN_AT = Number(process.env.MON_OPEN_AT) || Date.parse('2026-11-20T08:25:00+09:00');
   const isTester = (u) => !!u && (Date.now() >= OPEN_AT || TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase()));
   app.get('/api/mon/access', (req, res) => res.json({ ok: isTester(req.user) }));
   app.use('/api/mon', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'ブリードモンスターズはまだ準備中です' })));
