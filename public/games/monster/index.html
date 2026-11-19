@@ -72,9 +72,39 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 @keyframes flash{0%{opacity:0}20%{opacity:.85}100%{opacity:0}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes eggw{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}
-.ma-rays{transform-origin:60px 62px;animation:spin 18s linear infinite}
-.ma-halo{transform-origin:60px 62px;animation:spin 6s linear infinite}
-@media (prefers-reduced-motion: reduce){.ma-rays,.ma-halo{animation:none}}
+.ma-rays{transform-box:view-box;transform-origin:60px 64px;animation:spin 18s linear infinite}
+.ma-halo{transform-box:view-box;transform-origin:60px 64px;animation:spin 6s linear infinite}
+/* モンスターの待機アニメ (軽い transform と opacity だけ) */
+.ma-idle{transform-box:view-box;transform-origin:60px 112px;animation:ma-breath 2.6s ease-in-out infinite}
+.ma-idle.float{animation:ma-float 3s ease-in-out infinite}
+.ma-eye{transform-box:view-box;animation:ma-blink 4.6s infinite}
+.ma-flap{transform-box:view-box;transform-origin:60px 70px;animation:ma-flap 1.8s ease-in-out infinite}
+.ma-flick{transform-box:fill-box;transform-origin:50% 100%;animation:ma-flick .7s ease-in-out infinite alternate}
+.ma-ember,.ma-mote{animation:ma-rise 2.4s ease-in infinite}.ma-ember.d1,.ma-mote.d1{animation-delay:.8s}.ma-ember.d2,.ma-mote.d2{animation-delay:1.6s}
+.ma-bub{animation:ma-rise 3s ease-in-out infinite}.ma-bub.d1{animation-delay:1s}.ma-bub.d2{animation-delay:2s}
+.ma-sway{transform-box:fill-box;transform-origin:50% 100%;animation:ma-sway 2.2s ease-in-out infinite alternate}
+.ma-glow,.ma-pulse{animation:ma-glow 1.8s ease-in-out infinite alternate}
+.ma-tw{transform-box:fill-box;transform-origin:50% 50%;animation:ma-tw 1.6s ease-in-out infinite}.ma-tw.d2{animation-delay:.5s}.ma-tw.d3{animation-delay:1s}
+.ma-flo{animation:ma-flo 2.4s ease-in-out infinite}
+.ma-wisp{transform-box:fill-box;transform-origin:50% 0;animation:ma-wisp 1.6s ease-in-out infinite alternate}
+.ma-gshadow{transform-box:fill-box;transform-origin:50% 50%;animation:ma-gsh 3s ease-in-out infinite}
+@keyframes ma-breath{0%,100%{transform:scale(1,1)}50%{transform:scale(1.025,.975)}}
+@keyframes ma-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes ma-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes ma-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.9)}}
+@keyframes ma-flick{from{transform:scale(1,1)}to{transform:scale(.9,1.12)}}
+@keyframes ma-rise{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-26px);opacity:0}}
+@keyframes ma-sway{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+@keyframes ma-glow{from{opacity:.6}to{opacity:1}}
+@keyframes ma-tw{0%,100%{transform:scale(.4);opacity:.3}50%{transform:scale(1.1);opacity:1}}
+@keyframes ma-flo{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes ma-wisp{from{transform:skewX(-6deg)}to{transform:skewX(6deg)}}
+@keyframes ma-gsh{0%,100%{transform:scale(1)}50%{transform:scale(.8)}}
+/* 選んだとき・バトル登場 */
+.mcard:active .ma-idle,.mcard.sel .ma-idle{animation:ma-hop .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes ma-hop{0%{transform:translateY(0)}40%{transform:translateY(-10px) scale(1.04)}100%{transform:translateY(0)}}
+@keyframes ma-enter{0%{transform:translateY(30px) scale(.3);opacity:0;filter:brightness(3)}60%{opacity:1;filter:brightness(1.6)}100%{transform:none;filter:none}}
+@media (prefers-reduced-motion: reduce){.ma-rays,.ma-halo,.ma-idle,.ma-eye,.ma-flap,.ma-flick,.ma-ember,.ma-mote,.ma-bub,.ma-sway,.ma-glow,.ma-pulse,.ma-tw,.ma-flo,.ma-wisp,.ma-gshadow,.ftr .mon{animation:none!important}}
 /* ---- バトル ---- */
 .bt{position:relative;border-radius:20px;overflow:hidden;background:radial-gradient(circle at 50% 40%,#3b2f8f,#14123a 70%);color:#fff;padding:10px;min-height:520px}
 .bt-side{display:flex;align-items:center;gap:8px}
@@ -100,7 +130,7 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 .pl .small{font-family:ui-monospace,monospace;font-size:10px}
 .ftr{position:absolute;bottom:20px;width:108px;height:108px;z-index:2;transition:transform .23s cubic-bezier(.3,.7,.3,1)}
 .ftr.me{left:8%}.ftr.foe{right:8%}
-.ftr .mon{width:100%;height:100%;animation:bob 1.6s ease-in-out infinite}
+.ftr .mon{width:100%;height:100%;animation:ma-enter .7s cubic-bezier(.2,1.4,.4,1) both,bob 1.6s ease-in-out .7s infinite}
 .ftr.foe .mon{animation-delay:.8s}
 .ftr .mon .ma-svg{width:100%;height:100%}
 .ftr.me .mon .ma-svg{transform:scaleX(-1)}
@@ -216,7 +246,7 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 </head>
 <body>
 <div id="app"><p class="empty">よみこみ中…</p></div>
-<script src="/games/monster/mon-art.js?v=1"></script>
+<script src="/games/monster/mon-art.js?v=2"></script>
 <script src="/games/monster/mon.js?v=9"></script>
 </body>
 </html>
