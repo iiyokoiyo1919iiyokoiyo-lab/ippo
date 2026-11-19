@@ -158,7 +158,7 @@ const PULL_COST = 100, TEN_COST = 900, PITY = 80;
 // ---------- 期間限定のガチャのセール (この期間だけ値段が変わる。終わると自動で元にもどる) ----------
 // テストのときは環境変数 CB_SALE_START / CB_SALE_END (ミリ秒の時刻) で上書きできる
 const SALES = [
-  { name: '3日間限定セール', start: Date.parse('2026-11-17T16:45:00+09:00'), end: Date.parse('2026-11-20T16:45:00+09:00'), pull: 30, ten: 270 },
+  { name: '限定セール', start: Date.parse('2026-11-17T16:45:00+09:00'), end: Date.parse('2026-11-23T16:45:00+09:00'), pull: 30, ten: 270 }, // 11/20 16:45 まで → 11/23 16:45 まで延長
 ];
 if (Number(process.env.CB_SALE_START) && Number(process.env.CB_SALE_END)) Object.assign(SALES[0], { start: Number(process.env.CB_SALE_START), end: Number(process.env.CB_SALE_END) });
 function pricesNow(now = Date.now()) {
@@ -175,7 +175,7 @@ const RATE_UPS = [
 // テストのときは環境変数 CB_PICKUP_START (ミリ秒の時刻) で上書きできる
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
-  { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T16:45:00+09:00') }, // タドコロ 1 体で 2% (セールと同じ 11/20 16:45 まで)
+  { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ 1 体で 2% (11/20 8:29 まで。8:30 から筆の剣士)
   { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:30:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:30〜11/21 8:30)
 ];
 if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
