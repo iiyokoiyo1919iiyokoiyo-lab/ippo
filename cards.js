@@ -553,7 +553,7 @@ const QUESTS = [
     enemy: [['raijin', 20], ['scissors', 20], ['gold', 20]],
     titles: { 1: '栗りん最速クリア🌰', 2: '栗りん準最速クリア🌰' }, // 1 番目・2 番目にクリアした人の称号 (プロフィールなどに出る)
     start: Date.parse('2026-11-19T08:00:00+09:00'), end: Date.parse('2026-11-22T08:00:00+09:00') },
-  { id: 'suishinya-2026', name: '水深夜', boss: 'ウォーターミッドナイト', emoji: '🌊', reward: 'watermid', bg: 'suishinya', hard: true, boost: 1.1, // 敵の能力 1.1 倍
+  { id: 'suishinya-2026', name: '水深夜', boss: 'ウォーターミッドナイト', emoji: '🌊', reward: 'watermid', bg: 'suishinya', hard: true, boost: 1.5, // 敵の能力 1.5 倍 (1.1 → 1.5 に強化)
     award: '深海に静けさが戻った…伝説の始まりだ🌊🌊🌊',
     hint: '紙属性クエスト: 敵は全員 📄つつむ → ✂️きるが有利！',
     pr: 'わざ「説教」は相手の攻撃力を 0.6 倍にして、味方の毒を治す！ 敵は先を読む強い CPU。\n紙属性クエスト: 敵は全員つつむ。✂️きるのキャラが有利！',
