@@ -105,7 +105,8 @@ function newMonster({ type = pick(TYPE_IDS), sex = rnd() < 0.5 ? 'm' : 'f', leve
 }
 
 // ---------- バトルの計算 (純粋な関数。テストでも使う) ----------
-// state: { mons: [a, b] (hp・能力・技・属性), first: 0|1, round }。cmds[i]: そのラウンドに入力したキーの並び
+// state: { mons: [a, b] (hp・能力・技・属性), first: 0|1, round }。cmds[i]: そのラウンドに確定したコマンドの並び (いくつでも)
+// 先攻の 1 つ目 → 後攻の 1 つ目 → 先攻の 2 つ目 … と交互に出す (片方が多ければ、残りはそのあと続けて出す)
 function matchSkill(mon, keys) { return mon.skills.map((id) => SKILLS[id]).find((s) => s && s.cmd === keys) || null; }
 function damage(att, def, skill, r) {
   const type = skill.kind === 'punch' ? att.type : skill.type;
@@ -116,11 +117,12 @@ function damage(att, def, skill, r) {
 }
 function resolveRound(state, cmds, r = rnd) {
   const ev = [];
-  const order = [state.first, 1 - state.first];
-  for (const p of order) {
+  const lists = cmds.map((c) => (Array.isArray(c) ? c : c ? [c] : []).map(String));
+  const steps = [];
+  for (let k = 0; k < Math.max(lists[0].length, lists[1].length, 1); k++) for (const p of [state.first, 1 - state.first]) if (k < lists[p].length || (k === 0 && !lists[p].length)) steps.push([p, lists[p][k] || '']);
+  for (const [p, keys] of steps) {
     const me = state.mons[p], foe = state.mons[1 - p];
     if (me.hp <= 0 || foe.hp <= 0) continue;
-    const keys = String(cmds[p] || '');
     const sk = keys ? matchSkill(me, keys) : null;
     if (!sk) { ev.push({ k: 'miss', p, keys, empty: !keys }); continue; }
     const d = damage(me, foe, sk, r);
@@ -133,6 +135,12 @@ function resolveRound(state, cmds, r = rnd) {
   if (!alive[0] || !alive[1]) state.winner = alive[0] ? 0 : alive[1] ? 1 : -1;
   else if (state.round >= 30) { const pct = state.mons.map((m) => m.hp / m.maxHp); state.winner = pct[0] === pct[1] ? -1 : pct[0] > pct[1] ? 0 : 1; ev.push({ k: 'timeup' }); }
   return ev;
+}
+// CPU: 10 秒で打てるだけ打つ (1 キーおよそ 0.6 秒 + 決定)。長いコマンドほど失敗しやすい
+function cpuCommands(mon, r = rnd, ms = 10_000) {
+  const out = []; let t = 600 + r() * 900;
+  for (let i = 0; i < 8; i++) { const c = cpuCommand(mon, r); const need = c.length * (500 + r() * 300) + 400; if (t + need > ms) break; t += need; out.push(c); }
+  return out;
 }
 // CPU: 持っている技からえらぶ。長いコマンドほど入力に失敗しやすい
 function cpuCommand(mon, r = rnd, skill = 0.5) {
@@ -467,8 +475,8 @@ module.exports = function install(app, ctx) {
   }
   function nextRound(b) {
     if (b.ended) return;
-    b.cmds = [null, null];
-    if (!b.uids[1]) b.cmds[1] = cpuCommand(b.state.mons[1], rnd, b.mode === 'cpu' ? 0.5 : 0.5);
+    b.cmds = [[], []];
+    if (!b.uids[1]) b.cmds[1] = cpuCommands(b.state.mons[1], rnd, INPUT_MS);
     b.deadline = Date.now() + INPUT_MS;
     b.uids.forEach((u) => u && sendTo(u, { t: 'input', round: b.state.round + 1, deadline: b.deadline, ms: INPUT_MS, state: pub(b) }));
     clearTimeout(b.timer); b.timer = setTimeout(() => resolve(b), INPUT_MS + 400);
@@ -476,8 +484,8 @@ module.exports = function install(app, ctx) {
   function resolve(b) {
     if (b.ended) return;
     clearTimeout(b.timer);
-    const events = resolveRound(b.state, b.cmds.map((c) => c || ''));
-    b.uids.forEach((u) => u && sendTo(u, { t: 'result', events, cmds: b.cmds.map((c) => c || ''), state: pub(b) }));
+    const events = resolveRound(b.state, b.cmds);
+    b.uids.forEach((u) => u && sendTo(u, { t: 'result', events, cmds: b.cmds, state: pub(b) }));
     if (b.state.winner !== null) { b.timer = setTimeout(() => finish(b, b.state.winner), Math.min(SHOW_MS, 2500)); return; }
     b.timer = setTimeout(() => nextRound(b), SHOW_MS);
   }
@@ -524,7 +532,7 @@ module.exports = function install(app, ctx) {
     ws.isAlive = true; ws.on('pong', () => { ws.isAlive = true; });
     const iv = setInterval(() => { if (!ws.isAlive) return ws.terminate(); ws.isAlive = false; try { ws.ping(); } catch {} }, 25_000);
     const b = battleOf.get(uid);
-    if (b && !b.ended) { const i = b.uids.indexOf(uid); clearTimeout(b.left[i]); b.left[i] = null; sendTo(uid, { t: 'start', mode: b.mode, you: i, players: b.players, state: pub(b), resumed: true }); if (b.deadline > Date.now()) sendTo(uid, { t: 'input', round: b.state.round + 1, deadline: b.deadline, ms: INPUT_MS, state: pub(b), submitted: !!b.cmds[i] }); }
+    if (b && !b.ended) { const i = b.uids.indexOf(uid); clearTimeout(b.left[i]); b.left[i] = null; sendTo(uid, { t: 'start', mode: b.mode, you: i, players: b.players, state: pub(b), resumed: true }); if (b.deadline > Date.now()) sendTo(uid, { t: 'input', round: b.state.round + 1, deadline: b.deadline, ms: INPUT_MS, state: pub(b), queued: b.cmds[i] }); }
     ws.on('message', (raw) => {
       let m; try { m = JSON.parse(raw); } catch { return; }
       if (!m || typeof m !== 'object') return;
@@ -555,10 +563,12 @@ module.exports = function install(app, ctx) {
       }
       if (m.t === 'cmd') { // 入力したコマンド (十字キーの並び)。1 ラウンド 1 回
         const bb = battleOf.get(uid); if (!bb || bb.ended) return;
-        const i = bb.uids.indexOf(uid); if (bb.cmds[i] !== null) return;
-        bb.cmds[i] = String(m.keys || '').toUpperCase().replace(/[^UDLR]/g, '').slice(0, 16);
-        const o = bb.uids[1 - i]; if (o) sendTo(o, { t: 'opponentReady' });
-        if (bb.cmds[0] !== null && bb.cmds[1] !== null) resolve(bb);
+        // 入力時間のあいだは、確定しても続けて何個でも打てる (1 ラウンド 12 個まで)。時間になったらまとめて出す
+        const i = bb.uids.indexOf(uid); if (Date.now() > bb.deadline + 300 || bb.cmds[i].length >= 12) return;
+        const keys = String(m.keys || '').toUpperCase().replace(/[^UDLR]/g, '').slice(0, 16); if (!keys) return;
+        bb.cmds[i].push(keys);
+        sendTo(uid, { t: 'queued', n: bb.cmds[i].length });
+        const o = bb.uids[1 - i]; if (o) sendTo(o, { t: 'opponentReady', n: bb.cmds[i].length });
       }
       if (m.t === 'cancel') { leave(uid); sendTo(uid, { t: 'cancelled' }); }
       if (m.t === 'surrender') { const bb = battleOf.get(uid); if (bb) finish(bb, 1 - bb.uids.indexOf(uid), 'surrender'); }
@@ -590,4 +600,4 @@ module.exports = function install(app, ctx) {
   // テスト用: セリをすぐ始める (MON_AUCTION_TEST=1 のときだけ)
   if (process.env.MON_AUCTION_TEST === '1') app.post('/api/mon/auction/test-start', (req, res) => { if (!auction) startAuction(Date.now()); res.json(auctionView()); });
 };
-Object.assign(module.exports, { TYPES, typeMult, SKILLS, POWER, resolveRound, cpuCommand, matchSkill, newMonster, mixLook, randomLook, powerOf, rankOf, strongestSkill, RANKS, INHERIT_RATE, MAX_CHILDREN, STUD_SCORE });
+Object.assign(module.exports, { TYPES, typeMult, SKILLS, POWER, resolveRound, cpuCommand, cpuCommands, matchSkill, newMonster, mixLook, randomLook, powerOf, rankOf, strongestSkill, RANKS, INHERIT_RATE, MAX_CHILDREN, STUD_SCORE });

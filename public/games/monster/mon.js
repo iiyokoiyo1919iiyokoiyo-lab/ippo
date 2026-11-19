@@ -220,7 +220,7 @@
     const mode = params.get('mode'), monId = params.get('mon'), code = params.get('code'), comment = params.get('comment') || '';
     app.innerHTML = `${head('⚔️ バトル', '#fight')}<div class="bt" id="bt"><div class="ovl"><div class="toss"><p style="animation:none">${mode === 'random' ? '対戦相手をさがしています…' : mode === 'board' ? '📋 掲示板で対戦相手を募集中…' : 'じゅんび中…'}</p><span id="wcode"></span><button class="btn sm" id="cancel" style="pointer-events:auto">やめる</button></div></div></div>`;
     const bt = $('#bt');
-    let ws = null, you = 0, st = null, keys = '', sent = false, deadline = 0, timer = 0, players = [], log = [], ended = false, busy = false;
+    let ws = null, you = 0, st = null, keys = '', queued = [], closed = false, oppN = 0, deadline = 0, timer = 0, players = [], log = [], ended = false, busy = false;
     const wsSend = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
     $('#cancel').onclick = () => { wsSend({ t: 'cancel' }); location.hash = '#fight'; };
     const mySkills = () => st.mons[you].skills;
@@ -233,11 +233,12 @@
       const match = mySkills().find((s) => s.cmd === keys);
       bt.innerHTML = `${side(foe, true)}
         <div class="bt-log">${log.slice(-2).map((l) => `<div>${esc(l)}</div>`).join('') || `ラウンド ${st.round + 1} · ${st.first === you ? 'あなたが先攻' : '相手が先攻'}`}</div>
-        ${phase === 'input' ? `<p class="prompt">${sent ? '相手を待っています…' : 'コマンドを打って技を入力！'}</p><div class="timer"><i id="tbar" style="width:100%"></i></div>
+        ${phase === 'input' ? `<p class="prompt">${closed ? '時間切れ！ 技を出すよ' : queued.length ? `続けて打てる！ (${queued.length} 個確定)` : 'コマンドを打って技を入力！'}${oppN ? `<small style="display:block;font-size:11px;opacity:.8">相手は ${oppN} 個確定</small>` : ''}</p><div class="timer"><i id="tbar" style="width:100%"></i></div>
+          ${queued.length ? `<div class="queue">${queued.map((q, i) => { const s = mySkills().find((x) => x.cmd === q); return `<span class="${s ? 'ok' : 'ng'}">${i + 1}. ${s ? esc(s.name) : '不発'}</span>`; }).join('')}</div>` : ''}
           <div class="bt-mid"><div><div class="slots ${match ? 'match' : ''}" id="slots">${[...keys].map((k) => `<span>${ARROW[k]}</span>`).join('') || '<small style="opacity:.6">↑↓←→ を押してコマンドを入力</small>'}</div>
             ${match ? `<p style="margin:4px 0;font-weight:900;color:#ffe066">✨ ${esc(match.name)}！</p>` : ''}
-            <div class="pad"><span class="c"></span><button data-k="U">↑</button><span class="c"></span><button data-k="L">←</button><button class="c" data-k="X" style="font-size:16px;background:rgba(255,255,255,.2);color:#fff;box-shadow:none" ${sent ? 'disabled' : ''}>消す</button><button data-k="R">→</button><span class="c"></span><button data-k="D">↓</button><span class="c"></span></div>
-            <button class="btn gold block" id="ok" ${sent ? 'disabled' : ''} style="font-size:20px">決定！</button></div>
+            <div class="pad"><span class="c"></span><button data-k="U">↑</button><span class="c"></span><button data-k="L">←</button><button class="c" data-k="X" style="font-size:16px;background:rgba(255,255,255,.2);color:#fff;box-shadow:none" ${closed ? 'disabled' : ''}>消す</button><button data-k="R">→</button><span class="c"></span><button data-k="D">↓</button><span class="c"></span></div>
+            <button class="btn gold block" id="ok" ${closed || !keys ? 'disabled' : ''} style="font-size:20px">決定！</button></div>
             <div class="cmdlist"><b style="font-size:12px">コマンド一覧</b>${mySkills().map((s) => `<div class="${s.cmd === keys ? 'hit' : s.cmd.startsWith(keys) && keys ? 'hit' : ''}"><b>${esc(s.name)}</b><span class="cmd">${arrows(s.cmd)}</span></div>`).join('')}</div></div>`
           : `<div style="min-height:300px"></div>`}
         ${side(me2, false)}
@@ -247,13 +248,14 @@
       $('#sur', bt)?.addEventListener('click', () => { if (confirm('こうさんしますか？')) wsSend({ t: 'surrender' }); });
     }
     function press(k) {
-      if (sent || ended || !st) return;
+      if (closed || ended || !st) return;
       if (k === 'X') keys = keys.slice(0, -1); else if (keys.length < 14) keys += k;
       const before = mySkills().find((s) => s.cmd === keys);
       render('input');
       if (before && k !== 'X') cutin(before, true);
     }
-    function submit() { if (sent || ended) return; sent = true; wsSend({ t: 'cmd', keys }); render('input'); }
+    // 決定: 確定した技は順番にならび、時間があるあいだは続けて何個でも打てる
+    function submit() { if (closed || ended || !keys) return; wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; render('input'); }
     const onKey = (e) => { const k = { ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', Backspace: 'X' }[e.key]; if (k) { e.preventDefault(); press(k); } else if (e.key === 'Enter') submit(); };
     document.addEventListener('keydown', onKey);
     function cutin(s, preview = false, who = you) {
@@ -279,12 +281,14 @@
           return;
         }
         if (m.t === 'input') {
-          st = m.state; keys = ''; sent = !!m.submitted; deadline = Date.now() + (m.deadline - Date.now());
+          st = m.state; keys = ''; queued = Array.isArray(m.queued) ? m.queued.slice() : []; closed = false; oppN = 0; deadline = Date.now() + (m.deadline - Date.now());
           render('input'); clearInterval(timer);
-          timer = setInterval(() => { const b = $('#tbar'); if (!b) return; const left = Math.max(0, deadline - Date.now()); b.style.width = (left / m.ms) * 100 + '%'; if (left <= 0) { clearInterval(timer); if (!sent) submit(); } }, 100);
+          timer = setInterval(() => { const b = $('#tbar'); if (!b) return; const left = Math.max(0, deadline - Date.now()); b.style.width = (left / m.ms) * 100 + '%';
+            if (left <= 0) { clearInterval(timer); if (keys && mySkills().some((s) => s.cmd === keys)) submit(); closed = true; render('input'); } }, 100);
           return;
         }
-        if (m.t === 'opponentReady') { if (sent) return; const p = $('.prompt', bt); if (p) p.textContent = 'コマンドを打って技を入力！ (相手は決めました)'; return; }
+        if (m.t === 'opponentReady') { oppN = m.n || oppN + 1; if (!closed) render('input'); return; }
+        if (m.t === 'queued') return;
         if (m.t === 'result') { clearInterval(timer); busy = true; await playEvents(m.events, m.state); busy = false; return; }
         if (m.t === 'opponentLeft') { log.push('相手の接続が切れました'); return; }
         if (m.t === 'end') { while (busy) await new Promise((r) => setTimeout(r, 100)); end(m); }
