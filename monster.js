@@ -486,8 +486,10 @@ module.exports = function install(app, ctx) {
     clearTimeout(b.timer);
     const events = resolveRound(b.state, b.cmds);
     b.uids.forEach((u) => u && sendTo(u, { t: 'result', events, cmds: b.cmds, state: pub(b) }));
-    if (b.state.winner !== null) { b.timer = setTimeout(() => finish(b, b.state.winner), Math.min(SHOW_MS, 2500)); return; }
-    b.timer = setTimeout(() => nextRound(b), SHOW_MS);
+    // 画面で技の演出 (撃ちこむ・大技のビーム) が終わるまで待ってから次のラウンドへ
+    const showMs = Math.max(SHOW_MS, events.reduce((t, e) => t + (e.k === 'skill' ? (e.kind === 'ult' ? 3400 : 2300) : e.k === 'miss' ? 1000 : e.k === 'ko' ? 800 : 0), 700));
+    if (b.state.winner !== null) { b.timer = setTimeout(() => finish(b, b.state.winner), showMs); return; }
+    b.timer = setTimeout(() => nextRound(b), showMs);
   }
   function finish(b, winner, reason = '') {
     if (b.ended) return;

@@ -215,6 +215,36 @@
     draw();
   }
 
+  // ---------- ドット絵 (技の弾・衝撃・背景)。文字の並びを四角のドットで描く ----------
+  const PIX_PAL = { fire: ['#e8590c', '#ff922b', '#fff3bf'], water: ['#1864ab', '#4dabf7', '#e7f5ff'], grass: ['#2b8a3e', '#69db7c', '#d3f9d8'], light: ['#f08c00', '#ffd43b', '#ffffff'], dark: ['#5f3dc4', '#9775fa', '#f3d9fa'], king: ['#b35c00', '#fcc419', '#fff9db'] };
+  const PIX = {
+    orb: ['..1111..', '.122221.', '12233221', '12333321', '12333321', '12233221', '.122221.', '..1111..'],
+    fire: ['....1...', '...121..', '..1221..', '.12321.1', '1233321.', '12333321', '.123321.', '..1111..'],
+    leaf: ['......11', '....1121', '...12221', '..122321', '.122321.', '.12221..', '1221....', '11......'],
+    star: ['...11...', '...21...', '11123111', '.123321.', '..1331..', '.12..21.', '12....21', '1......1'],
+    crown: ['1..1..1.', '12.2.21.', '1232321.', '1233321.', '12222221', '13131311', '11111111', '........'],
+    shade: ['.1.11.1.', '1122221.', '12233221', '12333321', '.233332.', '12233221', '.122221.', '1.1..1.1'],
+    impact: ['1...1...1', '.1..2..1.', '..12321..', '.1233321.', '123333321', '.1233321.', '..12321..', '.1..2..1.', '1...1...1'],
+  };
+  const PIX_SHOT = { fire: PIX.fire, water: PIX.orb, grass: PIX.leaf, light: PIX.star, dark: PIX.shade, king: PIX.crown };
+  function pix(map, pal, px = 5) {
+    const w = map[0].length, h = map.length; let r = '';
+    map.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${pal[Number(ch) - 1] || pal[0]}"/>`; }));
+    return `<svg width="${w * px}" height="${h * px}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">${r}</svg>`;
+  }
+  // 背景: 夜空・ドットの星と月・段々の山・タイルの地面
+  const PIX_BG = (() => {
+    const W = 96, H = 52; let r = `<rect width="${W}" height="${H}" fill="#1b1650"/><rect y="18" width="${W}" height="10" fill="#241d68"/><rect y="28" width="${W}" height="8" fill="#2f2780"/>`;
+    let seed = 7; const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    for (let i = 0; i < 26; i++) r += `<rect x="${Math.floor(rnd() * W)}" y="${Math.floor(rnd() * 26)}" width="1" height="1" fill="${rnd() < 0.3 ? '#ffe066' : '#ffffff'}" opacity="${0.5 + rnd() * 0.5}"/>`;
+    r += `<rect x="78" y="4" width="6" height="6" fill="#fff3bf"/><rect x="77" y="5" width="8" height="4" fill="#fff3bf"/><rect x="80" y="5" width="3" height="3" fill="#ffe066"/>`;
+    const hill = (x0, w, h, col) => { for (let i = 0; i < w; i++) { const hh = Math.round(h * Math.sin((i / w) * Math.PI)); r += `<rect x="${x0 + i}" y="${36 - hh}" width="1" height="${hh}" fill="${col}"/>`; } };
+    hill(-6, 40, 12, '#3b2f8f'); hill(28, 44, 15, '#352a82'); hill(64, 40, 11, '#3b2f8f');
+    for (let y = 36; y < H; y += 4) for (let x = 0; x < W; x += 4) r += `<rect x="${x}" y="${y}" width="4" height="4" fill="${((x + y) / 4) % 2 ? '#2f9e44' : '#37b24d'}"/>`;
+    r += `<rect y="36" width="${W}" height="1" fill="#8ce99a"/>`;
+    return `<svg class="pixbg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" shape-rendering="crispEdges">${r}</svg>`;
+  })();
+
   // ---------- バトル ----------
   function viewBattle(params) {
     const mode = params.get('mode'), monId = params.get('mon'), code = params.get('code'), comment = params.get('comment') || '';
@@ -225,14 +255,25 @@
     $('#cancel').onclick = () => { wsSend({ t: 'cancel' }); location.hash = '#fight'; };
     const mySkills = () => st.mons[you].skills;
     const hpBar = (f) => `<div class="hp"><i style="width:${Math.max(0, (f.hp / f.maxHp) * 100)}%" class="${f.hp / f.maxHp < 0.3 ? 'low' : ''}"></i></div><span class="small">${f.hp}/${f.maxHp}</span>`;
-    const side = (f, foe) => `<div class="bt-side ${foe ? 'foe' : 'me'}" id="${foe ? 'sfoe' : 'sme'}">${MonArt.svg(f.look, f.type, { rank: f.rank })}<div class="bt-info"><b>${esc(f.name)}</b>
-      <span class="small">${esc(players[foe ? 1 - you : you]?.displayName || '')} · ${typeTag(f.type)} · <span class="rk r-${esc(f.rank)}" style="position:static;padding:0 5px">${esc(f.rank)}</span></span>${hpBar(f)}</div></div>`;
+    const plate = (f, who) => `<div class="pl ${who}"><b>${esc(f.name)}</b><span class="pl-sub">${esc(players[who === 'foe' ? 1 - you : you]?.displayName || '')} ${typeTag(f.type)} <span class="rk r-${esc(f.rank)}" style="position:static;padding:0 4px;font-size:10px">${esc(f.rank)}</span></span>${hpBar(f)}</div>`;
+    function buildStage() {
+      const me2 = st.mons[you], foe = st.mons[1 - you];
+      bt.innerHTML = `<div class="stage" id="stage">${PIX_BG}
+        ${plate(me2, 'me')}${plate(foe, 'foe')}
+        <div class="ftr me" id="fme"><div class="mon">${MonArt.svg(me2.look, me2.type, { rank: me2.rank })}</div><i class="shadow"></i></div>
+        <div class="ftr foe" id="ffoe"><div class="mon">${MonArt.svg(foe.look, foe.type, { rank: foe.rank })}</div><i class="shadow"></i></div>
+        <div class="slog" id="slog"></div></div><div id="ctrl"></div>`;
+      updStage();
+    }
+    function updStage() {
+      const sl = $('#slog'); if (sl) sl.textContent = log.slice(-1)[0] || `ラウンド ${st.round + 1} · ${st.first === you ? 'あなたが先攻' : '相手が先攻'}`;
+      [['me', st.mons[you]], ['foe', st.mons[1 - you]]].forEach(([w, f]) => { const i = $(`.pl.${w} .hp i`, bt), n = $(`.pl.${w} .small`, bt); if (i) { i.style.width = Math.max(0, (f.hp / f.maxHp) * 100) + '%'; i.classList.toggle('low', f.hp / f.maxHp < 0.3); } if (n) n.textContent = `${f.hp}/${f.maxHp}`; });
+    }
     function render(phase) {
       if (!$('#bt')) return;
-      const me2 = st.mons[you], foe = st.mons[1 - you];
+      if (!$('#stage')) buildStage(); else updStage();
       const match = mySkills().find((s) => s.cmd === keys);
-      bt.innerHTML = `${side(foe, true)}
-        <div class="bt-log">${log.slice(-2).map((l) => `<div>${esc(l)}</div>`).join('') || `ラウンド ${st.round + 1} · ${st.first === you ? 'あなたが先攻' : '相手が先攻'}`}</div>
+      $('#ctrl').innerHTML = `
         ${phase === 'input' ? `<p class="prompt">${closed ? '時間切れ！ 技を出すよ' : queued.length ? `続けて打てる！ (${queued.length} 個確定)` : 'コマンドを打って技を入力！'}${oppN ? `<small style="display:block;font-size:11px;opacity:.8">相手は ${oppN} 個確定</small>` : ''}</p><div class="timer"><i id="tbar" style="width:100%"></i></div>
           ${queued.length ? `<div class="queue">${queued.map((q, i) => { const s = mySkills().find((x) => x.cmd === q); return `<span class="${s ? 'ok' : 'ng'}">${i + 1}. ${s ? esc(s.name) : '不発'}</span>`; }).join('')}</div>` : ''}
           <div class="bt-mid"><div><div class="slots ${match ? 'match' : ''}" id="slots">${[...keys].map((k) => `<span>${ARROW[k]}</span>`).join('') || '<small style="opacity:.6">↑↓←→ を押してコマンドを入力</small>'}</div>
@@ -240,8 +281,7 @@
             <div class="pad"><span class="c"></span><button data-k="U">↑</button><span class="c"></span><button data-k="L">←</button><button class="c" data-k="X" style="font-size:16px;background:rgba(255,255,255,.2);color:#fff;box-shadow:none" ${closed ? 'disabled' : ''}>消す</button><button data-k="R">→</button><span class="c"></span><button data-k="D">↓</button><span class="c"></span></div>
             <button class="btn gold block" id="ok" ${closed || !keys ? 'disabled' : ''} style="font-size:20px">決定！</button></div>
             <div class="cmdlist"><b style="font-size:12px">コマンド一覧</b>${mySkills().map((s) => `<div class="${s.cmd === keys ? 'hit' : s.cmd.startsWith(keys) && keys ? 'hit' : ''}"><b>${esc(s.name)}</b><span class="cmd">${arrows(s.cmd)}</span></div>`).join('')}</div></div>`
-          : `<div style="min-height:300px"></div>`}
-        ${side(me2, false)}
+          : `<p class="prompt" style="opacity:.85">⚔️ バトル中…</p><div style="min-height:250px"></div>`}
         ${ended ? '' : '<button class="btn sm" id="sur" style="margin-top:8px;background:rgba(255,255,255,.15);color:#fff">こうさん</button>'}`;
       $$('[data-k]', bt).forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
       $('#ok', bt)?.addEventListener('click', submit);
@@ -284,8 +324,8 @@
       const el = document.createElement('div'); el.className = 'ci' + (s.kind === 'ult' ? ' ult' : '');
       el.style.background = `linear-gradient(90deg,transparent,var(--${col}) 15%,var(--${col}) 85%,transparent)`;
       el.innerHTML = `<small>${preview ? 'コマンド認識！' : who === you ? 'あなたの' : '相手の'}${esc(KIND[s.kind])}</small><b>${esc(s.name)}</b>`;
-      bt.append(el); setTimeout(() => el.remove(), 1600);
-      if (s.kind === 'ult' && !preview) { const f = document.createElement('div'); f.className = 'flashb'; bt.append(f); setTimeout(() => f.remove(), 600); }
+      if (!preview) el.classList.add('short');
+      ($('#stage') || bt).append(el); setTimeout(() => el.remove(), preview ? 1600 : 1000);
     }
     function connect() {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/mb`);
@@ -302,6 +342,7 @@
           return;
         }
         if (m.t === 'input') {
+          while (busy) await new Promise((r) => setTimeout(r, 80)); // 演出が終わってから入力にもどる
           st = m.state; keys = ''; queued = Array.isArray(m.queued) ? m.queued.slice() : []; closed = false; oppN = 0; deadline = Date.now() + (m.deadline - Date.now());
           render('input'); clearInterval(timer);
           timer = setInterval(() => { const b = $('#tbar'); if (!b) return; const left = Math.max(0, deadline - Date.now()); b.style.width = (left / m.ms) * 100 + '%';
@@ -321,21 +362,23 @@
       for (const e of events) {
         if (e.k === 'skill') {
           const s = { name: e.name, kind: e.kind, type: e.type };
+          log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！`); updStage();
           cutin(s, false, e.p);
-          await wait(900);
-          const tgt = e.p === you ? '#sfoe' : '#sme';
-          const el = $(tgt, bt); el?.classList.add('shake');
-          const d = document.createElement('div'); d.className = 'dmg'; d.textContent = `-${e.dmg}${e.eff === 'good' ? ' 効果ばつぐん！' : e.eff === 'bad' ? ' いまひとつ' : ''}`;
-          d.style.top = e.p === you ? '60px' : 'auto'; d.style.bottom = e.p === you ? 'auto' : '70px'; d.style.left = '20px'; bt.append(d); setTimeout(() => d.remove(), 1100);
-          prev.mons[1 - e.p].hp = e.hp;
-          const side2 = $(tgt + ' .hp i', bt); if (side2) side2.style.width = Math.max(0, (e.hp / prev.mons[1 - e.p].maxHp) * 100) + '%';
-          log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！ ${e.dmg} ダメージ${e.eff === 'good' ? ' (効果ばつぐん)' : ''}`);
-          await wait(800);
+          await wait(650);
+          await attackFx(e);                                     // 技を相手に撃ちこむ
+          st.mons[1 - e.p].hp = e.hp; prev.mons[1 - e.p].hp = e.hp;
+          popDmg(e);
+          log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！ ${e.dmg} ダメージ${e.eff === 'good' ? ' (効果ばつぐん)' : e.eff === 'bad' ? ' (いまひとつ)' : ''}`); updStage();
+          await wait(650);
         } else if (e.k === 'miss') {
-          const el = document.createElement('div'); el.className = 'ci'; el.style.background = 'linear-gradient(90deg,transparent,#495057 20%,#495057 80%,transparent)';
-          el.innerHTML = `<small>${e.p === you ? 'あなた' : '相手'}</small><b>${e.empty ? '入力なし…' : '不発…'}</b>`; bt.append(el); setTimeout(() => el.remove(), 1600);
-          log.push(`${e.p === you ? 'あなた' : '相手'}の技は${e.empty ? '入力されなかった' : '不発だった'}`); await wait(1000);
-        } else if (e.k === 'ko') { log.push(`${e.p === you ? 'あなた' : '相手'}のモンスターはたおれた！`); }
+          const at = $(e.p === you ? '#fme' : '#ffoe', bt);
+          at?.classList.add('fizzle'); setTimeout(() => at?.classList.remove('fizzle'), 900);
+          const d = document.createElement('div'); d.className = 'pdmg miss'; d.textContent = e.empty ? '…' : '不発！'; placeOver(d, at, -20); ($('#stage') || bt).append(d); setTimeout(() => d.remove(), 1000);
+          log.push(`${e.p === you ? 'あなた' : '相手'}の技は${e.empty ? '入力されなかった' : '不発だった'}`); updStage(); await wait(900);
+        } else if (e.k === 'ko') {
+          const t = $(e.p === you ? '#fme' : '#ffoe', bt); t?.classList.add('ko');
+          log.push(`${e.p === you ? 'あなた' : '相手'}のモンスターはたおれた！`); updStage(); await wait(700);
+        }
       }
       st = ns;
     }
@@ -348,6 +391,51 @@
       refresh().catch(() => {});
     }
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const center = (el) => { const sr = $('#stage').getBoundingClientRect(), r = (el.querySelector('.mon') || el).getBoundingClientRect(); return { x: r.left - sr.left + r.width / 2, y: r.top - sr.top + r.height / 2 }; };
+    function placeOver(d, el, dy = 0) { if (!el) return; const c = center(el); d.style.left = c.x + 'px'; d.style.top = (c.y - 50 + dy) + 'px'; }
+    function popDmg(e) {
+      const tgt = $(e.p === you ? '#ffoe' : '#fme', bt), d = document.createElement('div');
+      d.className = 'pdmg' + (e.eff === 'good' ? ' good' : e.eff === 'bad' ? ' bad' : '') + (e.kind === 'ult' ? ' big' : '');
+      d.innerHTML = `-${e.dmg}${e.eff === 'good' ? '<small>こうかばつぐん!</small>' : e.eff === 'bad' ? '<small>いまひとつ…</small>' : ''}`;
+      placeOver(d, tgt); $('#stage').append(d); setTimeout(() => d.remove(), 1200);
+    }
+    function sprite(cls, html, x, y) { const d = document.createElement('div'); d.className = 'spr ' + cls; d.innerHTML = html; d.style.left = x + 'px'; d.style.top = y + 'px'; $('#stage').append(d); return d; }
+    function burst(x, y, pal, n = 12, big = false) {
+      const im = sprite('impact' + (big ? ' big' : ''), pix(PIX.impact, pal, big ? 8 : 5), x, y); setTimeout(() => im.remove(), 600);
+      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, d = (big ? 70 : 40) + Math.random() * 30;
+        const q = sprite('px', '', x, y); q.style.background = pal[i % 3]; q.style.setProperty('--dx', Math.cos(a) * d + 'px'); q.style.setProperty('--dy', Math.sin(a) * d + 'px'); setTimeout(() => q.remove(), 700); }
+    }
+    async function attackFx(e) {
+      const stage = $('#stage'); if (!stage) return;
+      const atk = $(e.p === you ? '#fme' : '#ffoe', bt), tgt = $(e.p === you ? '#ffoe' : '#fme', bt);
+      const a = center(atk), t = center(tgt), pal = PIX_PAL[e.type] || PIX_PAL.fire, dir = t.x > a.x ? 1 : -1;
+      const hit = () => { tgt.classList.remove('hit'); void tgt.offsetWidth; tgt.classList.add('hit'); };
+      if (e.kind === 'punch') { // 直殴り: 相手に突進して、ドットの衝撃
+        atk.style.setProperty('--dash', `${(t.x - a.x) * 0.62}px`); atk.classList.add('dash');
+        await wait(230); burst(t.x - dir * 18, t.y, pal, 10); hit(); stage.classList.add('jolt');
+        await wait(300); atk.classList.remove('dash'); stage.classList.remove('jolt');
+      } else if (e.kind === 'magic') { // 魔法: 属性の弾がとんでいき、はじける
+        atk.classList.add('cast'); await wait(180);
+        const map = PIX_SHOT[e.type] || PIX.orb, b = sprite('shot', pix(map, pal, 5), a.x, a.y);
+        if (dir < 0) b.firstElementChild.style.transform = 'scaleX(-1)';
+        const trail = setInterval(() => { const r = b.getBoundingClientRect(), sr = stage.getBoundingClientRect(); const q = sprite('trail', '', r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2); q.style.background = pal[1]; setTimeout(() => q.remove(), 400); }, 40);
+        await b.animate([{ transform: 'translate(-50%,-50%) translate(0,0) scale(.6)' }, { transform: `translate(-50%,-50%) translate(${(t.x - a.x) / 2}px,${-40}px) scale(1.1)`, offset: 0.5 }, { transform: `translate(-50%,-50%) translate(${t.x - a.x}px,${t.y - a.y}px) scale(1)` }], { duration: 520, easing: 'ease-in' }).finished;
+        clearInterval(trail); b.remove(); burst(t.x, t.y, pal, 14); hit(); atk.classList.remove('cast');
+        await wait(250);
+      } else { // 大技: 暗くなって力をためる → 巨大なドットのビーム → 大爆発
+        stage.classList.add('dim'); atk.classList.add('charge');
+        const ring = sprite('chargering', '', a.x, a.y); ring.style.borderColor = pal[1]; ring.style.boxShadow = `0 0 20px ${pal[1]}`;
+        await wait(650); ring.remove();
+        const beam = document.createElement('div'); beam.className = 'beam';
+        const x0 = Math.min(a.x, t.x), w = Math.abs(t.x - a.x);
+        beam.style.cssText = `left:${x0}px;top:${a.y - 22}px;width:${w}px;--c1:${pal[0]};--c2:${pal[1]};--c3:${pal[2]};transform-origin:${dir > 0 ? 'left' : 'right'} center`;
+        stage.append(beam);
+        await wait(260); const f = document.createElement('div'); f.className = 'flashb'; stage.append(f); setTimeout(() => f.remove(), 500);
+        burst(t.x, t.y, pal, 22, true); hit(); stage.classList.add('quake');
+        await wait(450); beam.classList.add('out'); burst(t.x, t.y - 20, pal, 12, true);
+        await wait(300); beam.remove(); stage.classList.remove('dim', 'quake'); atk.classList.remove('charge');
+      }
+    }
     connect();
     cleanup = () => { document.removeEventListener('keydown', onKey); clearInterval(timer); ended = true; try { ws.close(); } catch {} };
   }
