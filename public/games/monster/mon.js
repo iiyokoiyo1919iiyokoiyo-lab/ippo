@@ -93,7 +93,9 @@
     $('#go').onclick = async (e) => {
       e.target.disabled = true;
       try { const r = await api('/mon/start', { method: 'POST' }); await refresh();
-        app.innerHTML = `${head('🧬 ようこそ！', '')}<p class="shout">3 体のモンスターが生まれた！</p><div class="grid">${r.monsters.map((m) => mcard(m, { cls: 'reveal' })).join('')}</div><a class="btn primary block" href="#" style="margin-top:10px">はじめる</a>`;
+        app.innerHTML = `${head('🧬 ようこそ！', '')}<p class="shout">3 体のモンスターが生まれた！</p><div class="grid">${r.monsters.map((m) => mcard(m, { cls: 'reveal' })).join('')}</div>
+          <div class="card"><h2>✏️ 名前をつけよう</h2><p class="small muted" style="margin:0">あとからでも、モンスターの画面で変えられます。</p>${r.monsters.map((m) => `<p class="small" style="margin:8px 0 0">${m.sex === 'm' ? '♂' : '♀'} ${typeTag(m.type)}</p>${nameBox(m)}`).join('')}</div><a class="btn primary block" href="#" style="margin-top:10px">はじめる</a>`;
+        bindNames();
       } catch (err) { toast(err.message, true); e.target.disabled = false; }
     };
   }
@@ -116,6 +118,25 @@
         ${ms.length ? `<div class="grid">${ms.map((m) => mcard(m)).join('')}</div>` : '<p class="empty">モンスターがいません。セリで手に入れよう</p>'}</div>`;
   }
 
+  // ---------- 命名 (生まれたとき・買ったとき・詳細画面から。12 文字まで) ----------
+  let nameNext = null; // ショップで買った直後は詳細画面で名前の入力を開く
+  const nameBox = (m, label = '✏️ 名前をつける') => `<form class="namebox" data-name="${esc(m.id)}" style="display:flex;gap:6px;margin:8px 0"><input class="in" name="n" maxlength="12" value="${esc(m.name)}" placeholder="名前 (12 文字まで)" aria-label="名前" autocomplete="off" enterkeyhint="done"><button class="btn primary" style="white-space:nowrap">${label}</button></form>`;
+  function bindNames(root = app) {
+    $$('form.namebox', root).forEach((f) => f.onsubmit = async (e) => {
+      e.preventDefault();
+      const inp = f.querySelector('input'), btn = f.querySelector('button'), name = inp.value.trim();
+      if (!name) return toast('名前を入れてください', true);
+      btn.disabled = true;
+      try {
+        const r = await api(`/mon/monster/${encodeURIComponent(f.dataset.name)}/rename`, { method: 'POST', body: { name } });
+        inp.value = r.monster.name; await refresh();
+        $$('[data-nm]').filter((el) => el.dataset.nm === f.dataset.name).forEach((el) => { el.textContent = r.monster.name; });
+        toast(`「${r.monster.name}」と名づけました`); inp.blur();
+      } catch (err) { toast(err.message, true); }
+      btn.disabled = false;
+    });
+  }
+
   // ---------- モンスターの詳細 ----------
   async function viewMon(id) {
     const { monster: m, owner } = await api('/mon/monster/' + encodeURIComponent(id));
@@ -125,9 +146,9 @@
     const inh = new Set((m.inherited || []).map((x) => x.skill));
     app.innerHTML = `${head(esc(m.name), '#')}
       <div class="card center"><span class="rk r-${esc(m.rank)}" style="position:static;font-size:18px;padding:2px 12px">${esc(m.rank)}</span>
-        ${art(m, 'big-art')}<p style="margin:4px 0"><b style="font-size:20px">${esc(m.name)}</b> <span class="sx ${m.sex === 'm' ? 'm' : 'f'}" style="position:static">${m.sex === 'm' ? '♂' : '♀'}</span> ${typeTag(m.type)} · 第${m.gen}世代</p>
+        ${art(m, 'big-art')}<p style="margin:4px 0"><b style="font-size:20px" data-nm="${esc(m.id)}">${esc(m.name)}</b>${mine ? ' <button class="btn sm" id="nmopen" aria-label="名前を変える">✏️</button>' : ''} <span class="sx ${m.sex === 'm' ? 'm' : 'f'}" style="position:static">${m.sex === 'm' ? '♂' : '♀'}</span> ${typeTag(m.type)} · 第${m.gen}世代</p>
         <p class="small" style="margin:0"><span class="st ${esc(m.status)}">${m.status === 'training' ? `育成中 あと${m.trainLeft}ターン` : m.isStud ? `種モン (種付け料 ${m.studFee} コイン)` : esc(STATUS[m.status])}</span> 市場価値 <span class="val">${Number(m.score).toLocaleString()}</span> · ${m.wins}勝${m.losses}敗 (対人 ${m.pvpWins}勝${m.pvpLosses}敗)${m.sex === 'f' ? ` · 産んだ子 ${m.children}/${catalog.rules.maxChildren}` : ''}</p>
-        ${mine ? '' : `<p class="small muted">持ち主: ${esc(owner.displayName)}</p>`}</div>
+        ${mine ? `<div id="nmwrap" ${nameNext === m.id ? '' : 'hidden'}>${nameNext === m.id ? '<p class="small" style="margin:6px 0 0"><b>🎉 なかまになった！ 名前をつけてあげよう</b></p>' : ''}${nameBox(m)}</div>` : `<p class="small muted">持ち主: ${esc(owner.displayName)}</p>`}</div>
       ${mine ? `<div class="card" id="acts"></div>` : ''}
       ${(m.mutations || []).length ? mutCard(m) : ''}
       <div class="card"><h2>📊 能力</h2><div class="stats">${st('hp', 'HP', 500)}${st('atk', '攻撃', 150)}${st('mag', '魔力', 150)}${st('def', '防御', 150)}${st('spd', '素早さ', 150)}</div></div>
@@ -135,6 +156,10 @@
       <div class="card"><h2>🧬 血統</h2><div class="lin">${parent(m.father, '父')}${parent(m.mother, '母')}</div>
         ${(m.inherited || []).length ? `<p class="small">受けついだ技: ${(m.inherited).map((x) => `${esc(x.from)}の「${esc(m.skills.find((s) => s.id === x.skill)?.name || x.skill)}」`).join('・')}</p>` : ''}</div>`;
     if (!mine) return;
+    bindNames();
+    const openName = () => { const w = $('#nmwrap'); w.hidden = false; const i = w.querySelector('input'); i.focus(); i.select(); };
+    $('#nmopen').onclick = openName;
+    if (nameNext === m.id) { nameNext = null; setTimeout(() => $('#nmwrap input')?.focus(), 50); }
     const acts = $('#acts'), b = [];
     if (m.status === 'training') b.push(`<a class="btn gold block" href="#train/${m.id}">🏋️ 育成する (あと ${m.trainLeft} ターン)</a>`);
     if (m.status === 'active') b.push(`<a class="btn primary block" href="#fight?mon=${m.id}">⚔️ このモンスターで戦う</a>`);
@@ -151,7 +176,7 @@
     $('#stud', acts)?.addEventListener('click', () => { const fee = prompt('種付け料 (コイン) を決めてください', '100'); if (fee !== null) act('stud', { fee: Number(fee) }, '種モンになりました'); });
     $('#list', acts)?.addEventListener('click', () => { const price = prompt('スタート価格 (コイン)', '50'); if (price !== null) act('list', { price: Number(price) }, `次のセリ (${fmtTime(me.next)}) に出品しました`); });
     $('#unlist', acts)?.addEventListener('click', () => act('unlist', {}, '出品をやめました'));
-    $('#rename', acts)?.addEventListener('click', () => { const name = prompt('新しい名前 (12 文字まで)', m.name); if (name) act('rename', { name }, '名前を変えました'); });
+    $('#rename', acts)?.addEventListener('click', () => { openName(); $('#nmwrap').scrollIntoView({ block: 'center', behavior: 'smooth' }); });
   }
 
   // ---------- 育成 (10 ターン) ----------
@@ -213,10 +238,11 @@
     app.innerHTML = `${head('💞 配合', '#')}<div class="card center"><div class="lin" style="margin-bottom:8px">${mcard(F, { href: '' })}${mcard(M, { href: '' })}</div><span class="egg">🥚</span><p class="shout">タマゴが…！？</p></div>`;
     if (mut && (mut.new.length || mut.discoveries.length)) return setTimeout(() => mutantBirth(c, mut), 1400);
     setTimeout(() => {
-      app.innerHTML = `${head('💞 配合', '#')}<div class="card center"><p class="shout">🎉 ${esc(c.name)} が生まれた！</p>
-        <div class="reveal">${art(c, 'big-art')}</div><p><span class="rk r-${esc(c.rank)}" style="position:static;padding:2px 10px">${esc(c.rank)}</span> ${c.sex === 'm' ? '♂ オス' : '♀ メス'} · ${typeTag(c.type)} · 第${c.gen}世代</p>
+      app.innerHTML = `${head('💞 配合', '#')}<div class="card center"><p class="shout">🎉 <span data-nm="${esc(c.id)}">${esc(c.name)}</span> が生まれた！</p>
+        <div class="reveal">${art(c, 'big-art')}</div>${nameBox(c)}<p><span class="rk r-${esc(c.rank)}" style="position:static;padding:2px 10px">${esc(c.rank)}</span> ${c.sex === 'm' ? '♂ オス' : '♀ メス'} · ${typeTag(c.type)} · 第${c.gen}世代</p>
         <p>${(c.inherited || []).length ? (c.inherited).map((x) => `<span class="inh" style="font-size:13px">${esc(x.from)}から「${esc(c.skills.find((s) => s.id === x.skill)?.name || '')}」</span>`).join(' ') : '<span class="small muted">今回は親の技を受けつげなかった…</span>'}</p>
         <a class="btn gold block" href="#train/${c.id}">🏋️ 育成する (10 ターン)</a><a class="btn block" href="#mon/${c.id}" style="margin-top:8px">くわしく見る</a></div>`;
+      bindNames();
     }, 2000);
   }
 
@@ -224,19 +250,21 @@
   function mutantBirth(c, mut) {
     const top = c.mutantRarity || mut.new[0]?.rarity || 'N';
     const first = mut.discoveries.length > 0;
-    const shareText = `🧬 突然変異が誕生！ ${c.name} に「${(mut.new.length ? mut.new : c.mutations || []).map((x) => x.name).join('・')}」が発現した${first ? '。だれも見たことのない変異を発見！' : '！'} #ブリードモンスターズ`;
+    const shareText = () => `🧬 突然変異が誕生！ ${me.monsters.find((x) => x.id === c.id)?.name || c.name} に「${(mut.new.length ? mut.new : c.mutations || []).map((x) => x.name).join('・')}」が発現した${first ? '。だれも見たことのない変異を発見！' : '！'} #ブリードモンスターズ`;
     app.innerHTML = `<div class="mutfx mr-${esc(top)}" id="mutfx"><div class="mutfx-dna">${Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</div>
       <div class="mutfx-in"><p class="mutfx-t1">⚠️ 突然変異 ⚠️</p>
         <div class="mutfx-art reveal">${art(c, 'big-art')}</div>
         ${mut.new.map((x) => `<div class="mutfx-name"><span class="mutb mr-${esc(x.rarity)}">変異${esc(x.rarity)}</span><b>${esc(x.name)}</b><small>${esc(x.catName)}</small></div>`).join('')}
         ${first ? `<div class="mutfx-first">🏆 第一発見！ ${mut.discoveries.map((d) => `<span>${esc(d.kind === 'combo' ? '新しい組み合わせ「' + d.name + '」' : '「' + d.name + '」')}</span>`).join('')}${mut.title ? `<em>称号「${esc(mut.title)}」</em>` : ''}</div>` : ''}
+        ${nameBox(c)}
         <div class="lin" style="margin-top:12px"><a class="btn gold" href="#mon/${esc(c.id)}">くわしく見る</a><button class="btn" id="mshare">📣 タイムラインに投稿</button></div>
         <a class="btn block" href="#train/${esc(c.id)}" style="margin-top:8px">🏋️ 育成する</a></div>
       <button class="btn sm mutfx-skip" id="mskip">スキップ ▶</button></div>`;
     const fx = $('#mutfx');
     $('#mskip').onclick = () => fx.classList.add('skip');
+    bindNames();
     setTimeout(() => fx.classList.add('done'), 3200);
-    $('#mshare').onclick = () => { if (inFrame) parent.postMessage({ source: 'ippo-monster', type: 'share', text: shareText }, location.origin); else toast('IppO の中で開くと投稿できます'); };
+    $('#mshare').onclick = () => { if (inFrame) parent.postMessage({ source: 'ippo-monster', type: 'share', text: shareText() }, location.origin); else toast('IppO の中で開くと投稿できます'); };
   }
 
   // ---------- 血統書 (3 世代の家系図を 1 枚の画像に・タイムラインにシェア) ----------
@@ -677,7 +705,7 @@
       $$('[data-buy]').forEach((b) => b.onclick = async () => {
         if (!confirm(`${b.dataset.price} コインで買いますか？`)) return;
         b.disabled = true;
-        try { const r = await api(`/mon/shop/${b.dataset.buy}/buy`, { method: 'POST' }); await refresh(); toast(`${r.monster.name} がなかまになった！`); location.hash = '#mon/' + r.monster.id; }
+        try { const r = await api(`/mon/shop/${b.dataset.buy}/buy`, { method: 'POST' }); await refresh(); toast(`${r.monster.name} がなかまになった！`); nameNext = r.monster.id; location.hash = '#mon/' + r.monster.id; }
         catch (e) { toast(e.message, true); draw(); }
       });
     };
