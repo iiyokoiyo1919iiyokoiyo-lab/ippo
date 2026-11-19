@@ -36,13 +36,13 @@ const H = 3600_000, D = 24 * H;
 const GACHA_NOTICES = [
   { id: '2026-11-18', at: Date.parse('2026-11-18T08:40:00+09:00'), until: Date.parse('2026-11-19T08:35:00+09:00') },
   { id: '2026-11-19', at: Date.parse('2026-11-19T08:35:00+09:00'), until: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ ピックアップ + セール
-  { id: '2026-11-20', at: Date.parse('2026-11-20T08:35:00+09:00'), until: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 ピックアップ (8:35〜) + セール。タドコロ・ハサミ丸は 8:29 で排出終了
+  { id: '2026-11-20', at: Date.parse('2026-11-20T08:00:00+09:00'), until: Date.parse('2026-11-21T08:30:00+09:00'), skip: ['tadokoro'] }, // 8:00 に告知: 筆の剣士 ピックアップ (8:35〜) + セール。もうすぐ終わるタドコロ PU は載せない (8:29 でタドコロ・ハサミ丸は排出終了)
 ];
-// その告知の時点でのガチャの情報 (セール・これからのピックアップ・確率アップ)
+// その告知の時点でのガチャの情報 (セール・これからのピックアップ・確率アップ)。skip: 載せないピックアップのキャラ
 function gachaInfo(n) {
   const { SALES, PICKUPS, RATE_UPS, CARDS } = cards;
   const sale = SALES.find((x) => n.at < x.end && x.start < n.until) || null;
-  const pickups = PICKUPS.filter((x) => (!x.end || x.end > n.at) && x.start < n.until).map((x) => ({ ...x, card: CARDS[x.id] }));
+  const pickups = PICKUPS.filter((x) => (!x.end || x.end > n.at) && x.start < n.until && !(n.skip || []).includes(x.id)).map((x) => ({ ...x, card: CARDS[x.id] }));
   const rateUps = RATE_UPS.filter((x) => n.at >= x.start && (!x.end || x.end > n.at)).map((x) => ({ ...x, cards: x.ids.map((id) => CARDS[id]) }));
   return { sale, pickups, rateUps };
 }
