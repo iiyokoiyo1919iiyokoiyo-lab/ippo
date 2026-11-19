@@ -689,7 +689,7 @@ module.exports = function install(app, ctx) {
     const events = resolveRound(b.state, b.cmds);
     b.uids.forEach((u) => u && sendTo(u, { t: 'result', events, cmds: b.cmds, state: pub(b) }));
     // 画面で技の演出 (撃ちこむ・大技のビーム) が終わるまで待ってから次のラウンドへ
-    const showMs = Math.max(SHOW_MS, events.reduce((t, e) => t + (e.k === 'skill' ? (e.kind === 'ult' ? 3400 : 2300) : e.k === 'blocked' ? 2200 : e.k === 'guard' ? 1000 : e.k === 'miss' ? 1000 : e.k === 'ko' ? 800 : 0), 700));
+    const showMs = Math.max(SHOW_MS, events.reduce((t, e) => t + (e.k === 'skill' || e.k === 'blocked' ? (e.kind === 'ult' ? 4400 : e.kind === 'magic' ? 3100 : 2600) : e.k === 'guard' ? 1000 : e.k === 'miss' ? 1000 : e.k === 'ko' ? 1300 : 0), 700));
     if (b.state.winner !== null) { b.timer = setTimeout(() => finish(b, b.state.winner), showMs); return; }
     b.timer = setTimeout(() => nextRound(b), showMs);
   }

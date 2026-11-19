@@ -482,7 +482,7 @@
       const before = mySkills().find((s) => s.cmd === keys);
       updateInput();
       keyFx(k, before);
-      if (before && k !== 'X') cutin(before, true);
+      if (before && k !== 'X') pachiCut(before, true, you);
     }
     // キーを押すたびのエフェクト: ボタンから光の輪・入力枠に火花と矢印が飛びこむ・どの技に近づいているか・合わなくなったらゆれる
     const KEY_COL = { U: '#ffe066', D: '#74c0fc', L: '#ff8787', R: '#8ce99a', X: '#ced4da' };
@@ -514,6 +514,27 @@
       el.innerHTML = `<small>${preview ? 'コマンド認識！' : who === you ? 'あなたの' : '相手の'}${esc(KIND[s.kind])}</small><b>${esc(s.name)}</b>`;
       if (!preview) el.classList.add('short');
       ($('#stage') || bt).append(el); setTimeout(() => el.remove(), preview ? 1600 : 1000);
+    }
+    // パチンコ風のギラギラカットイン: 白フラッシュ → 回転する光線 → 斜めの帯 → 巨大な漢字 → 金色の技名がドンと落ちてくる → 火花
+    // 大技は虹色の光線・虹の枠・「確定」のハンコ。preview: 入力中にコマンドが成立したとき (入力のじゃまをしないよう触れない・少し短い)
+    const PC_LABEL = { punch: ['⚡ チャンス！', '激'], magic: ['🔥 激アツ！！', '熱'], ult: ['🌈 超激アツ確定！！！', '極'], guard: ['🛡️ 鉄壁！', '守'] };
+    const PC_MS = { punch: 800, magic: 1000, ult: 1500, guard: 700 };
+    function pachiCut(s, preview = false, who = you) {
+      if (!bt) return 0;
+      const kind = PC_LABEL[s.kind] ? s.kind : 'punch', ms = Math.round((PC_MS[kind] || 900) * (preview ? 0.85 : 1));
+      const col = kind === 'guard' ? '#748ffc' : `var(--${kind === 'punch' ? st.mons[who].type : s.type})`;
+      const [lab, kanji] = PC_LABEL[kind], n = kind === 'ult' ? 20 : 12;
+      const sparks = Array.from({ length: n }, (_, i) => `<i style="--a:${Math.round((i / n) * 360 + Math.random() * 14)}deg;--d:${Math.round(120 + Math.random() * 120)}px;--dl:${(0.08 + Math.random() * 0.25).toFixed(2)}s"></i>`).join('');
+      $$('.pc', bt).forEach((x) => x.remove()); // 前のカットインは消して、新しいものを出す (重ならないように)
+      const el = document.createElement('div'), len = [...s.name].length;
+      el.className = `pc k-${kind}${preview ? ' pre' : ''}`; el.style.setProperty('--ms', ms + 'ms'); el.style.setProperty('--c', col);
+      el.style.setProperty('--fs', (len > 9 ? 22 : len > 7 ? 26 : len > 5 ? 30 : 34) + 'px'); // 長い技名は小さく (1 行におさめる)
+      el.innerHTML = `<div class="pc-flash"></div><div class="pc-rays"></div><div class="pc-band"><div class="pc-stripe"></div></div><div class="pc-kanji">${esc(kanji)}</div>
+        <div class="pc-txt"><small>${esc(preview ? 'コマンド成立！' : `${who === you ? 'あなた' : '相手'}の${KIND[kind] || ''}`)}</small><span class="pc-lab">${esc(lab)}</span><b data-t="${esc(s.name)}">${esc(s.name)}</b></div>
+        <div class="pc-sp">${sparks}</div>${kind === 'ult' ? '<div class="pc-frame"></div><div class="pc-stamp">確定</div>' : ''}`;
+      bt.append(el); setTimeout(() => el.remove(), ms + 120);
+      if (preview && navigator.vibrate) { try { navigator.vibrate(kind === 'ult' ? [30, 40, 70] : 20); } catch {} }
+      return ms;
     }
     function connect() {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/mb`);
@@ -551,8 +572,7 @@
         if (e.k === 'skill') {
           const s = { name: e.name, kind: e.kind, type: e.type };
           log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！`); updStage();
-          cutin(s, false, e.p);
-          await wait(650);
+          await wait(pachiCut(s, false, e.p) * 0.75);            // パチンコ風カットイン
           await attackFx(e);                                     // 技を相手に撃ちこむ
           st.mons[1 - e.p].hp = e.hp; prev.mons[1 - e.p].hp = e.hp;
           popDmg(e);
@@ -566,8 +586,7 @@
         } else if (e.k === 'blocked') {                         // 同じ回の防御で技が無効になった
           const s = { name: e.name, kind: e.kind, type: e.type };
           log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！`); updStage();
-          cutin(s, false, e.p);
-          await wait(650);
+          await wait(pachiCut(s, false, e.p) * 0.75);
           const tgt = $(e.p === you ? '#ffoe' : '#fme', bt);
           shieldFx(tgt, true);
           await attackFx({ ...e, blocked: true });
@@ -581,7 +600,8 @@
           log.push(`${e.p === you ? 'あなた' : '相手'}の技は${e.empty ? '入力されなかった' : '不発だった'}`); updStage(); await wait(900);
         } else if (e.k === 'ko') {
           const t = $(e.p === you ? '#fme' : '#ffoe', bt); t?.classList.add('ko');
-          log.push(`${e.p === you ? 'あなた' : '相手'}のモンスターはたおれた！`); updStage(); await wait(700);
+          koFx(e.p !== you);
+          log.push(`${e.p === you ? 'あなた' : '相手'}のモンスターはたおれた！`); updStage(); await wait(1100);
         }
       }
       st = ns;
@@ -605,7 +625,7 @@
     }
     function popDmg(e) {
       const tgt = $(e.p === you ? '#ffoe' : '#fme', bt), d = document.createElement('div');
-      d.className = 'pdmg' + (e.eff === 'good' ? ' good' : e.eff === 'bad' ? ' bad' : '') + (e.kind === 'ult' ? ' big' : '');
+      d.className = 'pdmg gdmg' + (e.eff === 'good' ? ' good' : e.eff === 'bad' ? ' bad' : '') + (e.kind === 'ult' ? ' big' : '');
       d.innerHTML = `-${e.dmg}${e.eff === 'good' ? '<small>こうかばつぐん!</small>' : e.eff === 'bad' ? '<small>いまひとつ…</small>' : ''}`;
       placeOver(d, tgt); $('#stage').append(d); setTimeout(() => d.remove(), 1200);
     }
@@ -615,35 +635,68 @@
       for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + Math.random() * 0.5, d = (big ? 70 : 40) + Math.random() * 30;
         const q = sprite('px', '', x, y); q.style.background = pal[i % 3]; q.style.setProperty('--dx', Math.cos(a) * d + 'px'); q.style.setProperty('--dy', Math.sin(a) * d + 'px'); setTimeout(() => q.remove(), 700); }
     }
+    // ---- ギラギラの部品 ----
+    const ONOMA = { punch: ['ドゴッ!!', 'バキィッ!!', 'ズガン!!', 'ドカッ!!'], magic: ['ズドォン!!', 'バシュウッ!!', 'ドバァン!!'], ult: ['ドッゴォォン!!!', 'ズガガガガ!!!', 'ドドドドドッ!!!'] };
+    const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+    function sflash(col = '#fff', ms = 380) { const st2 = $('#stage'); if (!st2) return; const f = document.createElement('div'); f.className = 'sflash'; f.style.background = col; f.style.animationDuration = ms + 'ms'; st2.append(f); setTimeout(() => f.remove(), ms + 50); }
+    function shock(x, y, col, size = 1, delay = 0) { const r = sprite('shock', '', x, y); r.style.setProperty('--c', col); r.style.setProperty('--s', size); r.style.animationDelay = delay + 'ms'; setTimeout(() => r.remove(), 700 + delay); }
+    function starburst(x, y, col, big = false) { const r = sprite('sburst' + (big ? ' big' : ''), '', x, y); r.style.setProperty('--c', col); setTimeout(() => r.remove(), 750); }
+    function goldRain(x, y, n = 16, big = false) {
+      for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, d = (big ? 90 : 55) + Math.random() * (big ? 90 : 50);
+        const q = sprite('gp' + (i % 4 === 0 ? ' star' : ''), i % 4 === 0 ? '✦' : '', x, y); q.style.setProperty('--dx', Math.cos(a) * d + 'px'); q.style.setProperty('--dy', Math.sin(a) * d - 20 + 'px'); q.style.setProperty('--r', Math.round(Math.random() * 720 - 360) + 'deg');
+        q.style.animationDelay = Math.round(Math.random() * 120) + 'ms'; setTimeout(() => q.remove(), 1100); }
+    }
+    function onoma(x, y, text, col, big = false) { const d = sprite('onoma' + (big ? ' big' : ''), esc(text), x, y); d.style.setProperty('--c', col); setTimeout(() => d.remove(), 1000); }
+    function koFx(won) {
+      const stage = $('#stage'); if (!stage) return;
+      sflash('#fff', 500); stage.classList.add('quake'); setTimeout(() => stage.classList.remove('quake'), 900);
+      const k = document.createElement('div'); k.className = 'kofx' + (won ? ' won' : ''); k.innerHTML = '<i></i><b>K.O.!!</b>'; stage.append(k); setTimeout(() => k.remove(), 1400);
+      const sr = stage.getBoundingClientRect(); goldRain(sr.width / 2, sr.height / 2, won ? 26 : 12, true);
+    }
     async function attackFx(e) {
       const stage = $('#stage'); if (!stage) return;
       const atk = $(e.p === you ? '#fme' : '#ffoe', bt), tgt = $(e.p === you ? '#ffoe' : '#fme', bt);
       const a = center(atk), t = center(tgt), pal = PIX_PAL[e.type] || PIX_PAL.fire, dir = t.x > a.x ? 1 : -1;
       const hit = () => { if (e.blocked) return; tgt.classList.remove('hit'); void tgt.offsetWidth; tgt.classList.add('hit'); };
-      if (e.kind === 'punch') { // 直殴り: 相手に突進して、ドットの衝撃
+      const word = e.blocked ? 'ガキィン!!' : pickOne(ONOMA[e.kind] || ONOMA.punch);
+      if (e.kind === 'punch') { // 直殴り: 集中線の中を残像つきで突進 → 星形の衝撃・衝撃波・金の火花・擬音
+        stage.classList.add('speed');
+        const ghost = atk.cloneNode(true); ghost.removeAttribute('id'); ghost.classList.add('ghost'); stage.append(ghost);
         atk.style.setProperty('--dash', `${(t.x - a.x) * 0.62}px`); atk.classList.add('dash');
-        await wait(230); burst(t.x - dir * 18, t.y, pal, 10); hit(); stage.classList.add('jolt');
-        await wait(300); atk.classList.remove('dash'); stage.classList.remove('jolt');
-      } else if (e.kind === 'magic') { // 魔法: 属性の弾がとんでいき、はじける
-        atk.classList.add('cast'); await wait(180);
-        const map = PIX_SHOT[e.type] || PIX.orb, b = sprite('shot', pix(map, pal, 5), a.x, a.y);
+        ghost.style.setProperty('--dash', `${(t.x - a.x) * 0.35}px`); requestAnimationFrame(() => ghost.classList.add('dash'));
+        await wait(210);
+        sflash(pal[1], 180); starburst(t.x - dir * 14, t.y, pal[1]); shock(t.x, t.y, '#fff'); shock(t.x, t.y, pal[1], 0.7, 90);
+        burst(t.x - dir * 18, t.y, pal, 12); goldRain(t.x, t.y, 12); onoma(t.x + dir * 6, t.y - 62, word, pal[1]); hit(); stage.classList.add('jolt');
+        await wait(340); atk.classList.remove('dash'); stage.classList.remove('jolt', 'speed'); ghost.remove();
+        await wait(120);
+      } else if (e.kind === 'magic') { // 魔法: 足もとに回る魔法陣 → 光る弾が尾を引いてとぶ → 大爆発
+        const mc = sprite('mcircle', '', a.x, a.y + 34); mc.style.setProperty('--c', pal[1]);
+        atk.classList.add('cast'); await wait(360);
+        const map = PIX_SHOT[e.type] || PIX.orb, b = sprite('shot glow', pix(map, pal, 6), a.x, a.y);
+        b.style.setProperty('--c', pal[1]);
         if (dir < 0) b.firstElementChild.style.transform = 'scaleX(-1)';
-        const trail = setInterval(() => { const r = b.getBoundingClientRect(), sr = stage.getBoundingClientRect(); const q = sprite('trail', '', r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2); q.style.background = pal[1]; setTimeout(() => q.remove(), 400); }, 40);
-        await b.animate([{ transform: 'translate(-50%,-50%) translate(0,0) scale(.6)' }, { transform: `translate(-50%,-50%) translate(${(t.x - a.x) / 2}px,${-40}px) scale(1.1)`, offset: 0.5 }, { transform: `translate(-50%,-50%) translate(${t.x - a.x}px,${t.y - a.y}px) scale(1)` }], { duration: 520, easing: 'ease-in' }).finished;
-        clearInterval(trail); b.remove(); burst(t.x, t.y, pal, 14); hit(); atk.classList.remove('cast');
-        await wait(250);
-      } else { // 大技: 暗くなって力をためる → 巨大なドットのビーム → 大爆発
+        let tick = 0; const trail = setInterval(() => { const r = b.getBoundingClientRect(), sr = stage.getBoundingClientRect(); const q = sprite('trail', '', r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2); q.style.background = tick++ % 2 ? '#ffe066' : pal[1]; q.style.boxShadow = `0 0 8px ${pal[1]}`; setTimeout(() => q.remove(), 450); }, 30);
+        await b.animate([{ transform: 'translate(-50%,-50%) translate(0,0) scale(.6)' }, { transform: `translate(-50%,-50%) translate(${(t.x - a.x) / 2}px,${-46}px) scale(1.35)`, offset: 0.5 }, { transform: `translate(-50%,-50%) translate(${t.x - a.x}px,${t.y - a.y}px) scale(1.15)` }], { duration: 520, easing: 'ease-in' }).finished;
+        clearInterval(trail); b.remove();
+        sflash(pal[1], 260); starburst(t.x, t.y, pal[1], true); shock(t.x, t.y, '#fff', 1.1); shock(t.x, t.y, pal[1], 1.5, 120);
+        burst(t.x, t.y, pal, 18); goldRain(t.x, t.y, 18); onoma(t.x, t.y - 66, word, pal[1]); hit(); stage.classList.add('jolt'); atk.classList.remove('cast');
+        await wait(380); stage.classList.remove('jolt'); mc.remove();
+      } else { // 大技: 暗転 → 背中に虹の光線・力をためる → 「超必殺」 → 虹色の極太ビーム → ホワイトアウト → 連続大爆発 → 金の雨
         stage.classList.add('dim'); atk.classList.add('charge');
-        const ring = sprite('chargering', '', a.x, a.y); ring.style.borderColor = pal[1]; ring.style.boxShadow = `0 0 20px ${pal[1]}`;
-        await wait(650); ring.remove();
-        const beam = document.createElement('div'); beam.className = 'beam';
+        const rays = sprite('urays', '', a.x, a.y), ring = sprite('chargering', '', a.x, a.y); ring.style.borderColor = pal[1]; ring.style.boxShadow = `0 0 24px ${pal[1]}`;
+        onoma(a.x, a.y - 74, '超必殺!!', '#ffd43b', true);
+        for (let i = 0; i < 10; i++) { const q = sprite('suck', '', a.x + Math.cos(i * 0.63) * 90, a.y + Math.sin(i * 0.63) * 70); q.style.setProperty('--dx', -Math.cos(i * 0.63) * 90 + 'px'); q.style.setProperty('--dy', -Math.sin(i * 0.63) * 70 + 'px'); q.style.background = i % 2 ? '#fff' : pal[1]; q.style.animationDelay = i * 40 + 'ms'; setTimeout(() => q.remove(), 800); }
+        await wait(780); ring.remove();
+        const beam = document.createElement('div'); beam.className = 'beam rainbow';
         const x0 = Math.min(a.x, t.x), w = Math.abs(t.x - a.x);
-        beam.style.cssText = `left:${x0}px;top:${a.y - 22}px;width:${w}px;--c1:${pal[0]};--c2:${pal[1]};--c3:${pal[2]};transform-origin:${dir > 0 ? 'left' : 'right'} center`;
+        beam.style.cssText = `left:${x0}px;top:${a.y - 30}px;width:${w}px;height:60px;--c1:${pal[0]};--c2:${pal[1]};--c3:${pal[2]};transform-origin:${dir > 0 ? 'left' : 'right'} center`;
         stage.append(beam);
-        await wait(260); const f = document.createElement('div'); f.className = 'flashb'; stage.append(f); setTimeout(() => f.remove(), 500);
-        burst(t.x, t.y, pal, 22, true); hit(); stage.classList.add('quake');
-        await wait(450); beam.classList.add('out'); burst(t.x, t.y - 20, pal, 12, true);
-        await wait(300); beam.remove(); stage.classList.remove('dim', 'quake'); atk.classList.remove('charge');
+        await wait(240); sflash('#fff', 520); const f = document.createElement('div'); f.className = 'flashb'; stage.append(f); setTimeout(() => f.remove(), 500);
+        hit(); stage.classList.add('quake');
+        for (let i = 0; i < 5; i++) setTimeout(() => { const x = t.x + (Math.random() - 0.5) * 70, y = t.y + (Math.random() - 0.5) * 60; starburst(x, y, pal[i % 3], true); burst(x, y, pal, 10, i % 2 === 0); shock(x, y, i % 2 ? '#fff' : pal[1], 1.6); }, i * 120);
+        goldRain(t.x, t.y, 30, true); onoma(t.x, t.y - 70, word, pal[1], true);
+        await wait(720); beam.classList.add('out'); burst(t.x, t.y - 20, pal, 14, true);
+        await wait(300); beam.remove(); rays.remove(); stage.classList.remove('dim', 'quake'); atk.classList.remove('charge');
       }
     }
     connect();

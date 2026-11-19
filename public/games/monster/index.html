@@ -278,11 +278,84 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 @keyframes shield-in{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}60%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}100%{opacity:.85;transform:translate(-50%,-50%) scale(1)}}
 @keyframes shield-hit{0%,30%{filter:brightness(2.2);transform:translate(-50%,-50%) scale(1.12)}15%{transform:translate(-46%,-50%) scale(1.12)}45%{transform:translate(-54%,-50%) scale(1.05)}70%{opacity:.9;filter:none;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.25)}}
 @media (prefers-reduced-motion:reduce){.shield,.shield.hit{animation:none;opacity:.8}}
+/* ===== パチンコ風カットイン ===== */
+.pc{position:absolute;inset:0;z-index:30;pointer-events:none;overflow:hidden;animation:pc-life var(--ms) linear both}
+@keyframes pc-life{0%,82%{opacity:1}100%{opacity:0}}
+.pc-flash{position:absolute;inset:0;background:#fff;animation:pc-flash .35s ease-out both}
+@keyframes pc-flash{0%{opacity:.95}100%{opacity:0}}
+.pc-rays{position:absolute;left:50%;top:40%;width:260%;aspect-ratio:1;transform:translate(-50%,-50%);background:repeating-conic-gradient(rgba(255,236,140,.6) 0 7deg,transparent 7deg 15deg);-webkit-mask-image:radial-gradient(circle,#000 18%,transparent 60%);mask-image:radial-gradient(circle,#000 18%,transparent 60%);animation:pc-spin 2.4s linear infinite}
+.pc.k-ult .pc-rays{background:repeating-conic-gradient(#ff6b6b 0 6deg,#ffd43b 6deg 12deg,#69db7c 12deg 18deg,#4dabf7 18deg 24deg,#cc5de8 24deg 30deg);opacity:.8;animation-duration:1.1s}
+.pc.k-guard .pc-rays{background:repeating-conic-gradient(rgba(186,200,255,.6) 0 7deg,transparent 7deg 15deg)}
+@keyframes pc-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.pc-band{position:absolute;left:-12%;right:-12%;top:40%;height:132px;margin-top:-66px;transform:skewY(-7deg);background:linear-gradient(90deg,transparent,var(--c) 10%,var(--c) 90%,transparent);box-shadow:0 0 0 4px #ffe066,0 0 0 9px rgba(0,0,0,.45),0 0 46px 12px var(--c);animation:pc-band var(--ms) cubic-bezier(.2,.9,.2,1) both;overflow:hidden}
+@keyframes pc-band{0%{transform:skewY(-7deg) scaleY(0)}12%{transform:skewY(-7deg) scaleY(1.25)}22%,100%{transform:skewY(-7deg) scaleY(1)}}
+.pc-stripe{position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.25) 0 14px,transparent 14px 28px);background-size:62px 100%;animation:pc-stripe .45s linear infinite}
+@keyframes pc-stripe{to{background-position:62px 0}}
+.pc-kanji{position:absolute;left:3%;top:40%;margin-top:-72px;font-size:118px;line-height:1;font-weight:900;color:#fff;-webkit-text-stroke:9px #c92a2a;paint-order:stroke fill;text-shadow:0 0 24px #ffe066,0 7px 0 #6b0000;animation:pc-kanji var(--ms) cubic-bezier(.2,1.6,.4,1) both}
+.pc.k-ult .pc-kanji{-webkit-text-stroke-color:#862e9c;animation:pc-kanji var(--ms) cubic-bezier(.2,1.6,.4,1) both,pc-hue .6s linear infinite}
+.pc.k-guard .pc-kanji{-webkit-text-stroke-color:#364fc7}
+@keyframes pc-kanji{0%{transform:scale(4.2) rotate(-24deg);opacity:0}14%{transform:scale(.92) rotate(-8deg);opacity:1}20%{transform:scale(1.08) rotate(-8deg)}28%,100%{transform:scale(1) rotate(-8deg)}}
+@keyframes pc-hue{to{filter:hue-rotate(360deg)}}
+.pc-txt{position:absolute;left:0;right:0;top:40%;transform:translateY(-50%);padding:0 10px 0 30%;text-align:center}
+.pc-txt small{display:block;font-weight:900;font-size:13px;color:#fff;-webkit-text-stroke:3px rgba(0,0,0,.6);paint-order:stroke fill}
+.pc-lab{display:inline-block;margin:3px 0;padding:1px 12px;border-radius:999px;font-weight:900;font-size:15px;color:#c92a2a;background:#fff3bf;border:2px solid #fab005;animation:pc-blink .16s steps(2) infinite}
+@keyframes pc-blink{50%{background:#ff6b6b;color:#fff;border-color:#fff}}
+.pc-txt b{position:relative;display:block;font-size:var(--fs,34px);line-height:1.12;font-weight:900;letter-spacing:.02em;white-space:nowrap;
+  background:linear-gradient(180deg,#fff 0%,#fffbe6 28%,#ffe066 46%,#ffc400 58%,#fff3bf 80%,#fff 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1.5px #7a3d00;
+  filter:drop-shadow(0 2px 0 #3b1d00) drop-shadow(0 0 3px #000) drop-shadow(0 0 14px #ffd43b);animation:pc-slam var(--ms) cubic-bezier(.2,1.4,.4,1) both}
+.pc-txt b::after{content:attr(data-t);position:absolute;inset:0;background:linear-gradient(100deg,transparent 42%,#fff 50%,transparent 58%);background-size:260% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:0;animation:pc-glint .6s linear .18s 2 both}
+.pc.k-ult .pc-txt b{filter:drop-shadow(0 2px 0 #3b1d00) drop-shadow(0 0 3px #000) drop-shadow(0 0 16px #ff6bd6) drop-shadow(0 0 8px #74c0fc)}
+@keyframes pc-slam{0%{transform:scale(3.2);opacity:0}14%{transform:scale(.9);opacity:1}18%{transform:scale(1.08) translateX(-4px)}22%{transform:scale(1) translateX(4px)}26%,100%{transform:scale(1)}}
+@keyframes pc-glint{0%{background-position:130% 0}100%{background-position:-30% 0}}
+@keyframes pc-rainbow{to{background-position:200% 0}}
+.pc-sp{position:absolute;left:50%;top:40%}
+.pc-sp i{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle,#fff 0 25%,#ffd43b 45%,transparent 70%);animation:pc-spark .9s ease-out var(--dl) both}
+.pc.k-ult .pc-sp i{background:radial-gradient(circle,#fff 0 25%,#ff8cc6 45%,transparent 70%)}
+@keyframes pc-spark{0%{transform:rotate(var(--a)) translateX(12px) scale(1.6);opacity:1}100%{transform:rotate(var(--a)) translateX(var(--d)) scale(.3);opacity:0}}
+.pc-frame{position:absolute;inset:3px;border-radius:18px;border:6px solid #ffd43b;box-shadow:inset 0 0 22px #fff,0 0 22px #ff6bd6;animation:pc-hue .5s linear infinite}
+.pc-stamp{position:absolute;right:6%;top:13%;padding:0 10px;font-size:38px;font-weight:900;color:#e03131;border:5px solid #e03131;border-radius:12px;background:rgba(255,255,255,.85);transform:rotate(12deg);animation:pc-stamp .4s cubic-bezier(.2,1.6,.4,1) .3s both}
+@keyframes pc-stamp{0%{transform:rotate(12deg) scale(3.5);opacity:0}100%{transform:rotate(12deg) scale(1);opacity:1}}
+/* ===== 攻撃のギラギラ ===== */
+.sflash{position:absolute;inset:0;z-index:8;pointer-events:none;mix-blend-mode:screen;animation:sflash .38s ease-out both}
+@keyframes sflash{0%{opacity:.9}100%{opacity:0}}
+.spr.shock{width:40px;height:40px;border-radius:50%;border:5px solid var(--c);box-shadow:0 0 14px var(--c),inset 0 0 10px var(--c);animation:shock .6s cubic-bezier(.1,.8,.3,1) both}
+@keyframes shock{0%{transform:translate(-50%,-50%) scale(.3);opacity:1}100%{transform:translate(-50%,-50%) scale(calc(4.2 * var(--s,1)));opacity:0;border-width:1px}}
+.spr.sburst{width:120px;height:120px;background:radial-gradient(circle,#fff 0 14%,var(--c) 26%,transparent 60%);clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);animation:sburst .6s steps(5) both;z-index:7}
+.spr.sburst.big{width:190px;height:190px}
+@keyframes sburst{0%{transform:translate(-50%,-50%) scale(.2) rotate(0);opacity:1}50%{transform:translate(-50%,-50%) scale(1.15) rotate(18deg);opacity:1}100%{transform:translate(-50%,-50%) scale(1.4) rotate(30deg);opacity:0}}
+.spr.gp{width:8px;height:8px;border-radius:2px;background:linear-gradient(135deg,#fff,#ffd43b 40%,#f08c00);box-shadow:0 0 8px #ffd43b;animation:gp 1s cubic-bezier(.2,.8,.3,1) both;z-index:7}
+.spr.gp.star{width:auto;height:auto;background:none;box-shadow:none;color:#fff3bf;font-size:18px;line-height:1;text-shadow:0 0 8px #ffd43b,0 0 2px #fff}
+@keyframes gp{0%{transform:translate(-50%,-50%) scale(1.4);opacity:1}70%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy) + 40px)) rotate(var(--r)) scale(.6);opacity:0}}
+.spr.onoma{z-index:9;line-height:1;font-size:30px;font-weight:900;font-style:italic;white-space:nowrap;color:#fff;-webkit-text-stroke:5px var(--c);paint-order:stroke fill;text-shadow:0 0 14px var(--c),3px 3px 0 #000;animation:onoma .95s cubic-bezier(.2,1.6,.4,1) both}
+.spr.onoma.big{font-size:40px}
+@keyframes onoma{0%{transform:translate(-50%,-50%) scale(3) rotate(-14deg);opacity:0}16%{transform:translate(-50%,-50%) scale(.9) rotate(-8deg);opacity:1}24%{transform:translate(-50%,-50%) scale(1.1) rotate(-8deg)}75%{opacity:1}100%{transform:translate(-50%,-80%) scale(1) rotate(-8deg);opacity:0}}
+.stage.speed::before{content:'';position:absolute;inset:-20%;z-index:1;pointer-events:none;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.5) 0 1.2deg,transparent 1.2deg 9deg);-webkit-mask-image:radial-gradient(circle,transparent 26%,#000 60%);mask-image:radial-gradient(circle,transparent 26%,#000 60%);animation:speed .12s steps(2) infinite}
+@keyframes speed{50%{transform:rotate(4deg)}}
+.ftr.ghost{z-index:1;opacity:.45;filter:drop-shadow(0 0 10px #fff) saturate(2);pointer-events:none}
+.spr.mcircle{width:130px;height:40px;border-radius:50%;border:3px solid var(--c);box-shadow:0 0 18px var(--c),inset 0 0 14px var(--c);background:repeating-conic-gradient(var(--c) 0 6deg,transparent 6deg 20deg);opacity:.85;animation:mcircle .9s linear both;z-index:1}
+@keyframes mcircle{0%{transform:translate(-50%,-50%) scale(.2) rotate(0);opacity:0}25%{transform:translate(-50%,-50%) scale(1) rotate(60deg);opacity:.9}100%{transform:translate(-50%,-50%) scale(1.1) rotate(240deg);opacity:0}}
+.spr.shot.glow svg{filter:drop-shadow(0 0 10px var(--c)) drop-shadow(0 0 4px #fff) brightness(1.2)}
+.spr.urays{width:300px;height:300px;z-index:3;background:repeating-conic-gradient(#ff6b6b 0 6deg,#ffd43b 6deg 12deg,#69db7c 12deg 18deg,#4dabf7 18deg 24deg,#cc5de8 24deg 30deg);-webkit-mask-image:radial-gradient(circle,#000 10%,transparent 60%);mask-image:radial-gradient(circle,#000 10%,transparent 60%);opacity:.75;animation:urays 1s linear infinite}
+@keyframes urays{from{transform:translate(-50%,-50%) rotate(0)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+.spr.suck{width:7px;height:7px;border-radius:50%;box-shadow:0 0 8px #fff;animation:suck .7s ease-in both;z-index:5}
+@keyframes suck{0%{transform:translate(-50%,-50%) scale(1.4);opacity:0}30%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.3);opacity:0}}
+.beam.rainbow{animation:beamin .24s steps(4) both,pc-hue .5s linear infinite;box-shadow:0 0 0 4px #fff,0 0 0 8px var(--c3),0 0 46px 18px var(--c2)}
+.beam.rainbow::after{top:18px;height:24px;background:#fff;box-shadow:0 0 16px #fff}
+.beam.rainbow.out{animation:beamout .3s steps(3) both}
+.pdmg.gdmg{color:transparent;text-shadow:none;font-size:36px;background:linear-gradient(180deg,#fff 0%,#fff3bf 35%,#ffd43b 52%,#f08c00 70%,#fff3bf 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-stroke:2px #3b1d00;filter:drop-shadow(0 3px 0 #000) drop-shadow(0 0 10px #ffd43b)}
+.pdmg.gdmg.big{font-size:48px;background:linear-gradient(90deg,#ff6b6b,#ffd43b,#69db7c,#4dabf7,#cc5de8);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 3px 0 #000) drop-shadow(0 0 14px #fff)}
+.pdmg.gdmg.bad{font-size:26px;background:linear-gradient(180deg,#e7f5ff,#74c0fc);-webkit-background-clip:text;background-clip:text}
+.pdmg.gdmg small{-webkit-text-fill-color:#ffe066;-webkit-text-stroke:0;font-size:13px}
+.kofx{position:absolute;inset:0;z-index:12;pointer-events:none;display:grid;place-items:center}
+.kofx i{position:absolute;left:50%;top:50%;width:420px;height:420px;background:repeating-conic-gradient(rgba(255,236,140,.55) 0 8deg,transparent 8deg 16deg);-webkit-mask-image:radial-gradient(circle,#000 15%,transparent 60%);mask-image:radial-gradient(circle,#000 15%,transparent 60%);animation:urays 1.6s linear infinite}
+.kofx b{position:relative;font-size:64px;font-weight:900;font-style:italic;background:linear-gradient(180deg,#fff,#ffd43b 50%,#e8590c);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:3px #3b1d00;filter:drop-shadow(0 4px 0 #000) drop-shadow(0 0 16px #ffd43b);animation:pc-slam 1.4s cubic-bezier(.2,1.4,.4,1) both}
+.kofx:not(.won) b{background:linear-gradient(180deg,#fff,#adb5bd 50%,#495057);-webkit-background-clip:text;background-clip:text}
+@media (prefers-reduced-motion:reduce){.pc-rays,.pc-stripe,.pc-sp,.stage.speed::before,.spr.urays,.kofx i{display:none}.pc *,.spr.shock,.spr.sburst,.spr.gp,.spr.onoma,.spr.mcircle{animation-duration:.01ms!important;animation-iteration-count:1!important}}
 </style>
 </head>
 <body>
 <div id="app"><p class="empty">よみこみ中…</p></div>
 <script src="/games/monster/mon-art.js?v=3"></script>
-<script src="/games/monster/mon.js?v=14"></script>
+<script src="/games/monster/mon.js?v=15"></script>
 </body>
 </html>
