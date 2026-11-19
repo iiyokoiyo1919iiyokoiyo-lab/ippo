@@ -3134,7 +3134,7 @@ function cbQuestBanner(q, cat) {
   return `<a class="card cb-questbn${q.cleared ? ' cleared' : ''}${q.hard ? ' hard' : ''}" href="#/games/cards/quest">
     <span class="cb-questbn-sky" aria-hidden="true"><i></i><i></i><i></i></span>
     <span class="cb-questbn-art">${r ? CBArt.svg(r.id, r.rarity, { label: r.name }) : ''}</span>
-    <span class="cb-questbn-text"><span class="cb-questbn-tag">${q.hard ? '⚡ 高難易度クエスト' : '🌠 期間限定クエスト'}</span><b>${esc(q.name)}</b>
+    <span class="cb-questbn-text"><span class="cb-questbn-tag">${q.hard ? `${esc(q.emoji || '⚡')} 高難易度クエスト` : '🌠 期間限定クエスト'}</span><b>${esc(q.name)}</b>
       <span>${q.cleared ? '✅ クリアずみ · もう一度あそべます' : `クリアで <em class="cb-mr-word">MR</em>「${esc(r?.name || '')}」がもらえる！`}</span><small>${esc(end)} まで</small></span>${icon('chevron', 'chev')}</a>`;
 }
 const cbCoins = (n) => `<span class="cb-coins">🪙 <b>${Number(n).toLocaleString()}</b></span>`;
@@ -3552,7 +3552,7 @@ async function viewQuest() {
   root.innerHTML = quests.map((q) => `
     <section class="card cb-quest${q.hard ? ' hard' : ''}">
       <div class="cb-quest-sky" aria-hidden="true">${Array.from({ length: 6 }, (_, i) => `<i style="--x:${10 + i * 15}%;--d:${i * 0.7}s"></i>`).join('')}</div>
-      <span class="cb-quest-tag">${q.hard ? '⚡ 高難易度クエスト' : '🌠 期間限定クエスト'} · ${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</span>
+      <span class="cb-quest-tag">${q.hard ? `${esc(q.emoji || '⚡')} 高難易度クエスト` : '🌠 期間限定クエスト'} · ${esc(fmt(q.start))} 〜 ${esc(fmt(q.end))}</span>
       <h2>${esc(q.name)}</h2>
       <p>${esc(q.text)}</p>
       <div class="cb-quest-reward">
@@ -3596,6 +3596,7 @@ async function viewBattle(params) {
     : e.k === 'flinched' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠ってしまった！💤 (次のターン動けない)` : `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`)
     : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
+    : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
     : e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
@@ -3609,7 +3610,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3698,6 +3699,15 @@ async function viewBattle(params) {
       else if (e.k === 'skill') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill'); }, t); t += 320; }
       else if (e.k === 'guard') { setTimeout(() => replay(el(e.p), 'guarding'), t); }
       else if (e.k === 'ko') { setTimeout(() => pop(e.p, 'KO!', 'ko'), t); t += 300; }
+      else if (e.k === 'sermon') { // 説教: 吹き出しが出て、相手がしょんぼり
+        setTimeout(() => {
+          replay(el(e.p), 'charge'); pop(e.p, '📢 説教！', 'skill sermon');
+          overlayFx('cb-sermon' + (e.p === you ? ' to-foe' : ' to-me'), `<b>コラーッ！！</b><i>📢 説教タイム</i>${e.to !== null ? `<em>攻撃 ${e.from} → ${e.to}</em>` : ''}`, 1600, e.p === you ? 'top' : 'bottom');
+          if (e.to !== null) setTimeout(() => { replay(el(1 - e.p), 'hurt'); pop(1 - e.p, '攻撃ダウン…', 'tag'); }, 500);
+          if (e.cured.length) setTimeout(() => pop(e.p, '💧 毒が治った', 'heal'), 800);
+        }, t);
+        t += 900;
+      }
       else if (e.k === 'starfall') {
         setTimeout(() => {
           overlayFx('cb-starfall' + (e.target === you ? ' on-me' : ''), '<b>🌠 スターライトマーチ！</b>' + Array.from({ length: 14 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 7) * 0.09}s"></i>`).join(''), 1900);
@@ -3753,7 +3763,7 @@ async function viewBattle(params) {
         you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました');
         if (m.items) { items = m.items; coins = m.coins; }
         if (m.quest?.bg && /^[a-z0-9-]+$/.test(m.quest.bg)) { box().classList.add('qbg'); box().style.setProperty('--qbg', `url("/bg/${m.quest.bg}.svg")`); } // 期間限定クエストの戦闘背景
-        if (m.quest) { const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = `${m.quest.hard ? '⚡ ' : '🌠 '}${m.quest.name}`; }
+        if (m.quest) { const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = `${m.quest.emoji || (m.quest.hard ? '⚡' : '🌠')} ${m.quest.name}`; }
         if (m.board) { fromBoard = true; const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = m.rated ? '📋 レート戦 (掲示板)' : '📋 掲示板の対戦';
           if (!m.resumed && m.vs && you === 1) log.push(`掲示板からのレート戦です (この相手とはこれまで ${m.vs.games} 戦 ${m.vs.wins} 勝 ${m.vs.losses} 敗)`);
           else if (!m.resumed) log.push('掲示板からのレート戦です'); }

@@ -79,16 +79,21 @@ function questHtml(q) {
 // 高難易度クエスト: 雷雲と稲妻
 function hardQuestHtml(q, r) {
   const bolt = (x, y, s, o = 1) => `<svg style="position:absolute;left:${x}px;top:${y}px;width:${90 * s}px;height:${220 * s}px;opacity:${o};filter:drop-shadow(0 0 18px #ffd43b) drop-shadow(0 0 40px #fab005)" viewBox="0 0 90 220"><path d="M50,0L10,110H40L20,220L85,80H52L72,0Z" fill="#fff3bf" stroke="#ffd43b" stroke-width="4"/></svg>`;
-  return `<div class="bn" style="background:radial-gradient(circle at 25% 55%,#4c3aa8,#24164f 45%,#0b0720 80%);">
-    <div style="position:absolute;left:-60px;top:-80px;width:1400px;height:260px;background:radial-gradient(ellipse at 20% 60%,#3d3566 0 30%,transparent 31%),radial-gradient(ellipse at 45% 40%,#2f2857 0 28%,transparent 29%),radial-gradient(ellipse at 75% 60%,#3d3566 0 30%,transparent 31%);opacity:.9"></div>
-    ${bolt(520, -20, 1.4)}${bolt(1080, 10, 1, 0.85)}${bolt(40, -30, 0.9, 0.7)}${sparks(10)}
+  const water = q.bg === 'suishinya';
+  const bubble = (x, y, d) => `<i style="position:absolute;left:${x}px;top:${y}px;width:${d}px;height:${d}px;border-radius:50%;border:3px solid rgba(208,235,255,.8);box-shadow:inset -6px -6px 0 rgba(255,255,255,.25)"></i>`;
+  const deco = water ? [[520, 60, 60], [600, 150, 30], [1100, 40, 50], [1050, 300, 26], [80, 40, 40], [140, 600, 34], [980, 520, 44], [560, 560, 22]].map((b) => bubble(...b)).join('')
+    : `${bolt(520, -20, 1.4)}${bolt(1080, 10, 1, 0.85)}${bolt(40, -30, 0.9, 0.7)}`;
+  return `<div class="bn" style="background:${water ? 'linear-gradient(180deg,#05081c 0,#103a7a 22%,#0b2a5e 60%,#040b22 100%)' : 'radial-gradient(circle at 25% 55%,#4c3aa8,#24164f 45%,#0b0720 80%)'};">
+    ${water ? '<div style="position:absolute;left:820px;top:30px;width:90px;height:90px;border-radius:50%;background:#fff9db;box-shadow:0 0 50px #fff3bf"></div><div style="position:absolute;left:0;right:0;top:150px;height:4px;background:rgba(165,216,255,.7)"></div><div style="position:absolute;left:700px;top:150px;width:300px;height:525px;background:linear-gradient(rgba(208,235,255,.3),rgba(208,235,255,0));clip-path:polygon(30% 0,70% 0,100% 100%,0 100%)"></div>'
+      : '<div style="position:absolute;left:-60px;top:-80px;width:1400px;height:260px;background:radial-gradient(ellipse at 20% 60%,#3d3566 0 30%,transparent 31%),radial-gradient(ellipse at 45% 40%,#2f2857 0 28%,transparent 29%),radial-gradient(ellipse at 75% 60%,#3d3566 0 30%,transparent 31%);opacity:.9"></div>'}
+    ${deco}${sparks(10)}
     <div class="glow" style="left:60px;top:100px;width:520px;height:520px;background:radial-gradient(rgba(255,236,153,.85),rgba(250,176,5,0))"></div>
     <div class="art" style="left:40px;top:70px;width:560px;height:560px">%%ART%%</div>
-    <div class="ribbon" style="left:-40px;top:34px;background:linear-gradient(90deg,#e67700,#c92a2a)">⚡ 高難易度クエスト</div>
+    <div class="ribbon" style="left:-40px;top:34px;background:${water ? 'linear-gradient(90deg,#1c7ed6,#5f3dc4)' : 'linear-gradient(90deg,#e67700,#c92a2a)'}">${esc(q.emoji || '⚡')} 高難易度クエスト</div>
     <div style="position:absolute;left:600px;top:120px;width:580px">
       <div class="stroke" style="--sw:14px;--sc:#3b1d00;font-size:100px;line-height:1.1;color:#ffe066;text-shadow:0 0 34px #fab005;white-space:nowrap">${esc(q.name)}</div>
       <div style="margin-top:18px;font-size:36px;color:#fff;text-shadow:0 3px 0 #1b1035">クリアで <span style="color:#ff8fd8;font-size:54px;text-shadow:0 0 16px #ff6bd6,0 3px 0 #1b1035">${esc(r.rarity)}</span> ${esc(r.name)} GET!!</div>
-      <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！</div>
+      <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">${water ? '📢 説教 = 相手の攻撃 0.6 倍・毒を治す！' : `⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！`}</div>
       ${q.hint ? `<div style="margin-top:10px;display:inline-block;padding:6px 16px;border-radius:14px;background:linear-gradient(90deg,#fff3bf,#ffc078);font-size:26px;color:#7a3e00;font-weight:900">${esc(q.hint)}</div><br>` : ''}
       <div style="margin-top:12px;display:inline-block;padding:8px 16px;border-radius:14px;background:rgba(11,7,32,.75);font-size:22px;color:#fff3bf;font-weight:700">敵: ${q.enemy.map(([id, lv]) => `${esc(cards.CARDS[id].name)} Lv${lv}`).join('・')}</div>
     </div>
@@ -103,11 +108,11 @@ function awardHtml(q, rank) {
   const bolt = (x, y, s, o = 1) => `<svg style="position:absolute;left:${x}px;top:${y}px;width:${90 * s}px;height:${220 * s}px;opacity:${o};filter:drop-shadow(0 0 18px #fff3bf) drop-shadow(0 0 40px #fab005)" viewBox="0 0 90 220"><path d="M50,0L10,110H40L20,220L85,80H52L72,0Z" fill="#fff9db" stroke="#ffd43b" stroke-width="4"/></svg>`;
   return `<div class="bn" style="background:radial-gradient(circle at 28% 52%,${c1},${c2} 30%,${c3} 62%,#3b1d00 100%);--r1:rgba(255,255,255,.6);--r2:transparent">
     <div class="rays" style="left:28%"></div>${confetti(60, gold ? ['#fff', '#ffd43b', '#fab005', '#fff3bf', '#ff922b'] : ['#fff', '#dee2e6', '#adb5bd', '#e9ecef', '#74c0fc'])}${sparks(22)}
-    ${bolt(560, -30, 1.2, 0.9)}${bolt(1090, 380, 0.9, 0.8)}
+    ${q.bg === 'suishinya' ? '' : `${bolt(560, -30, 1.2, 0.9)}${bolt(1090, 380, 0.9, 0.8)}`}
     <div class="glow" style="left:30px;top:70px;width:560px;height:560px;background:radial-gradient(#fff,rgba(255,255,255,0))"></div>
     <div class="art" style="left:40px;top:90px;width:520px;height:520px">%%ART%%</div>
     <div style="position:absolute;left:400px;top:430px;font-size:170px;line-height:1;transform:rotate(12deg);filter:drop-shadow(0 8px 0 rgba(0,0,0,.25))">${gold ? '🏆' : '🥈'}</div>
-    <div class="ribbon" style="left:-40px;top:34px;background:linear-gradient(90deg,#c92a2a,#e67700)">⚡ ${esc(r.name)} 討伐速報</div>
+    <div class="ribbon" style="left:-40px;top:${[...r.name].length > 8 ? 44 : 34}px;${[...r.name].length > 8 ? 'font-size:34px;' : ''}background:linear-gradient(90deg,#c92a2a,#e67700)">${esc(q.emoji || '⚡')} ${esc(r.name)} 討伐速報</div>
     <div style="position:absolute;left:560px;top:110px;width:620px;text-align:center">
       <div class="stroke" style="--sw:16px;--sc:${ink};font-size:${gold ? 132 : 112}px;line-height:1.05;color:${gold ? '#fff9db' : '#fff'};text-shadow:0 0 40px ${gold ? '#ffd43b' : '#fff'};white-space:nowrap">${gold ? '最速討伐' : '準最速討伐'}</div>
       <div class="stroke" style="--sw:12px;--sc:${ink};margin-top:16px;font-size:64px;color:${gold ? '#ffe066' : '#e9ecef'};white-space:nowrap">${gold ? '👑 誕生！！ 👑' : '✨ 現る！！ ✨'}</div>

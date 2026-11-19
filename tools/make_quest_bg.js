@@ -76,8 +76,35 @@ ${stars}${meteors}
 </svg>`;
 }
 
+// 水深夜: 真夜中の深海 (水面の上に月、差しこむ月の光の筋、泡、魚の影、海藻)
+function suishinya() {
+  const r = rng(23);
+  const bubbles = Array.from({ length: 40 }, () => { const x = r() * W, y = 200 + r() * 680, rr = 1.5 + r() * 5;
+    return `<circle cx="${f(x)}" cy="${f(y)}" r="${f(rr)}" fill="none" stroke="#a5d8ff" stroke-width="1.2" opacity="${f(0.3 + r() * 0.5)}"><animate attributeName="cy" values="${f(y)};${f(y - 120)}" dur="${f(5 + r() * 6)}s" repeatCount="indefinite"/></circle>`; }).join('');
+  const fish = Array.from({ length: 7 }, () => { const x = r() * W, y = 300 + r() * 450, s = 0.6 + r() * 0.9, d = r() < 0.5 ? 1 : -1;
+    return `<path transform="translate(${f(x)} ${f(y)}) scale(${f(s * d)} ${f(s)})" d="M-20,0 C-10,-9 10,-9 18,0 C10,9 -10,9 -20,0Z M18,0 L30,-8 L28,0 L30,8Z" fill="#0a1a3f" opacity=".7"/>`; }).join('');
+  const weeds = Array.from({ length: 9 }, (_, i) => { const x = 20 + i * 68 + r() * 20, h = 80 + r() * 120;
+    return `<path d="M${f(x)},900 C${f(x - 20)},${f(900 - h * 0.4)} ${f(x + 20)},${f(900 - h * 0.7)} ${f(x)},${f(900 - h)}" stroke="#0f3d3e" stroke-width="${f(6 + r() * 6)}" fill="none" stroke-linecap="round" opacity=".9"/>`; }).join('');
+  const stars = Array.from({ length: 40 }, () => `<circle cx="${f(r() * W)}" cy="${f(r() * 120)}" r="${f(0.5 + r() * 1.2)}" fill="#fff" opacity="${f(0.4 + r() * 0.6)}"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+<defs>
+<linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0b1a4a"/><stop offset=".18" stop-color="#103a7a"/><stop offset=".5" stop-color="#0b2a5e"/><stop offset="1" stop-color="#040b22"/></linearGradient>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05081c"/><stop offset="1" stop-color="#14204a"/></linearGradient>
+<linearGradient id="ray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d0ebff" stop-opacity=".35"/><stop offset="1" stop-color="#d0ebff" stop-opacity="0"/></linearGradient>
+<filter id="gl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"/></filter>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#sea)"/>
+<rect width="${W}" height="140" fill="url(#sky)"/>${stars}
+<circle cx="430" cy="60" r="30" fill="#fff9db" filter="url(#gl)" opacity=".7"/><circle cx="430" cy="60" r="24" fill="#fff9db"/>
+<path d="M0,140 C60,130 120,150 180,140 C240,130 300,150 360,140 C420,130 480,150 540,140 C570,135 590,140 600,140" stroke="#a5d8ff" stroke-width="3" fill="none" opacity=".7"/>
+<path d="M330,140 L230,900 L470,900 L420,140Z" fill="url(#ray)"/><path d="M450,140 L420,900 L600,900 L500,140Z" fill="url(#ray)" opacity=".7"/><path d="M120,140 L20,700 L160,700 L170,140Z" fill="url(#ray)" opacity=".5"/>
+${fish}${bubbles}${weeds}
+<path d="M0,870 C100,850 200,880 300,862 C400,846 500,872 600,858 V900 H0Z" fill="#071530"/>
+</svg>`;
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight })) {
+for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya })) {
   const svg = fn(); fs.writeFileSync(path.join(OUT, name + '.svg'), svg);
   console.log('作った:', `public/bg/${name}.svg`, svg.length, 'bytes');
 }

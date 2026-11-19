@@ -2081,3 +2081,16 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-newbulk-arts { display: flex; gap: 2px; flex-basis: 100%; justify-content: center; }
 .cb-newbulk-arts .cb-svg { width: 62px; height: 62px; }
 .cb-newbulk small { color: var(--primary, #4b55f0); font-weight: 800; }
+
+/* 説教 (ウォーターミッドナイト) */
+.cb-scolded { color: #1971c2; font-weight: 800; }
+.cb-float.skill.sermon { color: #1971c2; }
+.cb-sermon { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; align-content: center; gap: 2px; animation: cb-sm-flash 1.6s ease both; }
+.cb-sermon.to-foe { top: 0; } .cb-sermon.to-me { bottom: 0; }
+.cb-sermon b { position: relative; padding: 10px 22px; border-radius: 26px; background: #fff; color: #1864ab; font-size: 30px; font-weight: 900; box-shadow: 0 6px 0 rgba(16, 60, 120, .3), 0 0 0 4px #1c7ed6; animation: cb-sm-pop .9s cubic-bezier(.2, 1.6, .4, 1) both; }
+.cb-sermon b::after { content: ''; position: absolute; left: 40px; bottom: -14px; border: 10px solid transparent; border-top: 14px solid #fff; }
+.cb-sermon i { font-style: normal; font-weight: 900; color: #fff; -webkit-text-stroke: 5px #1864ab; paint-order: stroke fill; font-size: 18px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .25s both; }
+.cb-sermon em { font-style: normal; font-weight: 900; color: #fff; background: #e03131; padding: 2px 12px; border-radius: 999px; font-size: 15px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .45s both; }
+@keyframes cb-sm-pop { 0% { transform: scale(0) rotate(-12deg); } 60% { transform: scale(1.12) rotate(4deg); } 75% { transform: scale(.96) rotate(-3deg); } 100% { transform: scale(1) rotate(0); } }
+@keyframes cb-sm-flash { 0% { background: rgba(25, 113, 194, 0); } 15% { background: rgba(25, 113, 194, .35); } 100% { background: rgba(25, 113, 194, 0); } }
+@media (prefers-reduced-motion: reduce) { .cb-sermon { animation: none; } .cb-sermon * { animation: none !important; } }

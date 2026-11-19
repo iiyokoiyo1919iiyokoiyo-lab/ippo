@@ -83,6 +83,11 @@ const UPDATES = [
     text: `🔥【セール延長決定！】ガチャの割引 (1 回 30 コイン・10 回 270 コイン) を 11/23(月) 16:45 まで延長します！
 🎒 タドコロのピックアップは 11/20(金) 8:29 まで
 🖌️ 11/20(金) 8:30 から SSR「筆の剣士」ピックアップ 2% (〜11/21 8:30) ${TAG}` },
+  { key: 'preview-suishinya-2026-11-19', at: Date.parse('2026-11-19T23:45:00+09:00'), until: Date.parse('2026-11-20T08:30:00+09:00'), banner: 'quest-suishinya-2026',
+    text: `🌊【高難易度クエスト予告】明日 11/20(金) 8:30 から 3 日間、「水深夜」開催！
+敵は ウォーターミッドナイト・星キャンディー・虹色ペンケース姫 (全員 Lv20・能力 1.1 倍)
+📢 新わざ「説教」: 相手の攻撃力を 0.6 倍にして、味方の毒を治す！
+紙属性クエスト: 敵は全員つつむ → ✂️きるが有利。最速・準最速クリアには称号🌊 ${TAG}` },
 ];
 
 const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -119,7 +124,7 @@ function schedule() {
   for (const q of QUESTS) {
     const r = CARDS[q.reward];
     out.push({ key: `quest-start:${q.id}`, at: q.start, until: q.start + D, banner: bannerName('quest', q.id),
-      text: `${q.hard ? '⚡【高難易度クエスト開始】' : '🌠【期間限定クエスト開始】'}「${q.name}」が始まりました！
+      text: `${q.hard ? `${q.emoji || '⚡'}【高難易度クエスト開始】` : '🌠【期間限定クエスト開始】'}「${q.name}」が始まりました！
 ${q.enemy.map(([id, lv]) => `${CARDS[id].name} Lv${lv}`).join('・')} に勝つと、${r.rarity}「${r.name}」が仲間に！
 ${q.pr || `わざ「${SKILLS[r.skill].name}」: ${SKILLS[r.skill].desc}`}
 ${fmt(q.end)} まで ${TAG}` });
@@ -239,18 +244,19 @@ module.exports = function install(app, ctx) {
     const mins = Math.max(0, Math.floor((at - quest.start) / 60000)), took = mins >= 1440 ? `${Math.floor(mins / 1440)} 日 ${Math.floor(mins / 60) % 24} 時間` : mins >= 60 ? `${Math.floor(mins / 60)} 時間 ${mins % 60} 分` : `${mins} 分`;
     const r = cards.CARDS[quest.reward];
     const who = `${user.display_name || user.username} (@${user.username})`;
-    const text = rank === 1 ? `⚡⚡⚡【${quest.boss} 討伐速報】⚡⚡⚡
+    const e = quest.emoji || '⚡';
+    const text = rank === 1 ? `${e}${e}${e}【${quest.boss} 討伐速報】${e}${e}${e}
 🏆👑 最速討伐者、誕生！！ 👑🏆
 ${who} さんが「${quest.name}」で ${quest.boss}を全校最速で討伐ッ！！
 ⏱ 開始から ${took}・${turns} ターンで撃破
 🎁 ${r.rarity}「${r.name}」GET＆称号「${title || '最速討伐'}」授与！！
-雷鳴が止んだ…伝説の始まりだ🔥🔥🔥 ${TAG}`
-      : `⚡⚡【${quest.boss} 討伐速報・第 2 報】⚡⚡
+${quest.award || '伝説の始まりだ🔥🔥🔥'} ${TAG}`
+      : `${e}${e}【${quest.boss} 討伐速報・第 2 報】${e}${e}
 🥈✨ 準最速討伐者、現る！！ ✨🥈
 ${who} さんが「${quest.name}」で ${quest.boss}を討伐ッ！！
 ⏱ 開始から ${took}・${turns} ターンで撃破
 🎁 ${r.rarity}「${r.name}」GET＆称号「${title || '準最速討伐'}」授与！！
-次の討伐者はキミだ⚡🔥 ${TAG}`;
+次の討伐者はキミだ${e}🔥 ${TAG}`;
     const award = bannerName('award', `${quest.id}-${rank}`); // 表彰の金ピカ画像 (なければクエストのバナー)
     const id = post(text, bannerFile(award) ? award : bannerName('quest', quest.id));
     if (id) { db.prepare('INSERT OR IGNORE INTO official_posts (key, post_id, posted_at) VALUES (?, ?, ?)').run(key, id, Date.now()); console.log(`[official] 表彰しました: ${key} @${user.username}`); }

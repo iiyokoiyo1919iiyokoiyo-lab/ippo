@@ -364,6 +364,28 @@
         <path d="M74,26 C88,18 98,24 112,16 C104,30 92,28 78,32Z M76,30 C88,36 96,42 110,40 C100,50 90,44 78,36Z" fill="#e03131" stroke="#a61e1e" stroke-width="1.2"/>
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
+      // ウォーターミッドナイト (MR・つつむ・説教): 真夜中色の水筆ペン。しずく形の水タンクの中に夜の海と星、
+      // 頭に三日月のキャップ、まるメガネ、指し棒をかまえて説教する
+      watermid: () => {
+        const drop = `M60,8 C78,34 100,52 100,76 C100,100 82,114 60,114 C38,114 20,100 20,76 C20,52 42,34 60,8Z`;
+        return `
+        <path d="M96,40 L116,8" stroke="#8d5a2b" stroke-width="4" stroke-linecap="round"/><circle cx="116" cy="8" r="4" fill="#e03131"/>
+        <path d="${drop}" fill="${lg('wm', [[0, '#4dabf7'], [0.45, '#1c3d8f'], [1, '#0b1238']])}" stroke="#0b1238" stroke-width="2.4"/>
+        <g clip-path="${clip('wc', `<path d="${drop}"/>`)}">
+          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76 V120 H14Z" fill="${lg('sea', [[0, '#1971c2', 0.9], [1, '#0b1238', 1]])}"/>
+          <path d="M14,80 C30,72 44,86 60,78 C76,70 90,84 106,76" stroke="#a5d8ff" stroke-width="2" fill="none" opacity=".8"/>
+          ${[[34, 96, 2.2], [50, 104, 1.6], [76, 98, 2], [88, 90, 1.4], [62, 92, 1.2]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#e7f5ff" opacity=".9"/>`).join('')}
+          <circle cx="42" cy="50" r="12" fill="#fff" opacity=".12"/>
+        </g>
+        <path d="M44,22 C50,14 56,10 60,8" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+        <path d="M46,6 C52,-4 66,-4 70,4 C64,0 56,2 54,10 C52,6 48,6 46,6Z" fill="#ffe066" stroke="#f59f00" stroke-width="1.4"/>
+        ${twinkle(78, 4, 4, '#fff3bf')}${twinkle(34, 14, 3, '#fff')}
+        <circle cx="48" cy="58" r="10" fill="#e7f5ff" opacity=".25" stroke="#fff" stroke-width="2.4"/><circle cx="72" cy="58" r="10" fill="#e7f5ff" opacity=".25" stroke="#fff" stroke-width="2.4"/><path d="M58,58 h4" stroke="#fff" stroke-width="2.4"/>
+        ${face(60, 58, { eyes: 'cool', mouth: 'o', s: 0.85, iris: '#fff', blush: false })}
+        <path d="M40,46 L54,50 M80,46 L66,50" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M92,62 C104,56 106,46 98,40" stroke="#1c3d8f" stroke-width="6" stroke-linecap="round" fill="none"/>
+        <rect x="88" y="98" width="30" height="20" rx="8" fill="#fff" stroke="#1c7ed6" stroke-width="2"/><text x="103" y="112" font-size="10" font-weight="900" text-anchor="middle" fill="#1864ab" font-family="sans-serif">コラ!</text>`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>
