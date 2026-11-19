@@ -341,6 +341,29 @@
         <path d="M58,46l-4,7h4l-3,6l8,-9h-4l3,-4z" fill="#ffe066" stroke="#e67700" stroke-width=".8"/>
         ${bolt(16, 0, 1)}${bolt(112, 70, 0.9)}${bolt(104, 0, 0.75, '#fff3bf')}${bolt(8, 92, 0.6, '#fff3bf')}`;
       },
+      // 筆の剣士 (SSR・きる・疾風斬り): ほかのキャラより少し大きい。刀のようにかまえた大筆、金の帯、なびくハチマキ、緑の墨の斬撃
+      brush: () => {
+        const drop = (x, y, r) => `<path d="M${x},${y - r * 1.6} C${x + r},${y - r * 0.2} ${x + r},${y + r} ${x},${y + r} C${x - r},${y + r} ${x - r},${y - r * 0.2} ${x},${y - r * 1.6}Z" fill="#0b3d2e"/>`;
+        return `<g transform="translate(60 60) scale(1.12) translate(-60 -60)">
+        <path d="M4,84 C20,40 64,14 112,18" fill="none" stroke="${lg('sl1', [[0, '#e6fcf5', 0], [0.4, '#63e6be'], [0.8, '#12b886'], [1, '#e6fcf5', 0]], 1, 0)}" stroke-width="9" stroke-linecap="round" opacity=".85"/>
+        <path d="M10,104 C44,92 84,66 116,36" fill="none" stroke="${lg('sl2', [[0, '#fff', 0], [0.5, '#96f2d7'], [1, '#fff', 0]], 1, 0)}" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+        <path d="M18,30 C30,22 42,24 50,30 C40,28 30,30 18,30Z M88,96 C98,90 108,92 114,98 C104,96 96,96 88,96Z" fill="#20c997" opacity=".7"/>
+        ${drop(16, 58, 4)}${drop(104, 86, 3.4)}${drop(98, 14, 2.6)}${drop(24, 106, 2.4)}
+        <g transform="rotate(-26 60 60)">
+          <rect x="47" y="8" width="26" height="10" rx="5" fill="#5c3317"/><circle cx="60" cy="6" r="4.5" fill="none" stroke="#e03131" stroke-width="2.4"/>
+          <rect x="43" y="16" width="34" height="52" rx="11" fill="${lg('bw', [[0, '#d9a066'], [0.5, '#a9744f'], [1, '#6b3d1f']], 1, 0)}" stroke="#4a2a12" stroke-width="2.2"/>
+          <rect x="43" y="22" width="34" height="5" fill="${lg('gb1', [[0, '#fff3bf'], [0.5, '#fab005'], [1, '#e67700']], 1, 0)}"/>
+          <rect x="43" y="58" width="34" height="5" fill="${lg('gb2', [[0, '#fff3bf'], [0.5, '#fab005'], [1, '#e67700']], 1, 0)}"/>
+          <rect x="47" y="28" width="5" height="28" rx="2.5" fill="#fff" opacity=".35"/>
+          <rect x="41" y="66" width="38" height="10" rx="3" fill="${lg('fm', [[0, '#f8f9fa'], [0.5, '#ced4da'], [1, '#868e96']], 1, 0)}" stroke="#868e96"/>
+          <path d="M41,76 C39,90 53,102 60,110 C67,102 81,90 79,76Z" fill="${lg('ink', [[0, '#343a40'], [0.55, '#0b3d2e'], [1, '#20c997']])}"/>
+          <path d="M50,80 C52,92 57,99 60,105" stroke="#63e6be" stroke-width="1.8" fill="none" opacity=".7"/>
+          <path d="M43,33 H77" stroke="#e03131" stroke-width="5"/>
+          ${face(60, 46, { eyes: 'brave', mouth: 'grin', s: 0.95 })}
+        </g>
+        <path d="M74,26 C88,18 98,24 112,16 C104,30 92,28 78,32Z M76,30 C88,36 96,42 110,40 C100,50 90,44 78,36Z" fill="#e03131" stroke="#a61e1e" stroke-width="1.2"/>
+        ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
+      },
       case: () => `
         ${heart(18, 30, 1.2, '#ff8fab')}${heart(104, 26, 0.9, '#b197fc')}
         <rect x="12" y="40" width="96" height="62" rx="28" fill="${lg('rb', [[0, '#ffc9c9'], [0.2, '#ffe8cc'], [0.4, '#fff3bf'], [0.6, '#d3f9d8'], [0.8, '#d0ebff'], [1, '#e5dbff']], 1, 0)}" stroke="#f783ac" stroke-width="2.5"/>

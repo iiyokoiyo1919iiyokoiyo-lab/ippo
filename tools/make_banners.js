@@ -167,7 +167,7 @@ function gachaHtml(n) {
   for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity] && !cards.BULK_IDS.has(id)) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
   for (const q of cards.QUESTS) for (const rank of Object.keys(q.titles || {})) jobs.push({ name: bannerName('award', `${q.id}-${rank}`), html: awardHtml(q, Number(rank)), art: [q.reward, cards.CARDS[q.reward].rarity] });
-  for (const n of GACHA_NOTICES) { const pk = gachaInfo(n).pickups[0]; jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
+  for (const n of GACHA_NOTICES) { const ps = gachaInfo(n).pickups, pk = ps.find((x) => x.start >= n.at) || ps[0]; /* その告知で始まるピックアップのキャラを大きく */ jobs.push({ name: bannerName('gacha', n.id), html: gachaHtml(n), art: pk ? [pk.id, pk.card.rarity] : ['case', 'SSR'] }); }
   // 絵の抜けがないか確かめる (cards-art.js にないキャラは、えんぴつの絵になってしまう)
   {
     const vm = require('vm'), sandbox = { window: {} }; vm.runInNewContext(ART, sandbox);
