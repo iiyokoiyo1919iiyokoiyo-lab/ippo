@@ -463,14 +463,14 @@ ALTER TABLE card_horses ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 // 決まった敵のデッキ (CPU) に勝つとクリア。はじめてクリアしたときだけ報酬のカードがもらえる。期間はサーバーの時刻で決める
 // テストのときは環境変数 CB_QUEST_START / CB_QUEST_END (ミリ秒の時刻) で上書きできる
 const QUESTS = [
-  { id: 'starlight-2026', name: '星降る夜のクエスト', boss: '流れ星の三騎士', emoji: '🌠', reward: 'star',
+  { id: 'starlight-2026', name: '星降る夜のクエスト', boss: '流れ星の三騎士', emoji: '🌠', reward: 'star', bg: 'starlight', // bg: 対戦の背景 (public/bg/<bg>.svg。tools/make_quest_bg.js で作る)
     pr: 'わざ「スターライトマーチ」は 5 ターンのあいだ流星を降らせる！',
     text: '夜空から現れた 3 体のキャラクター。勝てば MR「星キャンディー」が仲間になる！',
     tip: '星キャンディーの「スターライトマーチ」は、5 ターンのあいだ毎ターン流星でダメージを与えてきます。相性 (✂️きる は 📄つつむ に強い) を考えてデッキを組もう！',
     enemy: [['star', 2], ['leaf', 3], ['gold', 1]],
     start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
   // 高難易度 (hard): 敵は先を読む強い CPU。能力に boost をかける (雷神降臨は 1.1 倍。Lv18 の SSR・MR デッキで勝率 タドコロ入り 23% / なし 13% くらい)
-  { id: 'raijin-2026', name: '雷神降臨', boss: '雷神クリりん', emoji: '⚡', reward: 'raijin', hard: true, boost: 1.1,
+  { id: 'raijin-2026', name: '雷神降臨', boss: '雷神クリりん', emoji: '⚡', reward: 'raijin', bg: 'raijin-night', hard: true, boost: 1.1,
     hint: '敵は全員 ✂️きる → 🪨おもいのタドコロが有利！',
     pr: 'わざ「落雷」は、どんな相性でも 2.3 倍の無属性こうげき！ 敵は先を読む強い CPU。\n敵は全員 ✂️きる。🪨おもいのタドコロが大活躍！ 野獣の眼光で怯ませれば落雷も止められる！',
     text: '雷鳴とともに現れた魔人「雷神クリりん」。落雷はどんな相性でも 2.3 倍！ 勝てば MR「雷神クリりん」が仲間になる',
@@ -774,7 +774,7 @@ function install(app, ctx) {
       players: uids.map((u) => (u ? userView(u) : cpuView)),
       state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u).map((c) => questBonus(quest, c)) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
     const items = quest?.hard ? { list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })), from: quest.start + ITEMS_AFTER } : null;
-    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, ...(items ? { items, coins: player(u).coins } : {}), quest: quest ? { id: quest.id, name: quest.name } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
+    uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, ...(items ? { items, coins: player(u).coins } : {}), quest: quest ? { id: quest.id, name: quest.name, bg: quest.bg || null, hard: !!quest.hard } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);
     return b;
   }

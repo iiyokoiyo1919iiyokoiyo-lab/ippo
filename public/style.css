@@ -2054,3 +2054,22 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 .cb-quest-items { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #e6fcf5; color: #0b5345; border: 2px solid #63e6be; display: grid; gap: 4px; font-size: .82rem; }
 .cb-quest-items > b { color: #087f5b; }
 .cb-quest-items small { color: #2b8a3e; }
+
+/* 期間限定クエストの戦闘背景 (public/bg/*.svg)。文字が読めるように、上の文字を白に・ログは半透明の白に */
+.cb-battle.qbg { background: var(--qbg) center / cover no-repeat, #0b1026; border-color: transparent; }
+.cb-battle.qbg > .cb-top, .cb-battle.qbg > .cb-top b, .cb-battle.qbg .cb-timer, .cb-battle.qbg .cb-acts > p, .cb-battle.qbg .cb-surrender { color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, .8); }
+.cb-battle.qbg .cb-timer.hurry { color: #ff8787; }
+.cb-battle.qbg .cb-log { background: rgba(255, 255, 255, .88); color: #1b1b3a; backdrop-filter: blur(4px); }
+.cb-battle.qbg .cb-fighter { background: color-mix(in srgb, var(--rc) 10%, rgba(255, 255, 255, .92)); color: #1b1b3a; }
+.cb-battle.qbg .cb-acts .btn-outline, .cb-battle.qbg .cb-acts .btn-ghost { background: rgba(255, 255, 255, .92); }
+.cb-battle.qbg .cb-wait, .cb-battle.qbg .cb-end { color: #1b1b3a; }
+/* 落雷: ハサミ丸の斬撃の黄色版 + 縦の斬撃 */
+.cb-yslash { animation-name: cb-ys-flash; }
+.cb-yslash i { background: linear-gradient(90deg, transparent, #fff9db 15%, #fff 45%, #fcc419 70%, transparent); box-shadow: 0 0 18px 4px #fab005, 0 0 40px 10px rgba(250, 176, 5, .55); }
+.cb-yslash i.v { top: -10%; left: auto; width: 16px; height: 120%; border-radius: 50%; background: linear-gradient(180deg, transparent, #fff9db 15%, #fff 45%, #fcc419 70%, transparent); transform-origin: center top; animation: cb-ys-down .42s cubic-bezier(.2, .9, .2, 1) both; }
+.cb-yslash i.v:nth-of-type(4) { left: 34%; --r: 8deg; animation-delay: .36s; }
+.cb-yslash i.v:nth-of-type(5) { left: 64%; --r: -6deg; animation-delay: .5s; width: 12px; }
+.cb-yslash b { -webkit-text-stroke-color: #b35c00; text-shadow: 0 0 18px #ffd43b; }
+@keyframes cb-ys-down { 0% { transform: rotate(var(--r)) scaleY(0); opacity: 1; } 60% { transform: rotate(var(--r)) scaleY(1); opacity: 1; } 100% { transform: rotate(var(--r)) scaleY(1); opacity: 0; } }
+@keyframes cb-ys-flash { 0% { background: rgba(255, 212, 59, 0); } 15% { background: rgba(255, 236, 153, .45); } 45% { background: rgba(255, 212, 59, .1); } 55% { background: rgba(255, 249, 219, .4); } 100% { background: rgba(255, 212, 59, 0); } }
+@media (prefers-reduced-motion: reduce) { .cb-yslash { display: none; } }

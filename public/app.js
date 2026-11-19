@@ -3680,7 +3680,7 @@ async function viewBattle(params) {
       else if (e.k === 'skill' && e.id === 'thunder') { // 落雷: 画面が光って、相手の盤面に稲妻が落ちる
         setTimeout(() => {
           replay(el(e.p), 'charge'); pop(e.p, e.skill, 'skill thunder');
-          overlayFx('cb-thunder' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><b>⚡ 落雷！</b>', 1300, e.p === you ? 'top' : 'bottom');
+          overlayFx('cb-gslash cb-yslash' + (e.p === you ? ' to-foe' : ' to-me'), '<i></i><i></i><i></i><i class="v"></i><i class="v"></i><b>⚡ 落雷！</b>', 1400, e.p === you ? 'top' : 'bottom');
         }, t);
         t += 650;
       }
@@ -3741,6 +3741,8 @@ async function viewBattle(params) {
       if (m.t === 'start') {
         you = m.you; players = m.players; state = m.state; ended = false; if (m.resumed) log.push('つなぎ直しました');
         if (m.items) { items = m.items; coins = m.coins; }
+        if (m.quest?.bg && /^[a-z0-9-]+$/.test(m.quest.bg)) { box().classList.add('qbg'); box().style.setProperty('--qbg', `url("/bg/${m.quest.bg}.svg")`); } // 期間限定クエストの戦闘背景
+        if (m.quest) { const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = `${m.quest.hard ? '⚡ ' : '🌠 '}${m.quest.name}`; }
         if (m.board) { fromBoard = true; const h = $('.page-head h1'); if (h?.firstChild?.nodeType === 3) h.firstChild.nodeValue = m.rated ? '📋 レート戦 (掲示板)' : '📋 掲示板の対戦';
           if (!m.resumed && m.vs && you === 1) log.push(`掲示板からのレート戦です (この相手とはこれまで ${m.vs.games} 戦 ${m.vs.wins} 勝 ${m.vs.losses} 敗)`);
           else if (!m.resumed) log.push('掲示板からのレート戦です'); }

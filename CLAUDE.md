@@ -6,6 +6,7 @@
 1. **カードゲームの設定** (`cards.js`)
    - 新キャラ: `CARD_LIST` に追加し、登場時刻を `RELEASES` に入れる (ピックアップがあれば `PICKUPS` も)
    - 新クエスト: `QUESTS` に追加する (開始・終了の時刻、敵、報酬)
+   - 期間限定クエストには固有の戦闘背景を付ける: `tools/make_quest_bg.js` に絵を足して `node tools/make_quest_bg.js` → `public/bg/<名前>.svg`、`QUESTS` の `bg` に名前を書く
 2. **ドパバナー (告知画像) を作る**
    - `node tools/make_banners.js` を実行すると、設定から `public/banners/char-<id>.jpg` / `public/banners/quest-<id>.jpg` ができる
    - できた画像を開いて、文字が読めること・キャラが見えることを確認してからコミットする (作り直しは `--force`)
