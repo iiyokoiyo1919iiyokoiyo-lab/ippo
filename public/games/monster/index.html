@@ -85,7 +85,7 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 .hp{height:12px;border-radius:99px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:4px}
 .hp i{display:block;height:100%;background:linear-gradient(90deg,#51cf66,#94d82d);transition:width .6s ease}
 .hp i.low{background:linear-gradient(90deg,#ff6b6b,#fa5252)}
-.bt-mid{display:grid;grid-template-columns:1fr 112px;gap:8px;margin:8px 0}
+.bt-mid{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:8px;margin:8px 0}
 .slots{display:flex;flex-wrap:wrap;gap:4px;min-height:44px;padding:6px;border-radius:12px;background:rgba(0,0,0,.35);border:2px dashed rgba(255,255,255,.35);align-content:flex-start}
 .slots span{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:900;background:#fff;color:#23224a;animation:pop .2s ease}
 .queue{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.queue span{padding:2px 8px;border-radius:999px;font-size:12px;font-weight:900;background:#ffe066;color:#4a2a00;animation:pop .25s ease}.queue span.ng{background:#868e96;color:#fff}
@@ -142,6 +142,26 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 @keyframes beamout{0%{transform:scaleY(1);opacity:1}100%{transform:scaleY(0);opacity:0}}
 @keyframes pdmg{0%{transform:translate(-50%,10px) scale(.6);opacity:0}20%{transform:translate(-50%,-6px) scale(1.2);opacity:1}40%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{transform:translate(-50%,-24px);opacity:0}}
 @media (prefers-reduced-motion: reduce){.ftr .mon{animation:none}.stage.quake,.stage.jolt{animation:none}}
+/* 入力の画面: 高さを固定して、キーを押してもボタンが動かないように */
+#ctrl .prompt{min-height:50px;margin:6px 0 2px}#ctrl .prompt small{display:block;font-size:11px;opacity:.8;min-height:14px}
+#ctrl .queue{min-height:26px;max-height:26px;overflow:hidden;margin:4px 0}
+#ctrl .slots{height:72px;overflow:hidden;align-content:flex-start}
+#ctrl .slots span{width:26px;height:26px;font-size:15px}
+.hintline{height:20px;margin:3px 0;font-size:12px;font-weight:800;color:#ffe066;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hintline.miss{color:#ffa8a8}
+.ctlmode{display:flex;gap:4px;justify-content:center;margin:2px 0 4px}
+.ctlmode button{border:0;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800;background:rgba(255,255,255,.12);color:#fff}
+.ctlmode button.on{background:#ffe066;color:#4a2a00}
+#pad{height:200px;overflow:hidden;display:grid;place-items:center}
+.inarea{min-width:0}
+.stick-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+.stick{position:relative;width:150px;height:150px;flex:none;border-radius:50%;background:radial-gradient(circle,#3b2f8f 0,#221b5c 60%,#14123a 100%);border:4px solid rgba(255,255,255,.35);box-shadow:inset 0 0 0 10px rgba(255,255,255,.05),0 6px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;-webkit-user-select:none}
+.stick .thumb{position:absolute;left:50%;top:50%;width:66px;height:66px;margin:-33px 0 0 -33px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#d0d4e8 60%,#8a8fb5);box-shadow:0 4px 0 #5c5f80,0 0 14px rgba(255,255,255,.4);transition:transform .12s ease}
+.stick.held .thumb{transition:none}
+.stick .sd{position:absolute;font-style:normal;font-weight:900;font-size:20px;color:rgba(255,255,255,.45)}
+.stick .sd.u{top:4px;left:50%;transform:translateX(-50%)}.stick .sd.d{bottom:4px;left:50%;transform:translateX(-50%)}.stick .sd.l{left:8px;top:50%;transform:translateY(-50%)}.stick .sd.r{right:8px;top:50%;transform:translateY(-50%)}
+.stick[data-dir="U"] .sd.u,.stick[data-dir="D"] .sd.d,.stick[data-dir="L"] .sd.l,.stick[data-dir="R"] .sd.r{color:#ffe066;text-shadow:0 0 10px #ffe066}
+.stick.kpress{animation:none}.stick.kpress .thumb{box-shadow:0 4px 0 #5c5f80,0 0 26px #ffe066}
+.erase{background:rgba(255,255,255,.15);color:#fff;white-space:nowrap;padding:3px 12px}
 /* キーを押すたびのエフェクト */
 .kfx{position:absolute;pointer-events:none;z-index:8}
 .kfx.ring{width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:4px solid var(--c);box-shadow:0 0 18px var(--c);animation:kring .5s ease-out both}
@@ -197,6 +217,6 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 <body>
 <div id="app"><p class="empty">よみこみ中…</p></div>
 <script src="/games/monster/mon-art.js?v=1"></script>
-<script src="/games/monster/mon.js?v=6"></script>
+<script src="/games/monster/mon.js?v=9"></script>
 </body>
 </html>

@@ -271,29 +271,68 @@
       const sl = $('#slog'); if (sl) sl.textContent = log.slice(-1)[0] || `ラウンド ${st.round + 1} · ${st.first === you ? 'あなたが先攻' : '相手が先攻'}`;
       [['me', st.mons[you]], ['foe', st.mons[1 - you]]].forEach(([w, f]) => { const i = $(`.pl.${w} .hp i`, bt), n = $(`.pl.${w} .small`, bt); if (i) { i.style.width = Math.max(0, (f.hp / f.maxHp) * 100) + '%'; i.classList.toggle('low', f.hp / f.maxHp < 0.3); } if (n) n.textContent = `${f.hp}/${f.maxHp}`; });
     }
+    // 入力のしかた: 十字キー (pad) / スティック (stick)。端末に覚えておく
+    let ctrlMode = (() => { try { return localStorage.getItem('mon_ctrl') === 'stick' ? 'stick' : 'pad'; } catch { return 'pad'; } })();
+    const surBtn = () => (ended ? '' : '<button class="btn sm" id="sur" style="margin-top:8px;background:rgba(255,255,255,.15);color:#fff">こうさん</button>');
+    const padHtml = () => `<div class="pad"><span class="c"></span><button data-k="U">↑</button><span class="c"></span><button data-k="L">←</button><button class="c" data-k="X" style="font-size:16px;background:rgba(255,255,255,.2);color:#fff;box-shadow:none">消す</button><button data-k="R">→</button><span class="c"></span><button data-k="D">↓</button><span class="c"></span></div>`;
+    const stickHtml = () => `<div class="stick-wrap"><div class="stick" id="stick"><i class="sd u">↑</i><i class="sd d">↓</i><i class="sd l">←</i><i class="sd r">→</i><b class="thumb" id="thumb"></b></div><button class="btn sm erase" data-k="X">⌫ 消す</button></div>`;
+    // 入力の画面は 1 ラウンドに 1 回だけ組み立てる。キーを押したときは中身だけ変える (ボタンの位置が動かないように)
     function render(phase) {
       if (!$('#bt')) return;
       if (!$('#stage')) buildStage(); else updStage();
+      if (phase !== 'input') { $('#ctrl').innerHTML = `<p class="prompt" style="opacity:.85">⚔️ バトル中…</p><div style="min-height:250px"></div>${surBtn()}`; bindSur(); return; }
+      $('#ctrl').innerHTML = `<p class="prompt" id="prompt"></p><div class="timer"><i id="tbar" style="width:100%"></i></div>
+        <div class="queue" id="queue"></div>
+        <div class="bt-mid"><div class="inarea">
+          <div class="slots" id="slots"></div><div class="hintline" id="hint"></div>
+          <div class="ctlmode" role="tablist"><button type="button" data-mode="pad" class="${ctrlMode === 'pad' ? 'on' : ''}">✚ 十字キー</button><button type="button" data-mode="stick" class="${ctrlMode === 'stick' ? 'on' : ''}">🕹️ スティック</button></div>
+          <div id="pad">${ctrlMode === 'stick' ? stickHtml() : padHtml()}</div>
+          <button class="btn gold block" id="ok" style="font-size:20px">決定！</button></div>
+          <div class="cmdlist" id="cmdlist"></div></div>${surBtn()}`;
+      bindPad();
+      $$('[data-mode]', bt).forEach((b) => b.addEventListener('click', () => { ctrlMode = b.dataset.mode; try { localStorage.setItem('mon_ctrl', ctrlMode); } catch {} $$('[data-mode]', bt).forEach((x) => x.classList.toggle('on', x === b)); $('#pad').innerHTML = ctrlMode === 'stick' ? stickHtml() : padHtml(); bindPad(); updateInput(); }));
+      $('#ok', bt).addEventListener('click', submit);
+      bindSur();
+      updateInput();
+    }
+    function bindSur() { $('#sur', bt)?.addEventListener('click', () => { if (confirm('こうさんしますか？')) wsSend({ t: 'surrender' }); }); }
+    function bindPad() {
+      $$('#pad [data-k]', bt).forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
+      const stick = $('#stick', bt); if (!stick) return;
+      // スティック: 倒した向きを入力。同じ向きをもう一度入れるときは、いったん真ん中にもどす (向きを変えるのはそのままでも OK)
+      const thumb = $('#thumb', stick); let id = null, last = null;
+      const move = (e) => {
+        const r = stick.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        const d = Math.hypot(dx, dy), max = r.width / 2 - 26, k = d > max ? max / d : 1;
+        thumb.style.transform = `translate(${dx * k}px,${dy * k}px)`;
+        if (d < r.width * 0.12) { last = null; stick.dataset.dir = ''; return; }
+        if (d > r.width * 0.26) { const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'); if (dir !== last) { last = dir; stick.dataset.dir = dir; press(dir); } }
+      };
+      stick.addEventListener('pointerdown', (e) => { e.preventDefault(); id = e.pointerId; stick.setPointerCapture(id); stick.classList.add('held'); move(e); });
+      stick.addEventListener('pointermove', (e) => { if (e.pointerId === id) move(e); });
+      const up = (e) => { if (e.pointerId !== id) return; id = null; last = null; stick.dataset.dir = ''; stick.classList.remove('held'); thumb.style.transform = ''; };
+      stick.addEventListener('pointerup', up); stick.addEventListener('pointercancel', up);
+    }
+    function updateInput() {
+      if (!$('#slots', bt)) return;
       const match = mySkills().find((s) => s.cmd === keys);
-      $('#ctrl').innerHTML = `
-        ${phase === 'input' ? `<p class="prompt">${closed ? '時間切れ！ 技を出すよ' : queued.length ? `続けて打てる！ (${queued.length} 個確定)` : 'コマンドを打って技を入力！'}${oppN ? `<small style="display:block;font-size:11px;opacity:.8">相手は ${oppN} 個確定</small>` : ''}</p><div class="timer"><i id="tbar" style="width:100%"></i></div>
-          ${queued.length ? `<div class="queue">${queued.map((q, i) => { const s = mySkills().find((x) => x.cmd === q); return `<span class="${s ? 'ok' : 'ng'}">${i + 1}. ${s ? esc(s.name) : '不発'}</span>`; }).join('')}</div>` : ''}
-          <div class="bt-mid"><div><div class="slots ${match ? 'match' : ''}" id="slots">${[...keys].map((k) => `<span>${ARROW[k]}</span>`).join('') || '<small style="opacity:.6">↑↓←→ を押してコマンドを入力</small>'}</div>
-            ${match ? `<p style="margin:4px 0;font-weight:900;color:#ffe066">✨ ${esc(match.name)}！</p>` : ''}
-            <div class="pad"><span class="c"></span><button data-k="U">↑</button><span class="c"></span><button data-k="L">←</button><button class="c" data-k="X" style="font-size:16px;background:rgba(255,255,255,.2);color:#fff;box-shadow:none" ${closed ? 'disabled' : ''}>消す</button><button data-k="R">→</button><span class="c"></span><button data-k="D">↓</button><span class="c"></span></div>
-            <button class="btn gold block" id="ok" ${closed || !keys ? 'disabled' : ''} style="font-size:20px">決定！</button></div>
-            <div class="cmdlist"><b style="font-size:12px">コマンド一覧</b>${mySkills().map((s) => `<div class="${s.cmd === keys ? 'hit' : s.cmd.startsWith(keys) && keys ? 'hit' : ''}"><b>${esc(s.name)}</b><span class="cmd">${arrows(s.cmd)}</span></div>`).join('')}</div></div>`
-          : `<p class="prompt" style="opacity:.85">⚔️ バトル中…</p><div style="min-height:250px"></div>`}
-        ${ended ? '' : '<button class="btn sm" id="sur" style="margin-top:8px;background:rgba(255,255,255,.15);color:#fff">こうさん</button>'}`;
-      $$('[data-k]', bt).forEach((b) => b.addEventListener('click', () => press(b.dataset.k)));
-      $('#ok', bt)?.addEventListener('click', submit);
-      $('#sur', bt)?.addEventListener('click', () => { if (confirm('こうさんしますか？')) wsSend({ t: 'surrender' }); });
+      const near = keys && mySkills().filter((s) => s.cmd.startsWith(keys) && s.cmd !== keys).sort((a, b) => a.cmd.length - b.cmd.length)[0];
+      $('#prompt', bt).innerHTML = `${closed ? '時間切れ！ 技を出すよ' : queued.length ? `続けて打てる！ (${queued.length} 個確定)` : 'コマンドを打って技を入力！'}<small>${oppN ? `相手は ${oppN} 個確定` : '&nbsp;'}</small>`;
+      $('#queue', bt).innerHTML = queued.map((q, i) => { const s = mySkills().find((x) => x.cmd === q); return `<span class="${s ? 'ok' : 'ng'}">${i + 1}. ${s ? esc(s.name) : '不発'}</span>`; }).join('');
+      const sl = $('#slots', bt); sl.className = 'slots' + (match ? ' match' : '');
+      sl.innerHTML = [...keys].map((k) => `<span>${ARROW[k]}</span>`).join('') || '<small style="opacity:.6">↑↓←→ でコマンドを入力</small>';
+      const h = $('#hint', bt);
+      h.className = 'hintline' + (keys && !match && !near ? ' miss' : '');
+      h.innerHTML = match ? `✨ <b>${esc(match.name)}</b>！ 決定で確定` : near ? `→ <b>${esc(near.name)}</b> まで あと ${near.cmd.length - keys.length} キー` : keys ? 'この並びの技はありません (消すで直せます)' : '&nbsp;';
+      $('#cmdlist', bt).innerHTML = `<b style="font-size:12px">コマンド一覧</b>${mySkills().map((s) => `<div class="${keys && s.cmd.startsWith(keys) ? 'hit' : ''}"><b>${esc(s.name)}</b><span class="cmd">${arrows(s.cmd)}</span></div>`).join('')}`;
+      $('#ok', bt).disabled = closed || !keys;
+      $$('#pad button, [data-mode]', bt).forEach((b) => { b.disabled = closed; });
     }
     function press(k) {
       if (closed || ended || !st) return;
       if (k === 'X') keys = keys.slice(0, -1); else if (keys.length < 14) keys += k;
       const before = mySkills().find((s) => s.cmd === keys);
-      render('input');
+      updateInput();
       keyFx(k, before);
       if (before && k !== 'X') cutin(before, true);
     }
@@ -301,24 +340,23 @@
     const KEY_COL = { U: '#ffe066', D: '#74c0fc', L: '#ff8787', R: '#8ce99a', X: '#ced4da' };
     function keyFx(k, matched) {
       const box = bt.getBoundingClientRect();
-      const btn = $(`[data-k="${k}"]`, bt), slots = $('#slots', bt);
+      const btn = $(`#pad [data-k="${k}"]`, bt) || $('#stick', bt), slots = $('#slots', bt);
       if (!btn || !slots) return;
       const br = btn.getBoundingClientRect(), sr = slots.getBoundingClientRect(), col = KEY_COL[k];
       const at = (r) => ({ x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 });
       const from = at(br), last = slots.lastElementChild?.getBoundingClientRect?.() ? at(slots.lastElementChild.getBoundingClientRect()) : at(sr);
       const fx = (cls, x, y, css = '', html = '', ms = 700) => { const e = document.createElement('i'); e.className = 'kfx ' + cls; e.style.cssText = `left:${x}px;top:${y}px;--c:${col};${css}`; e.innerHTML = html; bt.append(e); setTimeout(() => e.remove(), ms); return e; };
       fx('ring', from.x, from.y);                                   // ボタンから光の輪
-      btn.classList.add('kpress');
+      btn.classList.remove('kpress'); void btn.offsetWidth; btn.classList.add('kpress');
       if (k === 'X') return;
       fx('fly', from.x, from.y, `--dx:${last.x - from.x}px;--dy:${last.y - from.y}px`, ARROW[k], 420); // 矢印が入力枠へ飛ぶ
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4, d = 22 + Math.random() * 18; fx('spark', last.x, last.y, `--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d}px;animation-delay:.32s`, '', 900); }
       const near = mySkills().filter((s) => s.cmd.startsWith(keys) && s.cmd !== keys).sort((a, b) => a.cmd.length - b.cmd.length)[0];
       if (matched) { slots.classList.add('kmatch'); fx('burst', last.x, last.y, 'animation-delay:.3s', '', 900); }
-      else if (near) { const h = document.createElement('div'); h.className = 'knear'; h.innerHTML = `→ <b>${esc(near.name)}</b> まで あと ${near.cmd.length - keys.length} キー`; slots.after(h); }
-      else { slots.classList.add('kmiss'); const h = document.createElement('div'); h.className = 'knear miss'; h.textContent = 'この並びの技はありません (消すで直せます)'; slots.after(h); }
+      else if (!near) slots.classList.add('kmiss');
     }
     // 決定: 確定した技は順番にならび、時間があるあいだは続けて何個でも打てる
-    function submit() { if (closed || ended || !keys) return; wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; render('input'); }
+    function submit() { if (closed || ended || !keys) return; wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; updateInput(); }
     const onKey = (e) => { const k = { ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', Backspace: 'X' }[e.key]; if (k) { e.preventDefault(); press(k); } else if (e.key === 'Enter') submit(); };
     document.addEventListener('keydown', onKey);
     function cutin(s, preview = false, who = you) {
@@ -348,10 +386,10 @@
           st = m.state; keys = ''; queued = Array.isArray(m.queued) ? m.queued.slice() : []; closed = false; oppN = 0; deadline = Date.now() + (m.deadline - Date.now());
           render('input'); clearInterval(timer);
           timer = setInterval(() => { const b = $('#tbar'); if (!b) return; const left = Math.max(0, deadline - Date.now()); b.style.width = (left / m.ms) * 100 + '%';
-            if (left <= 0) { clearInterval(timer); if (keys && mySkills().some((s) => s.cmd === keys)) submit(); closed = true; render('input'); } }, 100);
+            if (left <= 0) { clearInterval(timer); if (keys && mySkills().some((s) => s.cmd === keys)) submit(); closed = true; updateInput(); } }, 100);
           return;
         }
-        if (m.t === 'opponentReady') { oppN = m.n || oppN + 1; if (!closed) render('input'); return; }
+        if (m.t === 'opponentReady') { oppN = m.n || oppN + 1; updateInput(); return; }
         if (m.t === 'queued') return;
         if (m.t === 'result') { clearInterval(timer); busy = true; await playEvents(m.events, m.state); busy = false; return; }
         if (m.t === 'opponentLeft') { log.push('相手の接続が切れました'); return; }
