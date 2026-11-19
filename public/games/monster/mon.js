@@ -252,7 +252,28 @@
       if (k === 'X') keys = keys.slice(0, -1); else if (keys.length < 14) keys += k;
       const before = mySkills().find((s) => s.cmd === keys);
       render('input');
+      keyFx(k, before);
       if (before && k !== 'X') cutin(before, true);
+    }
+    // キーを押すたびのエフェクト: ボタンから光の輪・入力枠に火花と矢印が飛びこむ・どの技に近づいているか・合わなくなったらゆれる
+    const KEY_COL = { U: '#ffe066', D: '#74c0fc', L: '#ff8787', R: '#8ce99a', X: '#ced4da' };
+    function keyFx(k, matched) {
+      const box = bt.getBoundingClientRect();
+      const btn = $(`[data-k="${k}"]`, bt), slots = $('#slots', bt);
+      if (!btn || !slots) return;
+      const br = btn.getBoundingClientRect(), sr = slots.getBoundingClientRect(), col = KEY_COL[k];
+      const at = (r) => ({ x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 });
+      const from = at(br), last = slots.lastElementChild?.getBoundingClientRect?.() ? at(slots.lastElementChild.getBoundingClientRect()) : at(sr);
+      const fx = (cls, x, y, css = '', html = '', ms = 700) => { const e = document.createElement('i'); e.className = 'kfx ' + cls; e.style.cssText = `left:${x}px;top:${y}px;--c:${col};${css}`; e.innerHTML = html; bt.append(e); setTimeout(() => e.remove(), ms); return e; };
+      fx('ring', from.x, from.y);                                   // ボタンから光の輪
+      btn.classList.add('kpress');
+      if (k === 'X') return;
+      fx('fly', from.x, from.y, `--dx:${last.x - from.x}px;--dy:${last.y - from.y}px`, ARROW[k], 420); // 矢印が入力枠へ飛ぶ
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4, d = 22 + Math.random() * 18; fx('spark', last.x, last.y, `--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d}px;animation-delay:.32s`, '', 900); }
+      const near = mySkills().filter((s) => s.cmd.startsWith(keys) && s.cmd !== keys).sort((a, b) => a.cmd.length - b.cmd.length)[0];
+      if (matched) { slots.classList.add('kmatch'); fx('burst', last.x, last.y, 'animation-delay:.3s', '', 900); }
+      else if (near) { const h = document.createElement('div'); h.className = 'knear'; h.innerHTML = `→ <b>${esc(near.name)}</b> まで あと ${near.cmd.length - keys.length} キー`; slots.after(h); }
+      else { slots.classList.add('kmiss'); const h = document.createElement('div'); h.className = 'knear miss'; h.textContent = 'この並びの技はありません (消すで直せます)'; slots.after(h); }
     }
     // 決定: 確定した技は順番にならび、時間があるあいだは続けて何個でも打てる
     function submit() { if (closed || ended || !keys) return; wsSend({ t: 'cmd', keys }); queued.push(keys); keys = ''; render('input'); }
