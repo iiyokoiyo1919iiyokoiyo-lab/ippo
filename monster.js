@@ -56,7 +56,9 @@ const SKILL_LIST = [
 const POWER = { punch: { 2: 16, 3: 22, 4: 28 }, magic: { 3: 20, 4: 27, 5: 34, 6: 42, 7: 50, 8: 58 }, ult: { 9: 82, 10: 92, 11: 100, 12: 108 } };
 const SKILLS = Object.fromEntries(SKILL_LIST.map(([id, name, kind, type, cmd, release]) => [id, { id, name, kind, type, cmd, power: POWER[kind][cmd.length], release: release ? Date.parse(release) : 0 }]));
 for (const id of Object.keys(SKILLS)) { const v = Number(process.env['MON_SKILL_' + id.toUpperCase()]); if (Number.isFinite(v) && v > 0) SKILLS[id].release = v; }
-{ const seen = new Set(); for (const s of Object.values(SKILLS)) { if (seen.has(s.cmd)) throw new Error('技のコマンドが重なっています: ' + s.cmd); seen.add(s.cmd); } }
+// 防御: どのモンスターも最初から使える。相手が「同じラウンドの同じ回」に技を撃ってきたら、その技を無効にする (撃ってこなければ空振り)
+const GUARD = { id: 'guard', name: 'ぼうぎょ', kind: 'guard', cmd: 'DD' };
+{ const seen = new Set([GUARD.cmd]); for (const s of Object.values(SKILLS)) { if (seen.has(s.cmd)) throw new Error('技のコマンドが重なっています: ' + s.cmd); seen.add(s.cmd); } }
 const skillOk = (id, now = Date.now()) => SKILLS[id] && now >= SKILLS[id].release;
 const MAX_SKILLS = 8;
 
@@ -123,12 +125,23 @@ function resolveRound(state, cmds, r = rnd) {
   const ev = [];
   const lists = cmds.map((c) => (Array.isArray(c) ? c : c ? [c] : []).map(String));
   const steps = [];
-  for (let k = 0; k < Math.max(lists[0].length, lists[1].length, 1); k++) for (const p of [state.first, 1 - state.first]) if (k < lists[p].length || (k === 0 && !lists[p].length)) steps.push([p, lists[p][k] || '']);
-  for (const [p, keys] of steps) {
+  for (let k = 0; k < Math.max(lists[0].length, lists[1].length, 1); k++) for (const p of [state.first, 1 - state.first]) if (k < lists[p].length || (k === 0 && !lists[p].length)) steps.push([p, lists[p][k] || '', k]);
+  // 防御: 同じ回 (k 番目) に相手が技を撃ってきたら無効
+  const guarding = (p, k) => lists[p][k] === GUARD.cmd;
+  const attacks = (p, k) => !!(lists[p][k] && matchSkill(state.mons[p], lists[p][k]));
+  for (const [p, keys, k] of steps) {
     const me = state.mons[p], foe = state.mons[1 - p];
     if (me.hp <= 0 || foe.hp <= 0) continue;
+    if (keys === GUARD.cmd) {
+      const hitBy = attacks(1 - p, k);
+      // 相手がこのあと撃ってくるなら構えを見せる。もう防いだ後なら何も出さない。撃ってこなければ空振り
+      const already = ev.some((e) => e.k === 'blocked' && e.p === 1 - p && e.slot === k);
+      if (!already) ev.push({ k: 'guard', p, slot: k, idle: !hitBy });
+      continue;
+    }
     const sk = keys ? matchSkill(me, keys) : null;
     if (!sk) { ev.push({ k: 'miss', p, keys, empty: !keys }); continue; }
+    if (guarding(1 - p, k)) { ev.push({ k: 'blocked', p, slot: k, skill: sk.id, name: sk.name, kind: sk.kind, type: sk.kind === 'punch' ? me.type : sk.type }); continue; }
     const d = damage(me, foe, sk, r);
     foe.hp = Math.max(0, foe.hp - d.dmg);
     ev.push({ k: 'skill', p, skill: sk.id, name: sk.name, kind: sk.kind, type: d.type, dmg: d.dmg, eff: d.mult > 1 ? 'good' : d.mult < 1 ? 'bad' : '', hp: foe.hp });
@@ -143,7 +156,7 @@ function resolveRound(state, cmds, r = rnd) {
 // CPU: 10 秒で打てるだけ打つ (1 キーおよそ 0.6 秒 + 決定)。長いコマンドほど失敗しやすい
 function cpuCommands(mon, r = rnd, ms = 10_000) {
   const out = []; let t = 600 + r() * 900;
-  for (let i = 0; i < 8; i++) { const c = cpuCommand(mon, r); const need = c.length * (500 + r() * 300) + 400; if (t + need > ms) break; t += need; out.push(c); }
+  for (let i = 0; i < 8; i++) { const c = r() < 0.12 ? GUARD.cmd : cpuCommand(mon, r); const need = c.length * (500 + r() * 300) + 400; if (t + need > ms) break; t += need; out.push(c); }
   return out;
 }
 // CPU: 持っている技からえらぶ。長いコマンドほど入力に失敗しやすい
@@ -323,7 +336,7 @@ module.exports = function install(app, ctx) {
   app.get('/api/mon/catalog', (req, res) => res.json({
     types: TYPES, typeTable: Object.fromEntries(TYPE_IDS.map((a) => [a, Object.fromEntries(TYPE_IDS.map((d) => [d, typeMult(a, d)]))])),
     skills: Object.values(SKILLS).filter((s) => skillOk(s.id)).map((s) => skillView(s.id)), ranks: RANKS,
-    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS },
+    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS }, guard: GUARD,
   }));
   app.get('/api/mon/me', requireAuth, (req, res) => {
     const uid = req.user.id, started = !!db.prepare('SELECT 1 FROM mon_players WHERE user_id = ?').get(uid);
@@ -676,7 +689,7 @@ module.exports = function install(app, ctx) {
     const events = resolveRound(b.state, b.cmds);
     b.uids.forEach((u) => u && sendTo(u, { t: 'result', events, cmds: b.cmds, state: pub(b) }));
     // 画面で技の演出 (撃ちこむ・大技のビーム) が終わるまで待ってから次のラウンドへ
-    const showMs = Math.max(SHOW_MS, events.reduce((t, e) => t + (e.k === 'skill' ? (e.kind === 'ult' ? 3400 : 2300) : e.k === 'miss' ? 1000 : e.k === 'ko' ? 800 : 0), 700));
+    const showMs = Math.max(SHOW_MS, events.reduce((t, e) => t + (e.k === 'skill' ? (e.kind === 'ult' ? 3400 : 2300) : e.k === 'blocked' ? 2200 : e.k === 'guard' ? 1000 : e.k === 'miss' ? 1000 : e.k === 'ko' ? 800 : 0), 700));
     if (b.state.winner !== null) { b.timer = setTimeout(() => finish(b, b.state.winner), showMs); return; }
     b.timer = setTimeout(() => nextRound(b), showMs);
   }
@@ -793,4 +806,4 @@ module.exports = function install(app, ctx) {
   // テスト用: セリをすぐ始める (MON_AUCTION_TEST=1 のときだけ)
   if (process.env.MON_AUCTION_TEST === '1') app.post('/api/mon/auction/test-start', (req, res) => { if (!auction) startAuction(Date.now()); res.json(auctionView()); });
 };
-Object.assign(module.exports, { TYPES, typeMult, SKILLS, POWER, resolveRound, cpuCommand, cpuCommands, matchSkill, newMonster, mixLook, randomLook, powerOf, rankOf, strongestSkill, RANKS, INHERIT_RATE, MAX_CHILDREN, STUD_SCORE });
+Object.assign(module.exports, { GUARD, TYPES, typeMult, SKILLS, POWER, resolveRound, cpuCommand, cpuCommands, matchSkill, newMonster, mixLook, randomLook, powerOf, rankOf, strongestSkill, RANKS, INHERIT_RATE, MAX_CHILDREN, STUD_SCORE });

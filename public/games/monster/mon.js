@@ -13,7 +13,9 @@
   const arrows = (cmd) => [...String(cmd)].map((k) => ARROW[k] || '').join('');
   const fmtTime = (t) => new Date(t).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
   const STATUS = { training: '育成中', active: '戦える', breeding: '繁殖入り', listed: 'セリに出品中', auction: 'セリ中' };
-  const KIND = { punch: '直殴り', magic: '魔法', ult: '大技' };
+  const KIND = { punch: '直殴り', magic: '魔法', ult: '大技', guard: '防御' };
+  // 防御 (どのモンスターも使える。相手が同じ回に撃ってきた技を無効にする)
+  const guardSkill = () => catalog?.guard ? { ...catalog.guard } : { id: 'guard', name: 'ぼうぎょ', kind: 'guard', cmd: 'DD' };
   let catalog = null, me = null, user = null;
 
   // ---------- IppO とのつなぎ (テーマ・ログイン) ----------
@@ -152,7 +154,8 @@
       ${mine ? `<div class="card" id="acts"></div>` : ''}
       ${(m.mutations || []).length ? mutCard(m) : ''}
       <div class="card"><h2>📊 能力</h2><div class="stats">${st('hp', 'HP', 500)}${st('atk', '攻撃', 150)}${st('mag', '魔力', 150)}${st('def', '防御', 150)}${st('spd', '素早さ', 150)}</div></div>
-      <div class="card"><h2>🎮 技とコマンド <span class="small muted">${m.skills.length}/${catalog.rules.maxSkills}</span></h2>${m.skills.map((s) => skillRow(s, inh.has(s.id) ? '<span class="inh">受けついだ</span>' : '')).join('')}</div>
+      <div class="card"><h2>🎮 技とコマンド <span class="small muted">${m.skills.length}/${catalog.rules.maxSkills}</span></h2>${m.skills.map((s) => skillRow(s, inh.has(s.id) ? '<span class="inh">受けついだ</span>' : '')).join('')}
+        <div class="skl"><span class="kd guard">${esc(KIND.guard)}</span><b>🛡️ ${esc(guardSkill().name)}</b><span class="ty muted">みんな使える</span><span class="cmd">${arrows(guardSkill().cmd)}</span><span class="small muted">同じ回の技を無効</span></div></div>
       <div class="card"><h2>🧬 血統</h2><div class="lin">${parent(m.father, '父')}${parent(m.mother, '母')}</div>
         ${(m.inherited || []).length ? `<p class="small">受けついだ技: ${(m.inherited).map((x) => `${esc(x.from)}の「${esc(m.skills.find((s) => s.id === x.skill)?.name || x.skill)}」`).join('・')}</p>` : ''}</div>`;
     if (!mine) return;
@@ -400,7 +403,7 @@
     let ws = null, you = 0, st = null, keys = '', queued = [], closed = false, oppN = 0, deadline = 0, timer = 0, players = [], log = [], ended = false, busy = false;
     const wsSend = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
     $('#cancel').onclick = () => { wsSend({ t: 'cancel' }); location.hash = '#fight'; };
-    const mySkills = () => st.mons[you].skills;
+    const mySkills = () => [...st.mons[you].skills, guardSkill()];
     const hpBar = (f) => `<div class="hp"><i style="width:${Math.max(0, (f.hp / f.maxHp) * 100)}%" class="${f.hp / f.maxHp < 0.3 ? 'low' : ''}"></i></div><span class="small">${f.hp}/${f.maxHp}</span>`;
     const plate = (f, who) => `<div class="pl ${who}"><b>${esc(f.name)}</b><span class="pl-sub">${esc(players[who === 'foe' ? 1 - you : you]?.displayName || '')} ${typeTag(f.type)} <span class="rk r-${esc(f.rank)}" style="position:static;padding:0 4px;font-size:10px">${esc(f.rank)}</span></span>${hpBar(f)}</div>`;
     function buildStage() {
@@ -507,7 +510,7 @@
     function cutin(s, preview = false, who = you) {
       const col = s.kind === 'punch' ? (st.mons[who].type) : s.type;
       const el = document.createElement('div'); el.className = 'ci' + (s.kind === 'ult' ? ' ult' : '');
-      el.style.background = `linear-gradient(90deg,transparent,var(--${col}) 15%,var(--${col}) 85%,transparent)`;
+      el.style.background = s.kind === 'guard' ? 'linear-gradient(90deg,transparent,#5c7cfa 15%,#748ffc 85%,transparent)' : `linear-gradient(90deg,transparent,var(--${col}) 15%,var(--${col}) 85%,transparent)`;
       el.innerHTML = `<small>${preview ? 'コマンド認識！' : who === you ? 'あなたの' : '相手の'}${esc(KIND[s.kind])}</small><b>${esc(s.name)}</b>`;
       if (!preview) el.classList.add('short');
       ($('#stage') || bt).append(el); setTimeout(() => el.remove(), preview ? 1600 : 1000);
@@ -555,6 +558,22 @@
           popDmg(e);
           log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！ ${e.dmg} ダメージ${e.eff === 'good' ? ' (効果ばつぐん)' : e.eff === 'bad' ? ' (いまひとつ)' : ''}`); updStage();
           await wait(650);
+        } else if (e.k === 'guard') {                           // 防御の構え (撃ってこなければ空振り)
+          const at = $(e.p === you ? '#fme' : '#ffoe', bt);
+          shieldFx(at, false);
+          log.push(e.idle ? `${e.p === you ? 'あなた' : '相手'}は身を守った…けれど攻撃は来なかった` : `${e.p === you ? 'あなた' : '相手'}は🛡️ぼうぎょの構え！`); updStage();
+          await wait(e.idle ? 900 : 700);
+        } else if (e.k === 'blocked') {                         // 同じ回の防御で技が無効になった
+          const s = { name: e.name, kind: e.kind, type: e.type };
+          log.push(`${e.p === you ? 'あなた' : '相手'}の「${e.name}」！`); updStage();
+          cutin(s, false, e.p);
+          await wait(650);
+          const tgt = $(e.p === you ? '#ffoe' : '#fme', bt);
+          shieldFx(tgt, true);
+          await attackFx({ ...e, blocked: true });
+          const d = document.createElement('div'); d.className = 'pdmg guard'; d.innerHTML = '🛡️ ガード！<small>技を無効にした</small>'; placeOver(d, tgt); ($('#stage') || bt).append(d); setTimeout(() => d.remove(), 1200);
+          log.push(`${e.p === you ? '相手' : 'あなた'}のぼうぎょで「${e.name}」は無効になった！`); updStage();
+          await wait(700);
         } else if (e.k === 'miss') {
           const at = $(e.p === you ? '#fme' : '#ffoe', bt);
           at?.classList.add('fizzle'); setTimeout(() => at?.classList.remove('fizzle'), 900);
@@ -578,6 +597,12 @@
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const center = (el) => { const sr = $('#stage').getBoundingClientRect(), r = (el.querySelector('.mon') || el).getBoundingClientRect(); return { x: r.left - sr.left + r.width / 2, y: r.top - sr.top + r.height / 2 }; };
     function placeOver(d, el, dy = 0) { if (!el) return; const c = center(el); d.style.left = c.x + 'px'; d.style.top = (c.y - 50 + dy) + 'px'; }
+    // 防御のバリア (ドット風の六角の盾)。hit: 技を受け止めた (光ってゆれる)
+    function shieldFx(el, hit) {
+      if (!el || !$('#stage')) return;
+      const c = center(el), d = document.createElement('div'); d.className = 'shield' + (hit ? ' hit' : '');
+      d.style.left = c.x + 'px'; d.style.top = c.y + 'px'; $('#stage').append(d); setTimeout(() => d.remove(), hit ? 1900 : 1100);
+    }
     function popDmg(e) {
       const tgt = $(e.p === you ? '#ffoe' : '#fme', bt), d = document.createElement('div');
       d.className = 'pdmg' + (e.eff === 'good' ? ' good' : e.eff === 'bad' ? ' bad' : '') + (e.kind === 'ult' ? ' big' : '');
@@ -594,7 +619,7 @@
       const stage = $('#stage'); if (!stage) return;
       const atk = $(e.p === you ? '#fme' : '#ffoe', bt), tgt = $(e.p === you ? '#ffoe' : '#fme', bt);
       const a = center(atk), t = center(tgt), pal = PIX_PAL[e.type] || PIX_PAL.fire, dir = t.x > a.x ? 1 : -1;
-      const hit = () => { tgt.classList.remove('hit'); void tgt.offsetWidth; tgt.classList.add('hit'); };
+      const hit = () => { if (e.blocked) return; tgt.classList.remove('hit'); void tgt.offsetWidth; tgt.classList.add('hit'); };
       if (e.kind === 'punch') { // 直殴り: 相手に突進して、ドットの衝撃
         atk.style.setProperty('--dash', `${(t.x - a.x) * 0.62}px`); atk.classList.add('dash');
         await wait(230); burst(t.x - dir * 18, t.y, pal, 10); hit(); stage.classList.add('jolt');
@@ -727,6 +752,7 @@
       <p>生まれた子は <b>${catalog.rules.trainTurns} ターン</b> 育成します。毎ターン「👊 直殴り」か「🔮 魔法」をえらんで能力を上げ、ときどき新しい技を覚えます。</p>
       <p>モンスターは何回でも戦えますが、<b>繁殖入りするともう戦えません</b>。市場価値 ${catalog.rules.studScore} 以上のオスは<b>種モン</b>になって、ほかの人のメスと配合できます (種付け料をもらえる)。</p>
       <h2>⚔️ バトル</h2><p>コイントスで先攻を決めます。毎ラウンド <b>${catalog.rules.inputMs / 1000} 秒</b> で十字キーのコマンドを入力して「決定！」。先攻から技を出し、どちらかの HP がなくなったら終わりです。コマンドがまちがっていると不発になります。</p>
+      <p>🛡️ <b>ぼうぎょ</b> (${arrows(guardSkill().cmd)}) はどのモンスターも使えます。相手が<b>同じラウンドの同じ回</b> (1 つ目どうし・2 つ目どうし…) に技を撃ってきたら、その技を<b>無効</b>にします。撃ってこなければ空振りです。</p>
       <p>直殴り (2〜4 キー) はモンスター自身の属性、魔法 (3〜8 キー)・大技 (10 キー前後) は技ごとの属性です。</p>
       <h2>💰 市場価値とセリ</h2><p>市場価値 (戦績スコア) は対人戦で上がります (勝ち +${catalog.rules.score.pvp.win}・負け +${catalog.rules.score.pvp.lose})。CPU 戦は 0.6 倍。メスが産んだ子は、<b>毎時 5 分</b>のセリに出品できます。コインはぶんぼうぐバトラーズと共通です。</p>
       <h2>🔥 相性 (攻撃 → 受ける側)</h2><div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;text-align:center"><tr><th></th>${ids.map((d) => `<th>${T[d].icon}</th>`).join('')}</tr>${ids.map((a) => `<tr><th>${T[a].icon}${T[a].name}</th>${ids.map((d) => { const v = catalog.typeTable[a][d]; return `<td style="padding:3px 6px;font-weight:800;color:${v > 1 ? '#e03131' : v < 1 ? '#1c7ed6' : 'var(--muted)'}">${v === 1 ? '-' : '×' + v}</td>`; }).join('')}</tr>`).join('')}</table></div>
