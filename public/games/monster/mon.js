@@ -12,7 +12,7 @@
   const ARROW = { U: '↑', D: '↓', L: '←', R: '→' };
   const arrows = (cmd) => [...String(cmd)].map((k) => ARROW[k] || '').join('');
   const fmtTime = (t) => new Date(t).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
-  const STATUS = { training: '育成中', active: '戦える', breeding: '繁殖入り', listed: 'セリに出品中', auction: 'セリ中' };
+  const STATUS = { training: '育成中', active: '戦える', breeding: '繁殖入り', listed: 'セリに出品中', auction: 'セリ中', sold: '売却済み' };
   const KIND = { punch: '直殴り', magic: '魔法', ult: '大技', guard: '防御' };
   // 防御 (どのモンスターも使える。相手が同じ回に撃ってきた技を無効にする)
   const guardSkill = () => catalog?.guard ? { ...catalog.guard } : { id: 'guard', name: 'ぼうぎょ', kind: 'guard', cmd: 'DD' };
@@ -172,6 +172,7 @@
     if (m.mother && ['training', 'active'].includes(m.status)) b.push(`<button class="btn block" id="list">🔨 セリに出す (次は ${esc(fmtTime(me.next))})</button>`);
     if (m.status === 'listed') b.push(`<button class="btn block" id="unlist">セリの出品をやめる (出品価格 ${m.listPrice} コイン)</button>`);
     b.push(`<a class="btn block" href="#pedigree/${m.id}">📜 血統書を作ってシェア</a>`);
+    if (!['listed', 'auction'].includes(m.status)) b.push(`<button class="btn block" id="sell" ${me.monsters.length <= 1 ? 'disabled' : ''}>💰 売却する (🪙 ${Number(m.sellPrice || 0).toLocaleString()})${me.monsters.length <= 1 ? ' — 最後の 1 体は売れません' : ''}</button>`);
     b.push(`<button class="btn sm" id="rename">✏️ 名前を変える</button>`);
     acts.innerHTML = `<div style="display:grid;gap:8px">${b.join('')}</div>`;
     const act = async (path, body, msg) => { try { await api(`/mon/monster/${m.id}/${path}`, { method: 'POST', body }); toast(msg); route(); } catch (e) { toast(e.message, true); } };
@@ -179,6 +180,12 @@
     $('#stud', acts)?.addEventListener('click', () => { const fee = prompt('種付け料 (コイン) を決めてください', '100'); if (fee !== null) act('stud', { fee: Number(fee) }, '種モンになりました'); });
     $('#list', acts)?.addEventListener('click', () => { const price = prompt('スタート価格 (コイン)', '50'); if (price !== null) act('list', { price: Number(price) }, `次のセリ (${fmtTime(me.next)}) に出品しました`); });
     $('#unlist', acts)?.addEventListener('click', () => act('unlist', {}, '出品をやめました'));
+    $('#sell', acts)?.addEventListener('click', async (e) => {
+      if (!confirm(`${m.name} を ${Number(m.sellPrice).toLocaleString()} コインで売却しますか？\n売ったモンスターはもどってきません。`)) return;
+      e.target.disabled = true;
+      try { const r = await api(`/mon/monster/${encodeURIComponent(m.id)}/sell`, { method: 'POST' }); await refresh(); toast(`${m.name} を売却しました (🪙 +${r.price})`); location.hash = '#'; }
+      catch (err) { toast(err.message, true); e.target.disabled = false; }
+    });
     $('#rename', acts)?.addEventListener('click', () => { openName(); $('#nmwrap').scrollIntoView({ block: 'center', behavior: 'smooth' }); });
   }
 

@@ -64,6 +64,9 @@ const MAX_SKILLS = 8;
 
 // ---------- ルール ----------
 const MAX_CHILDREN = 5, TRAIN_TURNS = 10, INHERIT_RATE = 0.7, STUD_SCORE = 600, MAX_MONSTERS = 40;
+// 売却: 強さの 8% + 市場価値の 2% (10〜500 コイン)。ショップのメス (B で約 200) を買って産ませて全部売っても得をしない値段
+const SELL = { power: 0.08, score: 0.02, min: 10, max: 500 };
+const sellPrice = (m) => clamp(Math.round(powerOf(m) * SELL.power + Math.max(0, m.score || 0) * SELL.score), SELL.min, SELL.max);
 const SCORE = { pvp: { win: 120, lose: 20 }, cpuMult: 0.6 };      // 市場価値 (戦績スコア)。CPU 戦は 0.6 倍
 const COINS = { pvp: { win: 50, lose: 10 }, cpu: { win: 15, lose: 3 } }; // 対戦でもらえるコイン (ぶんばとと共用)
 const INPUT_MS = Number(process.env.MON_INPUT_MS) || 10_000, SHOW_MS = Number(process.env.MON_SHOW_MS) || 3500, RECONNECT_MS = 30_000;
@@ -181,7 +184,7 @@ CREATE TABLE mon_monsters (
   hp INTEGER NOT NULL, atk INTEGER NOT NULL, mag INTEGER NOT NULL, def INTEGER NOT NULL, spd INTEGER NOT NULL,
   skills TEXT NOT NULL,                  -- 技の ID (JSON)
   inherited TEXT,                        -- 生まれたときに親から受けついだ技 (JSON)
-  status TEXT NOT NULL,                  -- training (育成中) / active (戦える) / breeding (繁殖入り) / listed (セリに出品中)
+  status TEXT NOT NULL,                  -- training (育成中) / active (戦える) / breeding (繁殖入り) / listed (セリに出品中) / sold (売却済み。血統のためにデータは残す)
   prev_status TEXT,                      -- セリに出す前の状態
   train_left INTEGER NOT NULL DEFAULT 0,
   score INTEGER NOT NULL DEFAULT 0,      -- 市場価値 (戦績スコア)
@@ -303,7 +306,7 @@ module.exports = function install(app, ctx) {
     id: m.id, name: m.name, sex: m.sex, type: m.type, gen: m.gen, look: m.look, status: m.status, trainLeft: m.train_left,
     hp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: m.skills.map(skillView).filter(Boolean),
     score: m.score, wins: m.wins, losses: m.losses, pvpWins: m.pvp_wins, pvpLosses: m.pvp_losses, children: m.children, isStud: !!m.is_stud, studFee: m.stud_fee,
-    listPrice: m.list_price, rank: rankOf(m), power: powerOf(m), inherited: m.inherited, ownerId: m.owner_id, createdAt: m.created_at,
+    listPrice: m.list_price, sellPrice: sellPrice(m), rank: rankOf(m), power: powerOf(m), inherited: m.inherited, ownerId: m.owner_id, createdAt: m.created_at,
     ...(m.mutations?.length ? { mutations: m.mutations.map((x) => MUT.viewOf(x, TYPES)).filter(Boolean), synergies: (m.syn || []).map((s) => ({ name: s.name, desc: s.desc })),
       mutantRarity: MUT.topRarity(m.mutations), look: { ...m.look, viz: MUT.vizOf(m.mutations) }, baseStats: m.base, initScore: m.init_score } : {}),
     ...(full ? { father: m.father_id ? parentBrief(m.father_id) : null, mother: m.mother_id ? parentBrief(m.mother_id) : null } : {}),
@@ -329,8 +332,8 @@ module.exports = function install(app, ctx) {
   }
   const isCommon = (id) => COMMON_STUDS.some((s) => s.id === id);
   const studReleased = (m, now = Date.now()) => { const s = OFFICIAL_STUDS.find((x) => x.id === m.id); return !s || now >= Date.parse(s.release); };
-  const mine = (uid) => db.prepare('SELECT * FROM mon_monsters WHERE owner_id = ? ORDER BY created_at').all(uid).map(parse);
-  const owned = (uid, id) => { const m = getMon(id); return m && m.owner_id === uid ? m : null; };
+  const mine = (uid) => db.prepare("SELECT * FROM mon_monsters WHERE owner_id = ? AND status != 'sold' ORDER BY created_at").all(uid).map(parse);
+  const owned = (uid, id) => { const m = getMon(id); return m && m.owner_id === uid && m.status !== 'sold' ? m : null; };
 
   // ---------- 状態 ----------
   app.get('/api/mon/catalog', (req, res) => res.json({
@@ -394,6 +397,23 @@ module.exports = function install(app, ctx) {
   });
 
   // ---------- 繁殖入り・種モン ----------
+  // 売却: コインに換える (セリ・バトル中は売れない。最後の 1 体は売れない)。種モンは種モンをやめる
+  app.post('/api/mon/monster/:id/sell', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, m = owned(uid, req.params.id); if (!m) return res.status(404).json({ error: 'そのモンスターは持っていません' });
+    if (['listed', 'auction'].includes(m.status)) return res.status(400).json({ error: 'セリに出しているモンスターは売れません (先に出品をやめてください)' });
+    if ([...battleOf.values()].some((b) => !b.ended && b.monIds.includes(m.id))) return res.status(400).json({ error: 'バトル中のモンスターは売れません' });
+    if (mine(uid).length <= 1) return res.status(400).json({ error: '最後の 1 体は売れません' });
+    const price = sellPrice(m);
+    db.exec('BEGIN');
+    try {
+      const r = db.prepare("UPDATE mon_monsters SET prev_status = status, status = 'sold', is_stud = 0 WHERE id = ? AND owner_id = ? AND status NOT IN ('listed', 'auction', 'sold')").run(m.id, uid);
+      if (!r.changes) { db.exec('ROLLBACK'); return res.status(409).json({ error: 'もう売れません' }); }
+      coins.add(uid, price);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    console.log(`[mon] @${req.user.username} が ${m.name} を ${price} コインで売却`);
+    res.json({ price, coins: coins.get(uid) });
+  });
   app.post('/api/mon/monster/:id/retire', requireAuth, writeLimit, (req, res) => {
     const m = owned(req.user.id, req.params.id); if (!m) return res.status(404).json({ error: 'そのモンスターは持っていません' });
     if (m.status !== 'active') return res.status(400).json({ error: m.status === 'training' ? '育成が終わってから繁殖入りできます' : 'このモンスターは繁殖入りできません' });
@@ -446,7 +466,7 @@ module.exports = function install(app, ctx) {
     if (!row) return res.status(404).json({ error: 'その商品は見つかりません (品ぞろえが入れかわったかも)' });
     if (row.buyer_id) return res.status(409).json({ error: 'ざんねん！ ひと足先に売り切れました' });
     if (db.prepare('SELECT 1 FROM mon_shop WHERE day = ? AND buyer_id = ?').get(day, uid)) return res.status(400).json({ error: '今日はもう 1 体買いました (明日の 7 時にまた並びます)' });
-    if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status != 'breeding'").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです` });
+    if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status NOT IN ('breeding', 'sold')").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです` });
     let id;
     db.exec('BEGIN');
     try {
@@ -469,7 +489,7 @@ module.exports = function install(app, ctx) {
     if (mo.children >= MAX_CHILDREN) return res.status(400).json({ error: `この母はもう ${MAX_CHILDREN} 体産みました` });
     if (!fa || fa.sex !== 'm' || fa.status !== 'breeding' || (fa.owner_id !== uid && !fa.is_stud) || !studReleased(fa)) return res.status(400).json({ error: '父は、繁殖入りした自分のオスか、種モンをえらんでください' });
     if (fa.id === mo.father_id || fa.id === mo.id) return res.status(400).json({ error: '親子では配合できません' });
-    if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status != 'breeding'").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです (セリに出すか繁殖入りさせてください)` });
+    if (db.prepare("SELECT COUNT(*) AS n FROM mon_monsters WHERE owner_id = ? AND status NOT IN ('breeding', 'sold')").get(uid).n >= MAX_MONSTERS) return res.status(400).json({ error: `持てるモンスターは ${MAX_MONSTERS} 体までです (セリに出すか繁殖入りさせてください)` });
     const fee = fa.owner_id === uid ? 0 : fa.stud_fee;
     // 二重実行の防止: 同じリクエスト ID なら、さっき生まれた子を返す (コインもう一度は払わない)
     const reqId = String(req.body?.requestId || '').slice(0, 64);
@@ -553,7 +573,7 @@ module.exports = function install(app, ctx) {
 
   // ---------- ランキング (市場価値) ----------
   app.get('/api/mon/ranking', (req, res) => {
-    const rows = db.prepare('SELECT * FROM mon_monsters WHERE owner_id IS NOT NULL AND score > 0 AND wins + losses > 0 ORDER BY score DESC, pvp_wins DESC LIMIT 30').all().map(parse);
+    const rows = db.prepare("SELECT * FROM mon_monsters WHERE owner_id IS NOT NULL AND status != 'sold' AND score > 0 AND wins + losses > 0 ORDER BY score DESC, pvp_wins DESC LIMIT 30").all().map(parse);
     res.json({ top: rows.map((m, i) => ({ rank: i + 1, monster: monView(m), owner: userView(m.owner_id) })) });
   });
 
