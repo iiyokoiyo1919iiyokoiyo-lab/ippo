@@ -510,6 +510,19 @@ module.exports = function install(app, ctx) {
     void child;
     return { newOnes: r.newOnes, discoveries, title };
   }
+  // 血統書: 本人・両親・祖父母 (3 世代)。だれのモンスターでも見られる (公開の情報だけ)
+  app.get('/api/mon/monster/:id/pedigree', (req, res) => {
+    const node = (id, depth) => {
+      const m = id && getMon(id); if (!m) return null;
+      const v = monView(m);
+      return { id: m.id, name: m.name, sex: m.sex, type: m.type, gen: m.gen, look: v.look, rank: v.rank, score: m.score, wins: m.wins, losses: m.losses, pvpWins: m.pvp_wins,
+        mutantRarity: v.mutantRarity || null, mutations: (v.mutations || []).filter((x) => x.mode === 'direct').map((x) => ({ name: x.name, rarity: x.rarity })), official: !m.owner_id,
+        ...(depth > 0 ? { father: node(m.father_id, depth - 1), mother: node(m.mother_id, depth - 1) } : {}) };
+    };
+    const root = node(req.params.id, 2); if (!root) return res.status(404).json({ error: 'そのモンスターは見つかりません' });
+    const m = getMon(req.params.id);
+    res.json({ pedigree: root, owner: userView(m.owner_id), skills: m.skills.map(skillView).filter(Boolean).map((s) => s.name) });
+  });
   // 図鑑: 発見ずみの変異と組み合わせだけ (総数・未発見のものは出さない)
   app.get('/api/mon/dex', (req, res) => {
     const rows = db.prepare('SELECT * FROM mon_discoveries ORDER BY discovered_at').all();

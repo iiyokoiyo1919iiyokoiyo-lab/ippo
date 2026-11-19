@@ -76,6 +76,7 @@
       if (parts[0] === 'shop') return viewShop();
       if (parts[0] === 'ranking') return viewRanking();
       if (parts[0] === 'dex') return viewDex();
+      if (parts[0] === 'pedigree' && parts[1]) return viewPedigree(parts[1]);
       if (parts[0] === 'help') return viewHelp();
       return viewHome();
     } catch (e) { app.innerHTML = `${head('ブリードモンスターズ', '')}<div class="card empty">${esc(e.message)}</div>`; }
@@ -142,6 +143,7 @@
     if (m.sex === 'f' && m.status === 'breeding') b.push(`<a class="btn gold block" href="#breed?mother=${m.id}">💞 配合する (あと ${catalog.rules.maxChildren - m.children} 体産める)</a>`);
     if (m.mother && ['training', 'active'].includes(m.status)) b.push(`<button class="btn block" id="list">🔨 セリに出す (次は ${esc(fmtTime(me.next))})</button>`);
     if (m.status === 'listed') b.push(`<button class="btn block" id="unlist">セリの出品をやめる (出品価格 ${m.listPrice} コイン)</button>`);
+    b.push(`<a class="btn block" href="#pedigree/${m.id}">📜 血統書を作ってシェア</a>`);
     b.push(`<button class="btn sm" id="rename">✏️ 名前を変える</button>`);
     acts.innerHTML = `<div style="display:grid;gap:8px">${b.join('')}</div>`;
     const act = async (path, body, msg) => { try { await api(`/mon/monster/${m.id}/${path}`, { method: 'POST', body }); toast(msg); route(); } catch (e) { toast(e.message, true); } };
@@ -235,6 +237,74 @@
     $('#mskip').onclick = () => fx.classList.add('skip');
     setTimeout(() => fx.classList.add('done'), 3200);
     $('#mshare').onclick = () => { if (inFrame) parent.postMessage({ source: 'ippo-monster', type: 'share', text: shareText }, location.origin); else toast('IppO の中で開くと投稿できます'); };
+  }
+
+  // ---------- 血統書 (3 世代の家系図を 1 枚の画像に・タイムラインにシェア) ----------
+  const RCOL = { C: '#868e96', B: '#1c7ed6', A: '#2f9e44', S: '#e67700', SS: '#cc5de8', Z: '#ff6b6b' };
+  const MCOL = { N: '#868e96', R: '#1c7ed6', SR: '#7048e8', SSR: '#e8590c', UR: '#c2255c', MR: '#ff6bd6' };
+  // モンスターの絵 (SVG) を画像にする (画像にするには xmlns が要る)
+  const svgImage = (svg) => new Promise((ok) => { const img = new Image(); img.onload = () => ok(img); img.onerror = () => ok(null); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="412" ')); });
+  async function drawPedigree(P, owner) {
+    const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    const FONT = '"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif';
+    const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#1b1035'); bg.addColorStop(0.5, '#2b1f6e'); bg.addColorStop(1, '#120a2a'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) { g.fillStyle = `rgba(255,${200 + (i % 50)},${150 + (i % 100)},${0.2 + (i % 7) / 10})`; g.fillRect((i * 397) % W, (i * 233) % H, 3, 3); }
+    // 金の額縁
+    g.strokeStyle = '#ffd43b'; g.lineWidth = 10; g.strokeRect(24, 24, W - 48, H - 48); g.strokeStyle = 'rgba(255,212,59,.5)'; g.lineWidth = 3; g.strokeRect(44, 44, W - 88, H - 88);
+    const text = (t, x, y, size, color = '#fff', align = 'center', weight = 900) => { g.font = `${weight} ${size}px ${FONT}`; g.fillStyle = color; g.textAlign = align; g.fillText(t, x, y); };
+    const fit = (t, max, size) => { g.font = `900 ${size}px ${FONT}`; while (g.measureText(t).width > max && size > 14) { size -= 2; g.font = `900 ${size}px ${FONT}`; } return size; };
+    text('📜 血統書  PEDIGREE', W / 2, 108, 40, '#ffe066');
+    // 本人
+    const self = await svgImage(MonArt.svg(P.look, P.type, { rank: P.rank }));
+    const glow = g.createRadialGradient(W / 2, 280, 20, W / 2, 280, 220); glow.addColorStop(0, 'rgba(255,224,102,.45)'); glow.addColorStop(1, 'rgba(255,224,102,0)'); g.fillStyle = glow; g.fillRect(0, 100, W, 380);
+    if (self) g.drawImage(self, W / 2 - 150, 128, 300, 309);
+    text(P.name, W / 2, 500, fit(P.name, 700, 60));
+    const T = catalog?.types?.[P.type] || {};
+    text(`${T.icon || ''}${T.name || ''}  ·  ${P.sex === 'm' ? '♂' : '♀'}  ·  第${P.gen}世代  ·  評価 ${P.rank}`, W / 2, 548, 30, '#e5dbff', 'center', 700);
+    text(`市場価値 ${Number(P.score).toLocaleString()}  ·  ${P.wins}勝${P.losses}敗`, W / 2, 590, 30, '#ffd43b', 'center', 800);
+    if (P.mutations.length) { const t = '🧬 ' + P.mutations.map((x) => `${x.name}(${x.rarity})`).join('  '); text(t, W / 2, 632, fit(t, 900, 28), '#ffa8e2', 'center', 800); }
+    // 家系図 (両親・祖父母)
+    const box = async (n, x, y, w, label) => {
+      g.fillStyle = 'rgba(255,255,255,.08)'; g.strokeStyle = n ? (RCOL[n.rank] || '#868e96') : 'rgba(255,255,255,.2)'; g.lineWidth = 4;
+      g.beginPath(); g.roundRect(x, y, w, w + 74, 22); g.fill(); g.stroke();
+      text(label, x + w / 2, y + 32, 22, '#c5f6fa', 'center', 800);
+      if (!n) { const e0 = label.startsWith('父') || label.startsWith('母') ? 'はじめのモンスター' : '—'; text(e0, x + w / 2, y + w / 2 + 40, Math.min(20, fit(e0, w - 24, 20)), 'rgba(255,255,255,.5)', 'center', 700); return; }
+      const im = await svgImage(MonArt.svg(n.look, n.type, { rank: n.rank })); if (im) g.drawImage(im, x + 10, y + 36, w - 20, w - 20);
+      text(n.name, x + w / 2, y + w + 34, fit(n.name, w - 16, 24), '#fff');
+      text(`${n.rank}${n.mutantRarity ? ` · 🧬${n.mutantRarity}` : ''}${n.official ? ' · 公式' : ''}`, x + w / 2, y + w + 62, 19, n.mutantRarity ? (MCOL[n.mutantRarity] || '#ffa8e2') : '#e5dbff', 'center', 800);
+    };
+    const line = (x1, y1, x2, y2) => { g.strokeStyle = 'rgba(255,212,59,.7)'; g.lineWidth = 4; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x1, (y1 + y2) / 2); g.lineTo(x2, (y1 + y2) / 2); g.lineTo(x2, y2); g.stroke(); };
+    const pw = 200, py = 668, gw = 170, gy = 984;
+    const px = [W / 2 - pw - 40, W / 2 + 40], gx = [70, 70 + gw + 40, W - 70 - gw * 2 - 40, W - 70 - gw];
+    line(W / 2, 644, px[0] + pw / 2, py); line(W / 2, 644, px[1] + pw / 2, py);
+    [[0, 0], [0, 1], [1, 2], [1, 3]].forEach(([pi, gi]) => line(px[pi] + pw / 2, py + pw + 74, gx[gi] + gw / 2, gy));
+    await box(P.father, px[0], py, pw, '父'); await box(P.mother, px[1], py, pw, '母');
+    await box(P.father?.father, gx[0], gy, gw, '父の父'); await box(P.father?.mother, gx[1], gy, gw, '父の母');
+    await box(P.mother?.father, gx[2], gy, gw, '母の父'); await box(P.mother?.mother, gx[3], gy, gw, '母の母');
+    text(`ブリーダー: ${owner?.displayName || ''}  ·  ブリードモンスターズ on IppO  ·  ${new Date().toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`, W / 2, H - 70, 24, 'rgba(255,255,255,.75)', 'center', 700);
+    return cv;
+  }
+  async function viewPedigree(id) {
+    app.innerHTML = `${head('📜 血統書', '#mon/' + encodeURIComponent(id))}<div class="card center"><p class="empty">血統書を作っています…</p></div>`;
+    const { pedigree: P, owner } = await api(`/mon/monster/${encodeURIComponent(id)}/pedigree`);
+    const cv = await drawPedigree(P, owner);
+    const url = cv.toDataURL('image/jpeg', 0.9);
+    const mineMon = me.monsters.some((x) => x.id === P.id);
+    app.innerHTML = `${head('📜 血統書', '#mon/' + encodeURIComponent(id))}<div class="card center"><img src="${url}" alt="${esc(P.name)} の血統書" style="width:100%;border-radius:12px;display:block">
+      <div class="lin" style="margin-top:10px">${mineMon ? '<button class="btn gold" id="pshare">📣 タイムラインに投稿</button>' : ''}<a class="btn" id="psave" href="${url}" download="${esc(P.name)}_血統書.jpg">💾 画像を保存</a></div></div>`;
+    $('#pshare')?.addEventListener('click', async (e) => {
+      e.target.disabled = true; e.target.textContent = '準備しています…';
+      try {
+        const blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.88));
+        const r = await fetch('/api/uploads', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || '画像を送れませんでした');
+        const anc = [P.father, P.mother].filter(Boolean).map((p) => p.name).join(' × ');
+        const text = `📜 ${P.name} の血統書 (第${P.gen}世代・評価 ${P.rank}${P.mutantRarity ? `・🧬変異${P.mutantRarity}` : ''})${anc ? `\n${anc} の子` : ''} #ブリードモンスターズ`;
+        if (inFrame) parent.postMessage({ source: 'ippo-monster', type: 'share', text, imageId: d.image.id }, location.origin); else toast('IppO の中で開くと投稿できます');
+      } catch (err) { toast(err.message, true); }
+      e.target.disabled = false; e.target.textContent = '📣 タイムラインに投稿';
+    });
   }
 
   // ---------- 変異図鑑 (発見されたものだけ) ----------
