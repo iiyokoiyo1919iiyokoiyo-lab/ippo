@@ -122,6 +122,24 @@ function awardHtml(q, rank) {
   </div>`;
 }
 
+// LR 昇格のお知らせ (虹色)
+function lrHtml() {
+  const RB = ['#ff6b6b', '#ffa94d', '#ffe066', '#69db7c', '#4dabf7', '#9775fa', '#f783ac'];
+  return `<div class="bn" style="background:conic-gradient(from 0deg at 30% 50%,${RB.join(',')},${RB[0]});--r1:rgba(255,255,255,.6);--r2:transparent">
+    <div style="position:absolute;inset:0;background:radial-gradient(circle at 30% 50%,rgba(255,255,255,.95),rgba(255,255,255,.35) 35%,rgba(40,10,80,.35) 75%)"></div>
+    <div class="rays" style="left:30%"></div>${confetti(50, ['#fff', ...RB])}${sparks(22)}
+    <div class="art" style="left:20px;top:110px;width:330px;height:330px"></div>
+    <div class="art" style="left:290px;top:230px;width:330px;height:330px"></div>
+    <div class="ribbon" style="left:-40px;top:30px;background:linear-gradient(90deg,#e03131,#7048e8)">🌈 新しいレア度</div>
+    <div style="position:absolute;left:600px;top:70px;width:580px;text-align:center">
+      <div class="stroke" style="--sw:18px;--sc:#3b1060;font-size:220px;line-height:1;color:#fff;text-shadow:${RB.map((c, i) => `${(i + 1) * 3}px ${(i + 1) * 3}px 0 ${c}`).join(',')},0 0 50px #fff">LR</div>
+      <div class="stroke" style="--sw:12px;--sc:#3b1060;font-size:58px;color:#fff;white-space:nowrap">に昇格できる！！</div>
+      <div style="margin-top:14px;display:inline-block;padding:10px 22px;border-radius:999px;background:rgba(40,10,80,.8);color:#fff;font-size:28px">高難易度クエストの報酬キャラを<br><span style="font-size:44px;color:#ffe066">25 枚</span> 集めると LR に</div>
+      <div style="margin-top:12px;font-size:30px;color:#3b1060;font-weight:900">能力 +35%・虹色のカード</div>
+    </div>
+  </div>`;
+}
+
 // まとめて追加した新キャラ (SSR を大きく並べ、SR を小さく)
 function bulkHtml(g) {
   const n = (r) => g.ids.filter((id) => cards.CARDS[id].rarity === r).length;
@@ -168,6 +186,7 @@ function gachaHtml(n) {
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const jobs = [];
+  jobs.push({ name: 'update-lr-2026-11-20', html: lrHtml(), art: null, arts: [['raijin', 'LR'], ['watermid', 'LR']] });
   for (const g of cards.BULK_RELEASES) jobs.push({ name: bannerName('bulk', g.id), html: bulkHtml(g), art: null, arts: g.ids.filter((id) => cards.CARDS[id].rarity === 'SSR').concat(g.ids.filter((id) => cards.CARDS[id].rarity === 'SR').slice(0, 6)).map((id) => [id, cards.CARDS[id].rarity]) });
   for (const [id, at] of Object.entries(cards.RELEASES)) if (cards.RARITY[cards.CARDS[id]?.rarity] && !cards.BULK_IDS.has(id)) jobs.push({ name: bannerName('char', id), html: charHtml(id, at), art: [id, cards.CARDS[id].rarity] });
   for (const q of cards.QUESTS) jobs.push({ name: bannerName('quest', q.id), html: questHtml(q), art: [q.reward, cards.CARDS[q.reward].rarity] });
