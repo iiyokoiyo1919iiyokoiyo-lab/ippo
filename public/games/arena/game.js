@@ -6,7 +6,7 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { FXAAShader } from './vendor/FXAAShader.js';
+import { createGraphics } from './world.js';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
@@ -15,91 +15,17 @@ $('#howto').innerHTML = isTouch
   ? '左のスティックで移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」'
   : 'WASD で移動・マウスで見回す・クリックで撃つ・F (右クリック) でなぐる<br>Space ジャンプ・Shift ダッシュ・R リロード・Esc で一時停止';
 
-// ---------- 画面 ----------
-const renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
-const PR = Math.min(devicePixelRatio, isTouch ? 1.5 : 2);
-renderer.setPixelRatio(PR);
-// FXAA (ふちのギザギザをなめらかにする): 場面をいったん画像 (rt) に描き、FXAA のシェーダーで画面へ
-const rt = new THREE.WebGLRenderTarget(1, 1, { type: renderer.capabilities.isWebGL2 ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer: true });
-const fxaaMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), vertexShader: FXAAShader.vertexShader,
-  fragmentShader: FXAAShader.fragmentShader.replace(/}\s*$/, '\t#include <colorspace_fragment>\n}'), depthTest: false, depthWrite: false });
-fxaaMat.uniforms.tDiffuse.value = rt.texture;
-const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fxaaMat));
-const scene = new THREE.Scene();
-scene.background = new THREE.Color('#9fd3ff');
-scene.fog = new THREE.Fog('#9fd3ff', 45, 130);
-const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 400);
-scene.add(new THREE.HemisphereLight('#ffffff', '#5a6b7c', 1.25));
-const sun = new THREE.DirectionalLight('#fff4d6', 1.4); sun.position.set(40, 80, 25); scene.add(sun);
-function resize() {
-  const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 82 : 70; camera.updateProjectionMatrix();
-  rt.setSize(Math.round(w * PR), Math.round(h * PR)); fxaaMat.uniforms.resolution.value.set(1 / Math.round(w * PR), 1 / Math.round(h * PR));
-}
-addEventListener('resize', resize); resize();
-
-// ---------- 街 ----------
-function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
-// 地面: 歩道・道路・白線
-const groundTex = canvasTex(1024, 1024, (g, W) => {
-  const k = W / A.SIZE, BLOCK = 18, ROAD = 8;
-  g.fillStyle = '#c9c4b8'; g.fillRect(0, 0, W, W);
-  g.fillStyle = '#3d4148';
-  for (let i = 0; i <= 5; i++) { const o = i * (BLOCK + ROAD) * k; g.fillRect(o, 0, ROAD * k, W); g.fillRect(0, o, W, ROAD * k); }
-  g.strokeStyle = '#f1f3f5'; g.lineWidth = 2; g.setLineDash([10, 10]);
-  for (let i = 0; i <= 5; i++) { const c = (i * (BLOCK + ROAD) + ROAD / 2) * k; g.beginPath(); g.moveTo(c, 0); g.lineTo(c, W); g.stroke(); g.beginPath(); g.moveTo(0, c); g.lineTo(W, c); g.stroke(); }
-});
-groundTex.anisotropy = 4;
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(A.SIZE, A.SIZE), new THREE.MeshLambertMaterial({ map: groundTex }));
-ground.rotation.x = -Math.PI / 2; scene.add(ground);
-// ビルの窓
-const winTex = canvasTex(64, 64, (g) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#5b6b80'; for (const [x, y] of [[8, 10], [36, 10], [8, 38], [36, 38]]) g.fillRect(x, y, 20, 16); g.fillStyle = 'rgba(255,255,255,.35)'; for (const [x, y] of [[10, 12], [38, 40]]) g.fillRect(x, y, 6, 4); });
-winTex.wrapS = winTex.wrapT = THREE.RepeatWrapping;
-for (const b of map.boxes) {
-  let mat;
-  if (b.kind === 'building') { const t = winTex.clone(); t.needsUpdate = true; t.repeat.set(Math.max(1, Math.round(b.w / 3)), Math.max(1, Math.round(b.h / 3))); mat = new THREE.MeshLambertMaterial({ color: b.color, map: t }); }
-  else mat = new THREE.MeshLambertMaterial({ color: b.color });
-  const m = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), mat);
-  m.position.set(b.x, b.y0 + b.h / 2 + (b.flat ? 0.001 : 0), b.z); scene.add(m);
-  if (b.kind === 'building') { // 屋上のふち
-    const r = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.35, b.d + 0.3), new THREE.MeshLambertMaterial({ color: '#495057' }));
-    r.position.set(b.x, b.h + 0.17, b.z); scene.add(r);
-  }
-  if (b.kind === 'car') { // 窓とタイヤ
-    const along = b.w > b.d, top = new THREE.Mesh(new THREE.BoxGeometry(along ? 2.2 : 1.6, 0.6, along ? 1.6 : 2.2), new THREE.MeshLambertMaterial({ color: '#a5d8ff' }));
-    top.position.set(b.x, b.h + 0.3, b.z); scene.add(top);
-  }
-}
-// 木 (公園)
-for (const b of map.boxes.filter((x) => x.kind === 'grass')) for (let k = 0; k < 4; k++) {
-  const x = b.x + (k % 2 ? 1 : -1) * (b.w / 2 - 1.2), z = b.z + (k < 2 ? 1 : -1) * (b.d / 2 - 1.2);
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.6), new THREE.MeshLambertMaterial({ color: '#8d5a3b' })); trunk.position.set(x, 0.8, z);
-  const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(1.2, 0), new THREE.MeshLambertMaterial({ color: '#2f9e44', flatShading: true })); leaf.position.set(x, 2.3, z);
-  scene.add(trunk, leaf);
-}
-
-// ---------- キャラクター (ブロックの体・まるい目) ----------
-function nameSprite(name, color) {
-  const tex = canvasTex(256, 64, (g, w, h) => { g.font = '900 30px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 7; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(name, w / 2, h / 2); g.fillStyle = color; g.fillText(name, w / 2, h / 2); });
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true })); s.scale.set(2.2, 0.55, 1); s.position.y = 2.35; s.renderOrder = 10; return s;
-}
-function makeChar(color, name, isMe) {
-  const g = new THREE.Group(), mat = new THREE.MeshLambertMaterial({ color }), dark = new THREE.MeshLambertMaterial({ color: '#343a40' }), skin = new THREE.MeshLambertMaterial({ color: '#ffe3c2' });
-  const box = (w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
-  box(0.26, 0.62, 0.3, dark, -0.16, 0.31, 0); box(0.26, 0.62, 0.3, dark, 0.16, 0.31, 0);   // 足
-  box(0.72, 0.78, 0.42, mat, 0, 1.0, 0);                                                     // 体
-  const punchArm = box(0.22, 0.24, 0.5, mat, -0.44, 1.18, -0.1);                            // 左うで (なぐる)
-  const arm = box(0.2, 0.24, 0.62, mat, 0.42, 1.25, -0.28);                                  // 右うで (前にのばす)
-  const head = box(0.52, 0.5, 0.5, skin, 0, 1.62, 0);
-  box(0.56, 0.16, 0.54, mat, 0, 1.9, 0);                                                     // ぼうし
-  box(0.08, 0.1, 0.02, dark, -0.12, 1.66, -0.26); box(0.08, 0.1, 0.02, dark, 0.12, 1.66, -0.26); // 目
-  const gun = box(0.14, 0.16, 0.7, dark, 0.42, 1.32, -0.62);                                 // ブラスター
-  const tip = box(0.1, 0.1, 0.08, new THREE.MeshBasicMaterial({ color: '#4dabf7' }), 0.42, 1.32, -0.98);
-  if (!isMe) g.add(nameSprite(name, '#fff'));
-  scene.add(g);
-  const fist = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.26), skin); fist.position.set(0, 0, -0.3); punchArm.add(fist); // こぶし
-  return { g, head, gun, tip, arm, punchArm };
-}
+// ---------- 画面・街・キャラクター (world.js) ----------
+const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
+const { scene, camera } = GFX;
+addEventListener('resize', GFX.resize); GFX.resize();
+const seedOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+const makeChar = (color, name, isMe) => GFX.makeChar(color, name, isMe, seedOf(name));
+// 画質 (はじめの画面で変えられる。変えると読みなおす)
+{ const QN = { low: '低', medium: '中', high: '高' }, b = document.createElement('button'); b.className = 'btn ghost'; b.id = 'gfx'; b.style.marginTop = '10px';
+  b.textContent = `⚙️ 画質: ${QN[GFX.quality]} (タップで変える)`;
+  b.onclick = () => { const list = GFX.qualities, next = list[(list.indexOf(GFX.quality) + 1) % list.length]; GFX.setQuality(next); location.reload(); };
+  $('#center > div').append(document.createElement('br'), b); }
 
 // ---------- 状態 ----------
 const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 15, reloading: 0, onGround: true };
@@ -185,12 +111,12 @@ function showCenter(title, btn, sub = '') { playing = false; $('#center').classL
 const fx = [];
 function tracer(o, e, color = '#ffe066') {
   const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...o), new THREE.Vector3(...e)]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true }));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3), transparent: true, fog: false }));
   scene.add(line); fx.push({ o: line, until: performance.now() + 110, fade: true });
 }
 function burst(p, color = '#ffffff', n = 8) { // 当たったときの星 (血は出さない)
   for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: i % 2 ? color : '#ffd43b', transparent: true }));
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), new THREE.MeshBasicMaterial({ color: new THREE.Color(i % 2 ? color : '#ffd43b').multiplyScalar(4), transparent: true }));
     m.position.set(...p); scene.add(m);
     fx.push({ o: m, until: performance.now() + 380, v: [(Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6], fade: true });
   }
@@ -229,7 +155,7 @@ function tryShoot(now) {
   send({ t: 'shoot', o, d: dn });
   updHud();
 }
-function muzzle(model) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 6), new THREE.MeshBasicMaterial({ color: '#fff3bf', transparent: true })); model.tip.getWorldPosition(m.position); scene.add(m); fx.push({ o: m, until: performance.now() + 60, fade: true }); }
+function muzzle(model) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffd28a').multiplyScalar(8), transparent: true })); model.tip.getWorldPosition(m.position); scene.add(m); fx.push({ o: m, until: performance.now() + 60, fade: true }); }
 
 // ---------- 通信 ----------
 function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
@@ -249,13 +175,13 @@ function connect() {
     else if (m.t === 'leave') { const s = scores.get(m.sid); if (s) feed(`${s.name} が帰った`); removePlayer(m.sid); }
     else if (m.t === 'spawn') {
       if (m.sid === you) { Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, yaw: m.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0 }); $('#dead').style.display = 'none'; if (myModel) { myModel.g.visible = true; myModel.g.rotation.x = 0; } updHud(); }
-      else { const o = others.get(m.sid); if (o) { Object.assign(o, { tx: m.x, ty: m.y, tz: m.z, alive: true }); o.model.g.position.set(m.x, m.y, m.z); o.model.g.visible = true; o.model.g.rotation.x = 0; } }
+      else { const o = others.get(m.sid); if (o) { Object.assign(o, { tx: m.x, ty: m.y, tz: m.z, alive: true }); o.model.g.position.set(m.x, m.y, m.z); o.cy = m.y; o.model.g.visible = true; o.model.g.rotation.x = 0; } }
     } else if (m.t === 's') {
       for (const [sid, x, y, z, yaw, pitch, hp, alive, prot] of m.p) {
         if (sid === you) { me.hp = hp; me.protect = !!prot; if (!alive && me.alive) me.alive = false; continue; }
         const o = others.get(sid); if (!o) continue;
         Object.assign(o, { tx: x, ty: y, tz: z, yaw, alive: !!alive, prot: !!prot });
-        if (!o.seen) { o.model.g.position.set(x, y, z); o.seen = true; }
+        if (!o.seen) { o.model.g.position.set(x, y, z); o.cy = y; o.seen = true; }
       }
       updHud();
     } else if (m.t === 'punch') {
@@ -292,13 +218,6 @@ $('#start').onclick = () => {
   if (!isTouch) canvas.requestPointerLock?.();
 };
 
-// なぐるときの、うでの動き (0.25 秒で前に突き出してもどす)
-function armAnim(model, now) {
-  const t = model.swing ? (now - model.swing) / 250 : 1;
-  const k = t < 1 ? Math.sin(Math.PI * t) : 0;
-  model.punchArm.position.z = -0.1 - k * 0.55; model.punchArm.scale.set(1 + k * 0.3, 1 + k * 0.3, 1 + k * 0.6);
-  if (t >= 1) model.swing = 0;
-}
 // ---------- 毎フレーム ----------
 const clock = new THREE.Clock();
 const camOff = new THREE.Vector3();
@@ -323,9 +242,10 @@ function frame() {
   }
   // 自分のモデルとカメラ (肩ごしの三人称。壁があればカメラを近づける)
   if (myModel) {
-    myModel.g.position.set(me.x, me.y, me.z); myModel.g.rotation.y = me.yaw;
-    armAnim(myModel, now);
-    const pivot = new THREE.Vector3(me.x, me.y + 1.6, me.z);
+    const curb = GFX.curbAt(me.x, me.z);
+    myModel.g.position.x = me.x; myModel.g.position.z = me.z; myModel.baseY = me.y; myModel.g.rotation.y = me.yaw;
+    GFX.animateChar(myModel, now, dt, curb);
+    const pivot = new THREE.Vector3(me.x, me.y + curb + 1.6, me.z);
     camOff.set(0.75, 0.35, 3.6).applyEuler(new THREE.Euler(me.pitch, me.yaw, 0, 'YXZ'));
     const dist = camOff.length(), dir = camOff.clone().normalize();
     const hit = A.rayWorld(map, [pivot.x, pivot.y, pivot.z], [dir.x, dir.y, dir.z], dist);
@@ -336,15 +256,16 @@ function frame() {
   // ほかのプレイヤー (なめらかに追いかける)
   const k = 1 - Math.exp(-dt * 14);
   for (const o of others.values()) {
-    const g = o.model.g; g.visible = o.alive || g.rotation.x !== 0;
-    g.position.x += (o.tx - g.position.x) * k; g.position.y += (o.ty - g.position.y) * k; g.position.z += (o.tz - g.position.z) * k;
-    armAnim(o.model, now);
+    const g = o.model.g;
+    g.position.x += (o.tx - g.position.x) * k; g.position.z += (o.tz - g.position.z) * k; o.cy = (o.cy ?? o.ty) + (o.ty - (o.cy ?? o.ty)) * k;
+    o.model.baseY = o.cy; GFX.animateChar(o.model, now, dt, GFX.curbAt(g.position.x, g.position.z));
     let dy = o.yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.rotation.y += dy * k;
-    g.traverse((m) => { if (m.material && 'opacity' in m.material && !m.isSprite) { m.material.transparent = !!o.prot; m.material.opacity = o.prot ? 0.55 : 1; } });
+    // 無敵中は点めつ (マテリアルは共有なので、見える・見えないで表す)
+    g.visible = (o.alive || g.rotation.x !== 0) && !(o.prot && Math.floor(now / 120) % 2);
   }
   stepFx(dt);
-  renderer.setRenderTarget(rt); renderer.render(scene, camera);
-  renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+  GFX.follow(me.x, me.z);
+  GFX.render();
   requestAnimationFrame(frame);
 }
 updHud(); connect(); requestAnimationFrame(frame);
