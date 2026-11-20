@@ -347,7 +347,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     S_.add(GEO.box, skin, [0, y, 0], [0, 0, 0], [0.062, 0.075, 0.03]);
     for (let i = 0; i < 4; i++) { const x = (i - 1.5) * 0.016;
       if (fist) S_.add(GEO.cap(0.0085, 0.022), skin, [x, y - 0.042, -0.014], [Math.PI / 2, 0, 0]); else S_.add(GEO.cap(0.0085, 0.036 - Math.abs(i - 1.5) * 0.005), skin, [x, y - 0.06, 0], [0.15, 0, 0]); }
-    S_.add(GEO.cap(0.009, 0.026), skin, [s * 0.034, y - 0.012, -0.012], [0.4, 0, s * 0.7]);
+    S_.add(GEO.cap(0.009, 0.026), skin, [-s * 0.034, y - 0.012, -0.012], [0.4, 0, -s * 0.7]);          // 親指は体の内がわ
   }
   function makeChar(color, name, isMe, seed = 1) {
     const g = new THREE.Group();
@@ -389,12 +389,12 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       const sh = new THREE.Group(); sh.position.set(s * 0.225, 1.42, 0); g.add(sh);
       const up = seg(); up.add(GEO.cap(0.058, 0.2), jacket, [0, -0.14, 0]); up.build(sh);
       const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
-      const lo = seg(); lo.add(GEO.cap(0.05, 0.19), jacket, [0, -0.12, 0]); lo.add(GEO.torus, jacketDark, [0, -0.235, 0], [Math.PI / 2, 0, 0], [0.05, 0.05, 0.05]); // そで口
+      const lo = seg(); lo.add(GEO.cap(0.05, 0.19), jacket, [0, -0.12, 0]); lo.add(GEO.cyl, jacketDark, [0, -0.225, 0], [0, 0, 0], [0.053, 0.035, 0.053]); // そで口
       addHand(lo, skin, -0.29, s, fist); lo.build(el);
       return { sh, el };
     };
     const R_ = arm(1, true), L_ = arm(-1, true);
-    R_.sh.rotation.x = -1.35; R_.el.rotation.x = -0.25; L_.sh.rotation.set(-1.15, 0, 0.55); L_.el.rotation.x = -0.75;
+    R_.sh.rotation.set(1.3, 0, -0.12); R_.el.rotation.x = 0.25; L_.sh.rotation.set(1.2, 0, 0.62); L_.el.rotation.x = 0.35; // うでは前へ (銃をかまえる)
     // ---- 足 (もも → ひざ → すね → スニーカー) ----
     const legs = [-1, 1].map((s) => {
       const hip = new THREE.Group(); hip.position.set(s * 0.1, 0.92, 0); g.add(hip);
@@ -439,7 +439,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     m.legs.forEach((l, i) => { const ph = Math.sin(m.walk + i * Math.PI); l.hip.rotation.x = THREE.MathUtils.lerp(l.hip.rotation.x, ph * amp, 0.3); l.knee.rotation.x = THREE.MathUtils.lerp(l.knee.rotation.x, Math.max(0, -Math.cos(m.walk + i * Math.PI)) * amp * 1.2, 0.3); });
     // なぐる (左うでを前に突き出す)
     const t = m.swing ? (now - m.swing) / 260 : 1, k = t < 1 ? Math.sin(Math.PI * t) : 0; if (t >= 1) m.swing = 0;
-    m.L.sh.rotation.set(-1.15 - k * 0.4, 0, 0.55 - k * 0.45); m.L.el.rotation.x = -0.75 + k * 0.75;
+    m.L.sh.rotation.set(1.2 + k * 0.35, 0, 0.62 - k * 0.55); m.L.el.rotation.x = 0.35 - k * 0.35;
     m.bob = moving ? Math.abs(Math.sin(m.walk)) * 0.03 : 0;
     m.g.position.y = (m.baseY ?? p.y) + curbY + (m.bob || 0);
   }

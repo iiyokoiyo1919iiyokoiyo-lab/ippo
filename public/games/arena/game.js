@@ -6,7 +6,7 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=5';
+import { createGraphics } from './world.js?v=7';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
