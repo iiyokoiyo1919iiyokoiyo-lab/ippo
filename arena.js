@@ -9,9 +9,14 @@
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const M = require('./public/games/arena/arena-map.js');
+const Body = require('./arena-body');
+const Config = require('./arena-config');
+const { NpcSystem } = require('./arena-npc');
 
 const MAX_HUMANS = 16, TICK_MS = 50, RESPAWN_MS = 3000, PROTECT_MS = 2000, HP = 100;
 const FIRE_MS = 130, RANGE = 90, DMG = { body: 22, head: 45 }, BOT_DMG = { body: 12, head: 24 };
+// 被弾の衝撃 (転倒するかどうか。arena-config の downImpact 以上で転倒): 体 18・頭 40・パンチ 34。ボットは弱め
+const IMPACT = { body: 18, head: 40 }, BOT_IMPACT = { body: 10, head: 26 }, PUNCH_IMPACT = 34;
 const BOTS_MAX = process.env.ARENA_BOTS != null ? Math.max(0, Number(process.env.ARENA_BOTS) || 0) : 3; // テスト用: ARENA_BOTS=0 でボットなし
 const PUNCH = { range: 2.4, cos: Math.cos((55 * Math.PI) / 180), dmg: 35, ms: 600, kb: 7 }; // なぐる: 前 2.4m・左右 55° いないの相手に 35 ダメージ + ふっとばし
 const MAX_SPEED = 9.5; // 走る速さ (8) + ゆとり
@@ -23,7 +28,11 @@ module.exports = function install(app, ctx) {
   const map = M.build();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 });
   const players = new Map(); // sid → プレイヤー (人間・ボット)
-  let loop = null, botSeq = 0;
+  let loop = null, botSeq = 0, tickN = 0;
+  const cfg = Config.load();
+  const npcs = new NpcSystem(map, cfg, { send: (m) => all(m) });
+  const isAdmin = (u) => !!(ctx.isAdmin && ctx.isAdmin(u));
+  const pubCfg = () => ({ ...cfg });
   const nameOf = (uid) => { const u = db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(uid); return u ? String(u.display_name || u.username).slice(0, 20) : '???'; };
   const humans = () => [...players.values()].filter((p) => !p.bot);
   const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths });
@@ -40,12 +49,14 @@ module.exports = function install(app, ctx) {
       const d = others.length ? Math.min(...others.map((q) => dist2(q, n))) : 1;
       if (d > bestD) { bestD = d; best = n; }
     }
-    Object.assign(p, { x: best.x, y: 0, z: best.z, yaw: Math.random() * Math.PI * 2, pitch: 0, hp: HP, alive: true, protectUntil: Date.now() + PROTECT_MS, lastPosAt: Date.now() });
+    if (!p.body) p.body = Body.create(HP); else Body.revive(p.body);
+    Object.assign(p, { x: best.x, y: 0, z: best.z, yaw: Math.random() * Math.PI * 2, pitch: 0, hp: HP, alive: true, down: false, protectUntil: Date.now() + PROTECT_MS, lastPosAt: Date.now() });
     if (p.bot) Object.assign(p, { node: best, goal: null, stuckAt: Date.now(), stuckPos: { x: p.x, z: p.z } });
     all({ t: 'spawn', sid: p.sid, x: p.x, y: p.y, z: p.z, yaw: p.yaw });
   }
 
   // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近いプレイヤーに当たる
+  // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近い相手 (プレイヤー・通行人) に当たる
   function fire(p, o, d, dmgTable) {
     const wallT = M.rayWorld(map, o, d, RANGE);
     let hit = null;
@@ -54,16 +65,30 @@ module.exports = function install(app, ctx) {
       const r = M.rayPlayer(o, d, q);
       if (r && r.t < wallT && (!hit || r.t < hit.t)) hit = { ...r, q };
     }
-    const t = hit ? hit.t : wallT;
-    all({ t: 'shot', sid: p.sid, o: o.map((v) => +v.toFixed(2)), e: [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t].map((v) => +v.toFixed(2)), hit: !!hit });
+    for (const n of npcs.targets()) { const r = M.rayPlayer(o, d, Body.isDown(n.body) ? { x: n.x, y: -1.2, z: n.z } : n); if (r && r.t < wallT && (!hit || r.t < hit.t)) hit = { ...r, q: n, npc: true }; }
+    const t = hit ? hit.t : wallT, e = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+    all({ t: 'shot', sid: p.sid, o: o.map((v) => +v.toFixed(2)), e: e.map((v) => +v.toFixed(2)), hit: !!hit });
+    npcs.emit('shot', p.x, p.z); npcs.emit('impact', e[0], e[2]); // 銃声と着弾は、まわりの通行人に伝わる
     if (!hit) return;
-    damage(p, hit.q, hit.head ? dmgTable.head : dmgTable.body, { head: hit.head });
+    const imp = dmgTable === BOT_DMG ? BOT_IMPACT : IMPACT;
+    damage(p, hit.q, hit.head ? dmgTable.head : dmgTable.body, { head: hit.head, impact: hit.head ? imp.head : imp.body, dir: d.map((v) => +v.toFixed(3)), npc: hit.npc });
   }
-  function damage(p, q, dmg, { head = false, melee = false, kb = null } = {}) {
-    q.hp = Math.max(0, q.hp - dmg);
-    all({ t: 'hit', sid: p.sid, to: q.sid, dmg, head, melee, kb, hp: q.hp });
-    if (q.hp <= 0) {
-      q.alive = false; q.deaths++; p.kills++; q.respawnAt = Date.now() + RESPAWN_MS;
+  // 当たったとき: 体の状態 (arena-body.js) で、硬直・転倒・行動不能を決める。プレイヤーも通行人も同じ
+  function damage(p, q, dmg, { head = false, melee = false, kb = null, impact = 0, dir = null, npc = false } = {}) {
+    const now = Date.now();
+    if (npc) {
+      const res = npcs.hit(q, { dmg, impact, dir, from: { x: p.x, z: p.z } });
+      if (res) all({ t: 'hit', sid: p.sid, to: q.id, npc: 1, dmg, head, melee, kb, res, dir, impact, hp: q.body.hp });
+      return;
+    }
+    const res = Body.hit(q.body, { dmg, impact, dir }, cfg, now);
+    if (!res) return;
+    q.hp = q.body.hp; q.down = Body.isDown(q.body);
+    if (res === 'down' && dir) { q.x += dir[0] * 0.6; q.z += dir[2] * 0.6; M.collide(map, q); } // 倒れた方向へ少しずれる
+    all({ t: 'hit', sid: p.sid, to: q.sid, dmg, head, melee, kb, res, dir, impact, hp: q.hp });
+    npcs.emit(res === 'stagger' ? 'hit' : 'down', q.x, q.z);
+    if (res === 'incap') {
+      q.alive = false; q.deaths++; p.kills++; q.respawnAt = now + RESPAWN_MS;
       all({ t: 'kill', killer: p.sid, victim: q.sid, head, melee, score: [pub(p), pub(q)] });
     }
   }
@@ -75,8 +100,8 @@ module.exports = function install(app, ctx) {
     all({ t: 'punch', sid: p.sid });
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
     let best = null;
-    for (const q of players.values()) {
-      if (q === p || !q.alive || q.protectUntil > now) continue;
+    for (const q of [...players.values(), ...npcs.targets()]) {
+      if (q === p || (q.sid && (!q.alive || q.protectUntil > now)) || (!q.sid && Body.isOut(q.body))) continue;
       const dx = q.x - p.x, dz = q.z - p.z, L = Math.hypot(dx, dz);
       if (L > PUNCH.range || Math.abs(q.y - p.y) > 1.5) continue;
       if (L > 0.3 && (dx * fx + dz * fz) / L < PUNCH.cos) continue;
@@ -86,12 +111,13 @@ module.exports = function install(app, ctx) {
     }
     if (!best) return;
     const n = best.L || 1;
-    damage(p, best.q, p.bot ? Math.round(PUNCH.dmg * 0.6) : PUNCH.dmg, { melee: true, kb: [+(best.dx / n * PUNCH.kb).toFixed(2), +(best.dz / n * PUNCH.kb).toFixed(2)] });
+    damage(p, best.q, p.bot ? Math.round(PUNCH.dmg * 0.6) : PUNCH.dmg, { melee: true, kb: [+(best.dx / n * PUNCH.kb).toFixed(2), +(best.dz / n * PUNCH.kb).toFixed(2)],
+      impact: p.bot ? 22 : PUNCH_IMPACT, dir: [+(best.dx / n).toFixed(3), 0, +(best.dz / n).toFixed(3)], npc: !best.q.sid });
   }
 
   // ボット: 道路の交差点をめぐり、見える相手がいたら撃つ (人間より弱い)
   function botThink(b, now, dt) {
-    if (!b.alive) return;
+    if (!b.alive || !Body.canAct(b.body)) return;
     if (!b.losAt || now - b.losAt > 300) { // 見える相手をさがす (0.3 秒ごと)
       b.losAt = now; b.target = null;
       let best = 40 * 40;
@@ -135,11 +161,22 @@ module.exports = function install(app, ctx) {
   }
   function tick() {
     const now = Date.now(), dt = TICK_MS / 1000;
+    tickN++;
     for (const p of players.values()) {
+      Body.update(p.body, now); p.down = Body.isDown(p.body);
       if (!p.alive && p.respawnAt && now >= p.respawnAt) { p.respawnAt = 0; spawn(p); }
       if (p.bot) botThink(p, now, dt);
     }
-    all({ t: 's', p: [...players.values()].map((p) => [p.sid, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +(p.pitch || 0).toFixed(3), p.hp, p.alive ? 1 : 0, p.protectUntil > now ? 1 : 0]) });
+    // 通行人: 1 秒に 10 回 (人数は 1 秒に 1 回あわせる)
+    const pl = [...players.values()].map((p) => ({ x: p.x, z: p.z, down: p.down }));
+    if (tickN % 20 === 1) npcs.sync(pl);
+    const withNpc = tickN % 2 === 0;
+    if (withNpc) npcs.update(now, 0.1, pl);
+    const prow = [...players.values()].map((p) => [p.sid, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +(p.pitch || 0).toFixed(3), p.hp, p.alive ? 1 : 0, p.protectUntil > now ? 1 : 0, Body.CODE[p.body.state]]);
+    if (!withNpc) return all({ t: 's', p: prow });
+    // 通行人が多いときは、その人から 110m いないの通行人だけ送る
+    if (npcs.npcs.size <= 60) return all({ t: 's', p: prow, n: npcs.snapshot() });
+    for (const p of players.values()) if (p.ws) send(p, { t: 's', p: prow, n: npcs.snapshot(p, 110 * 110) });
   }
   const startLoop = () => { if (!loop) loop = setInterval(tick, TICK_MS); };
   const stopLoop = () => { if (loop && !humans().length) { clearInterval(loop); loop = null; } };
@@ -152,7 +189,9 @@ module.exports = function install(app, ctx) {
     players.set(p.sid, p);
     syncBots(); startLoop();
     spawn(p);
-    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
+    npcs.sync([...players.values()].map((q) => ({ x: q.x, z: q.z })));
+    p.admin = isAdmin(user);
+    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
     all({ t: 'join', p: pub(p) });
     console.log(`[arena] @${user.username} が入った (人間 ${humans().length} 人)`);
     ws.on('message', (raw) => {
@@ -160,7 +199,7 @@ module.exports = function install(app, ctx) {
       const now = Date.now(); if (now - p.msgWin > 1000) { p.msgWin = now; p.msgs = 0; } if (++p.msgs > 60) return;
       let m; try { m = JSON.parse(raw); } catch { return; }
       if (!m || typeof m !== 'object') return;
-      if (m.t === 'pos' && p.alive) {
+      if (m.t === 'pos' && p.alive && Body.canMove(p.body)) { // 硬直・転倒・行動不能のあいだは動けない
         const x = Number(m.x), y = Number(m.y), z = Number(m.z), yaw = Number(m.yaw), pitch = Number(m.pitch);
         if (![x, y, z, yaw, pitch].every(Number.isFinite)) return;
         // 速すぎる動き (ワープ) は受けつけず、サーバーの位置にもどす
@@ -170,9 +209,12 @@ module.exports = function install(app, ctx) {
         M.collide(map, np);
         if (moved > allow || np.y > M.groundAt(map, np.x, np.z, np.y) + 3.2) { send(p, { t: 'fix', x: p.x, y: p.y, z: p.z }); return; }
         Object.assign(p, np, { yaw, pitch: Math.max(-1.4, Math.min(1.4, pitch)) });
-      } else if (m.t === 'punch' && p.alive) {
+      } else if (m.t === 'config' && p.admin) { // 管理者だけ: ゲームバランス・通行人の設定を変える (全員に知らせる)
+        Object.assign(cfg, Config.sanitize(m.patch)); all({ t: 'config', cfg: pubCfg() });
+        console.log(`[arena] 設定を変更: ${JSON.stringify(Config.sanitize(m.patch))}`);
+      } else if (m.t === 'punch' && p.alive && Body.canAct(p.body)) {
         punch(p);
-      } else if (m.t === 'shoot' && p.alive) {
+      } else if (m.t === 'shoot' && p.alive && Body.canAct(p.body)) {
         if (now - (p.lastShot || 0) < FIRE_MS - 20) return; p.lastShot = now;
         const o = Array.isArray(m.o) ? m.o.map(Number) : [], d = Array.isArray(m.d) ? m.d.map(Number) : [];
         if (o.length !== 3 || d.length !== 3 || ![...o, ...d].every(Number.isFinite)) return;
@@ -188,5 +230,6 @@ module.exports = function install(app, ctx) {
     });
   });
   ctx.arenaUpgrade = (req, socket, head, user) => wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
-  app.get('/api/arena/status', (req, res) => res.json({ humans: humans().length, max: MAX_HUMANS }));
+  app.get('/api/arena/status', (req, res) => res.json({ humans: humans().length, max: MAX_HUMANS, npcs: npcs.npcs.size }));
+  ctx.arenaDebug = { cfg, npcs, players }; // テスト用
 };

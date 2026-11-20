@@ -6,7 +6,12 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=7';
+import { createGraphics } from './world.js?v=8';
+import { Ragdoll, RagdollManager } from './ragdoll.js?v=1';
+import { NpcView } from './npcs.js?v=2';
+import { Sound } from './sound.js?v=1';
+import { Gore } from './gore.js?v=1';
+import { Settings } from './settings.js?v=1';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
@@ -21,26 +26,61 @@ const { scene, camera } = GFX;
 addEventListener('resize', GFX.resize); GFX.resize();
 const seedOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const makeChar = (color, name, isMe) => GFX.makeChar(color, name, isMe, seedOf(name));
-// 画質 (はじめの画面で変えられる。変えると読みなおす)
-{ const QN = { low: '低', medium: '中', high: '高' }, b = document.createElement('button'); b.className = 'btn ghost'; b.id = 'gfx'; b.style.marginTop = '10px';
-  b.textContent = `⚙️ 画質: ${QN[GFX.quality]} (タップで変える)`;
-  b.onclick = () => { const list = GFX.qualities, next = list[(list.indexOf(GFX.quality) + 1) % list.length]; GFX.setQuality(next); location.reload(); };
-  $('#center > div').append(document.createElement('br'), b); }
+// ---------- 体の物理・通行人・音・血・設定 ----------
+const env = { groundAt: (x, z) => GFX.curbAt(x, z), boxes: map.solid, cam: camera.position };
+const ragdolls = new RagdollManager({ low: 3, medium: 6, high: 10 }[GFX.quality] || 6);
+const sound = new Sound(), gore = new Gore(scene, env);
+const settings = new Settings({
+  quality: GFX.quality, qualities: GFX.qualities, onQuality: (q) => { GFX.setQuality(q); location.reload(); },
+  onLocal: (L) => applyLocal(L), onServer: (patch) => send({ t: 'config', patch }),
+});
+function applyLocal(L) { gore.blood = L.blood; gore.dismember = L.dismember; sound.setOn(L.sound); }
+applyLocal(settings.local);
+const npcView = new NpcView({ GFX, ragdolls, env, gore, sound, settings });
+{ const b = document.createElement('button'); b.className = 'btn ghost'; b.id = 'gfx'; b.style.marginTop = '10px'; b.textContent = `⚙️ 設定 (画質・ラグドール・血など)`;
+  b.onclick = () => settings.open(); $('#center > div').append(document.createElement('br'), b); }
+{ const b = document.createElement('button'); b.id = 'gear'; b.className = 'hud-btn'; b.textContent = '⚙️'; b.setAttribute('aria-label', '設定');
+  b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); settings.open(); }; document.body.append(b); }
 
 // ---------- 状態 ----------
-const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 15, reloading: 0, onGround: true };
+const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 15, reloading: 0, onGround: true, st: 0, srv: null };
+const canControl = () => me.alive && me.st === 0; // 硬直・転倒・行動不能のあいだは動けない
 const MAG = 15, RELOAD_MS = 1400;
 let you = null, ws = null, playing = false, lastSend = 0, lastShot = 0, rules = { fireMs: 130 };
 const others = new Map(); // sid → { name, color, bot, model, tx,ty,tz, yaw, alive, kills, deaths }
 const scores = new Map();
-let myModel = null;
+let myModel = null, myColor = '#4dabf7';
 function addPlayer(p) {
   scores.set(p.sid, { name: p.name, kills: p.kills || 0, deaths: p.deaths || 0, bot: p.bot });
-  if (p.sid === you) { if (!myModel) myModel = makeChar(p.color, p.name, true); return; }
+  if (p.sid === you) { myColor = p.color; if (!myModel) myModel = makeChar(p.color, p.name, true); return; }
   if (others.has(p.sid)) return;
   others.set(p.sid, { ...p, model: makeChar(p.color, p.name, false), tx: 0, ty: 0, tz: 0, yaw: 0, alive: true, seen: false });
 }
-function removePlayer(sid) { const o = others.get(sid); if (o) { scene.remove(o.model.g); others.delete(sid); } scores.delete(sid); renderScore(); }
+function removePlayer(sid) { const o = others.get(sid); if (o) { endRagdoll(o.model); GFX.disposeChar(o.model); others.delete(sid); } scores.delete(sid); renderScore(); }
+// ---------- 被弾のリアクション (プレイヤー・ボット) ----------
+function startRagdoll(model, hit) {
+  if (!model || model.ragdoll) return;
+  if (settings.local.ragdoll) ragdolls.add(new Ragdoll(model, env, { dir: hit.dir || [0, 0, 1], impact: hit.impact || 30, head: hit.head, strength: settings.local.reaction }));
+  else model.g.rotation.x = -Math.PI / 2; // ラグドールなし: その場に横たわる
+}
+function endRagdoll(model) { if (!model) return; if (model.ragdoll) ragdolls.remove(model.ragdoll); GFX.restPose(model); model.g.rotation.x = 0; model.g.rotation.z = 0; }
+function reactTo(model, m, pos) {
+  if (!model) return;
+  const hp = [pos.x, pos.y + (m.head ? 1.6 : 1.15), pos.z];
+  sound.play('flesh', pos.x, pos.z);
+  if (gore.blood) gore.spray(hp, m.dir || [0, 0, 1], m.res === 'incap' ? 26 : 12); else burst(hp, m.melee ? '#ff922b' : m.head ? '#ffd43b' : '#ffffff', m.melee ? 16 : m.head ? 12 : 7);
+  if (m.res === 'stagger') GFX.react(model, m.dir || [0, 0, 1], settings.local.reaction);
+  else if (m.res === 'down' || m.res === 'incap') {
+    startRagdoll(model, m); sound.play('fall', pos.x, pos.z); gore.pool(pos.x + (m.dir?.[0] || 0) * 0.7, pos.z + (m.dir?.[2] || 0) * 0.7);
+    if (m.res === 'incap' && model.ragdoll && settings.local.dismember) gore.dismemberOn(model, model.ragdoll, m.dir);
+  }
+}
+// 起き上がる・復活する: 体を元にもどす (欠損していたら作り直す)
+function freshModel(o, isMe) {
+  const m = isMe ? myModel : o.model; if (!m) return;
+  endRagdoll(m);
+  if (m.cut) { GFX.disposeChar(m); const s = scores.get(isMe ? you : o.sid); const nm = makeChar(isMe ? myColor : o.color, s?.name || '', isMe); if (isMe) myModel = nm; else o.model = nm; }
+}
 
 // ---------- 入力 ----------
 const keys = new Set(); let firing = false;
@@ -82,11 +122,11 @@ if (isTouch) {
 let lastPunch = 0;
 function doPunch() {
   const now = performance.now();
-  if (!playing || !me.alive || now - lastPunch < (rules.punch?.ms || 600)) return;
+  if (!playing || !canControl() || now - lastPunch < (rules.punch?.ms || 600)) return;
   lastPunch = now; me.protect = false; swing(myModel); send({ t: 'punch' });
 }
 function swing(model) { if (model) model.swing = performance.now(); }
-function jump() { if (playing && me.alive && me.onGround) { me.vy = 7; me.onGround = false; } }
+function jump() { if (playing && canControl() && me.onGround) { me.vy = 7; me.onGround = false; } }
 function reload() { if (me.reloading || me.ammo === MAG || !me.alive) return; me.reloading = performance.now() + RELOAD_MS; updHud(); }
 
 // ---------- HUD ----------
@@ -134,7 +174,7 @@ function stepFx(dt) {
 // ---------- 撃つ ----------
 const ray = new THREE.Vector3();
 function tryShoot(now) {
-  if (!me.alive || me.reloading) return;
+  if (!canControl() || me.reloading) return;
   if (now - lastShot < rules.fireMs) return;
   if (me.ammo <= 0) { reload(); return; }
   lastShot = now; me.ammo--; if (!me.ammo) reload();
@@ -167,42 +207,57 @@ function connect() {
     if (m.t === 'welcome') {
       you = m.you; rules = m.rules || rules;
       for (const p of m.players) addPlayer(p);
+      npcView.clear(); for (const n of m.npcs || []) npcView.add(n);
+      settings.setServer(m.cfg || {}, m.admin);
       Object.assign(me, { x: m.me.x, y: m.me.y, z: m.me.z, vy: 0, yaw: m.me.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0 }); updHud();
       renderScore();
       const b = $('#start'); b.disabled = false; b.textContent = 'はじめる！'; $('#status').textContent = `いま ${m.players.filter((p) => !p.bot).length} 人が遊んでいます`;
     } else if (m.t === 'full') { $('#status').textContent = '満員です。少し待ってからもう一度どうぞ'; }
+    else if (m.t === 'npcnew') npcView.add(m.n);
+    else if (m.t === 'npcgone') npcView.remove(m.id);
+    else if (m.t === 'nfx') npcView.fx(m);
+    else if (m.t === 'config') settings.setServer(m.cfg);
     else if (m.t === 'join') { addPlayer(m.p); renderScore(); if (m.p.sid !== you) feed(`${m.p.bot ? '🤖 ' : ''}${m.p.name} が来た`); }
     else if (m.t === 'leave') { const s = scores.get(m.sid); if (s) feed(`${s.name} が帰った`); removePlayer(m.sid); }
     else if (m.t === 'spawn') {
-      if (m.sid === you) { Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, yaw: m.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0 }); $('#dead').style.display = 'none'; if (myModel) { myModel.g.visible = true; myModel.g.rotation.x = 0; } updHud(); }
-      else { const o = others.get(m.sid); if (o) { Object.assign(o, { tx: m.x, ty: m.y, tz: m.z, alive: true }); o.model.g.position.set(m.x, m.y, m.z); o.cy = m.y; o.model.g.visible = true; o.model.g.rotation.x = 0; } }
+      if (m.sid === you) { freshModel(null, true); Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, yaw: m.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0, st: 0 }); $('#dead').style.display = 'none'; if (myModel) { myModel.g.visible = true; myModel.g.rotation.x = 0; } updHud(); }
+      else { const o = others.get(m.sid); if (o) { freshModel(o, false); Object.assign(o, { tx: m.x, ty: m.y, tz: m.z, alive: true, st: 0 }); o.model.g.position.set(m.x, m.y, m.z); o.cy = m.y; o.model.g.visible = true; o.model.g.rotation.x = 0; } }
     } else if (m.t === 's') {
-      for (const [sid, x, y, z, yaw, pitch, hp, alive, prot] of m.p) {
-        if (sid === you) { me.hp = hp; me.protect = !!prot; if (!alive && me.alive) me.alive = false; continue; }
+      for (const [sid, x, y, z, yaw, pitch, hp, alive, prot, st = 0] of m.p) {
+        if (sid === you) {
+          me.hp = hp; me.protect = !!prot; if (!alive && me.alive) me.alive = false; me.srv = { x, y, z };
+          if (me.st >= 2 && st === 0 && alive) { endRagdoll(myModel); Object.assign(me, { x, y, z }); if (myModel) myModel.rise = performance.now(); } // 起き上がった (サーバーの位置へ)
+          me.st = st; continue;
+        }
         const o = others.get(sid); if (!o) continue;
-        Object.assign(o, { tx: x, ty: y, tz: z, yaw, alive: !!alive, prot: !!prot });
+        if ((o.st || 0) >= 2 && st === 0 && alive) { endRagdoll(o.model); o.model.g.position.set(x, y, z); o.model.rise = performance.now(); }
+        Object.assign(o, { tx: x, ty: y, tz: z, yaw, alive: !!alive, prot: !!prot, st });
         if (!o.seen) { o.model.g.position.set(x, y, z); o.cy = y; o.seen = true; }
       }
+      if (m.n) npcView.snapshot(m.n);
       updHud();
     } else if (m.t === 'punch') {
       if (m.sid !== you) swing(others.get(m.sid)?.model);
     } else if (m.t === 'shot') {
+      sound.play('shot', m.o[0], m.o[2]); if (!m.hit) sound.play('impact', m.e[0], m.e[2]);
       if (m.sid === you) return;
       const o = others.get(m.sid); tracer(m.o, m.e, '#ff8787'); if (o) muzzle(o.model);
     } else if (m.t === 'hit') {
+      if (m.sid === you) hitMarker(m.head);
+      if (m.npc) { npcView.onHit(m); return; }
       const target = m.to === you ? null : others.get(m.to);
-      if (target) burst([target.model.g.position.x, target.model.g.position.y + (m.head ? 1.6 : 1.1), target.model.g.position.z], m.melee ? '#ff922b' : m.head ? '#ffd43b' : '#ffffff', m.melee ? 16 : m.head ? 12 : 7);
+      if (target) reactTo(target.model, m, target.model.g.position);
+      if (m.to === you) { reactTo(myModel, m, { x: me.x, y: me.y, z: me.z }); if (m.res !== 'stagger') { firing = false; me.kx = me.kz = 0; } if (m.res === 'stagger') me.st = 1; else me.st = m.res === 'down' ? 2 : 3; }
       if (m.melee && target && m.kb) { target.model.g.position.x += m.kb[0] * 0.08; target.model.g.position.z += m.kb[1] * 0.08; }
       if (m.melee && m.to === you && m.kb) { me.kx = m.kb[0]; me.kz = m.kb[1]; me.vy = Math.max(me.vy, 3.5); me.onGround = false; }
-      if (m.sid === you) hitMarker(m.head);
       if (m.to === you) { me.hp = m.hp; flashDamage(); updHud(); }
     } else if (m.t === 'kill') {
       for (const s of m.score) { const r = scores.get(s.sid); if (r) Object.assign(r, { kills: s.kills, deaths: s.deaths }); }
       renderScore();
       const k = scores.get(m.killer)?.name || '?', v = scores.get(m.victim)?.name || '?';
       feed(`${k} ${m.melee ? '👊' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
-      if (m.victim === you) { me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel) myModel.g.rotation.x = -Math.PI / 2; }
-      else { const o = others.get(m.victim); if (o) { o.alive = false; o.model.g.rotation.x = -Math.PI / 2; } }
+      if (m.victim === you) { me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
+      else { const o = others.get(m.victim); if (o) { o.alive = false; if (!o.model.ragdoll) o.model.g.rotation.x = -Math.PI / 2; } }
     } else if (m.t === 'fix') { Object.assign(me, { x: m.x, y: m.y, z: m.z }); }
   };
   ws.onclose = (e) => {
@@ -214,7 +269,7 @@ function connect() {
   };
 }
 $('#start').onclick = () => {
-  playing = true; $('#center').classList.add('hide');
+  playing = true; $('#center').classList.add('hide'); sound.start(); applyLocal(settings.local);
   if (!isTouch) canvas.requestPointerLock?.();
 };
 
@@ -224,7 +279,7 @@ const camOff = new THREE.Vector3();
 function frame() {
   const dt = Math.min(0.05, clock.getDelta()), now = performance.now();
   // 自分の移動
-  if (playing && me.alive) {
+  if (playing && canControl()) {
     let fx0 = 0, fz0 = 0, run = false;
     if (isTouch) { fx0 = move.x; fz0 = move.y; run = move.run; }
     else { if (keys.has('KeyW') || keys.has('ArrowUp')) fz0 -= 1; if (keys.has('KeyS') || keys.has('ArrowDown')) fz0 += 1; if (keys.has('KeyA') || keys.has('ArrowLeft')) fx0 -= 1; if (keys.has('KeyD') || keys.has('ArrowRight')) fx0 += 1; run = keys.has('ShiftLeft') || keys.has('ShiftRight'); }
@@ -243,9 +298,10 @@ function frame() {
   // 自分のモデルとカメラ (肩ごしの三人称。壁があればカメラを近づける)
   if (myModel) {
     const curb = GFX.curbAt(me.x, me.z);
-    myModel.g.position.x = me.x; myModel.g.position.z = me.z; myModel.baseY = me.y; myModel.g.rotation.y = me.yaw;
-    GFX.animateChar(myModel, now, dt, curb);
-    const pivot = new THREE.Vector3(me.x, me.y + curb + 1.6, me.z);
+    if (!myModel.ragdoll) { myModel.g.position.x = me.x; myModel.g.position.z = me.z; myModel.baseY = me.y; myModel.g.rotation.y = me.yaw; GFX.animateChar(myModel, now, dt, curb); }
+    // 倒れているあいだは、カメラは体を追う
+    const pv = myModel.ragdoll ? myModel.ragdoll.pelvis() : null;
+    const pivot = pv ? new THREE.Vector3(pv.x, pv.y + 0.9, pv.z) : new THREE.Vector3(me.x, me.y + curb + 1.6, me.z);
     camOff.set(0.75, 0.35, 3.6).applyEuler(new THREE.Euler(me.pitch, me.yaw, 0, 'YXZ'));
     const dist = camOff.length(), dir = camOff.clone().normalize();
     const hit = A.rayWorld(map, [pivot.x, pivot.y, pivot.z], [dir.x, dir.y, dir.z], dist);
@@ -261,6 +317,7 @@ function frame() {
   const k = 1 - Math.exp(-dt * 14);
   for (const o of others.values()) {
     const g = o.model.g;
+    if (o.model.ragdoll) { g.visible = true; continue; } // 倒れているあいだはラグドールが動かす
     g.position.x += (o.tx - g.position.x) * k; g.position.z += (o.tz - g.position.z) * k; o.cy = (o.cy ?? o.ty) + (o.ty - (o.cy ?? o.ty)) * k;
     o.model.baseY = o.cy; GFX.animateChar(o.model, now, dt, GFX.curbAt(g.position.x, g.position.z));
     let dy = o.yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.rotation.y += dy * k;
@@ -268,8 +325,15 @@ function frame() {
     g.visible = (o.alive || g.rotation.x !== 0) && !(o.prot && Math.floor(now / 120) % 2);
   }
   stepFx(dt);
+  const t1 = performance.now();
+  ragdolls.step(dt);
+  npcView.update(now, dt, camera.position);
+  gore.update(dt, ragdolls.list);
+  sound.setListener(camera.position.x, camera.position.z, me.yaw);
+  window.__arenaStats = { npcMs: performance.now() - t1, npcs: npcView.stats, ragdolls: ragdolls.list.length, awake: ragdolls.awake, frameMs: dt * 1000 };
   GFX.follow(me.x, me.z);
   GFX.render();
   requestAnimationFrame(frame);
 }
+if (location.hash === '#debug') window.__arenaDebug = { npcView, ragdolls, GFX, me, camera, gore, settings }; // 確認用 (#debug のときだけ)
 updHud(); connect(); requestAnimationFrame(frame);

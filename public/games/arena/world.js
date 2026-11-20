@@ -317,7 +317,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   const skinOf = (c) => { if (!skinMats.has(c)) skinMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 })); return skinMats.get(c); };
   const hairOf = (c) => { if (!hairMats.has(c)) hairMats.set(c, new THREE.MeshStandardMaterial({ color: c, map: hairTex.map, normalMap: hairTex.normal, roughness: 0.6 })); return hairMats.get(c); };
   // 形のもと (使いまわす)
-  const GEO = {
+  const GEO_HI = {
     ball: new THREE.SphereGeometry(1, 32, 24), hairCap: new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), ballLo: new THREE.SphereGeometry(1, 16, 12), box: new THREE.BoxGeometry(1, 1, 1),
     cyl: new THREE.CylinderGeometry(1, 1, 1, 24), cone: new THREE.ConeGeometry(1, 1, 16), torus: new THREE.TorusGeometry(1, 0.22, 10, 32),
     cap: (r, len) => new THREE.CapsuleGeometry(r, len, 8, 20),
@@ -326,6 +326,15 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     thigh: new THREE.LatheGeometry([[0, 0.02], [0.07, 0.02], [0.082, -0.08], [0.088, -0.2], [0.078, -0.36], [0.066, -0.44], [0, -0.46]].map(([x, y]) => new THREE.Vector2(x, y)), 20),
     shin: new THREE.LatheGeometry([[0, 0.02], [0.065, 0.02], [0.07, -0.08], [0.064, -0.2], [0.052, -0.36], [0.05, -0.4], [0, -0.41]].map(([x, y]) => new THREE.Vector2(x, y)), 20),
   };
+  // 通行人用の軽い形 (ポリゴンを 1/3 くらいに)
+  const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+  const GEO_LOW = { ...GEO_HI, ball: GEO_HI.ballLo, hairCap: new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), cyl: new THREE.CylinderGeometry(1, 1, 1, 10), cone: new THREE.ConeGeometry(1, 1, 8), torus: new THREE.TorusGeometry(1, 0.22, 6, 14),
+    cap: (r, len) => new THREE.CapsuleGeometry(r, len, 3, 8),
+    torso: lathe([[0, 0.9], [0.16, 0.9], [0.172, 0.95], [0.158, 1.04], [0.175, 1.16], [0.192, 1.28], [0.19, 1.37], [0.165, 1.44], [0.11, 1.49], [0.065, 1.51], [0, 1.515]], 12),
+    thigh: lathe([[0, 0.02], [0.07, 0.02], [0.082, -0.08], [0.088, -0.2], [0.078, -0.36], [0.066, -0.44], [0, -0.46]], 8),
+    shin: lathe([[0, 0.02], [0.065, 0.02], [0.07, -0.08], [0.064, -0.2], [0.052, -0.36], [0.05, -0.4], [0, -0.41]], 8) };
+  const capCache = new Map(); for (const G_ of [GEO_HI, GEO_LOW]) { const f = G_.cap; G_.cap = (r, len) => { const k = `${G_ === GEO_HI}${r},${len}`; if (!capCache.has(k)) capCache.set(k, f(r, len)); return capCache.get(k); }; }
+  const NPC_PANTS = ['#33415e', '#3b3b3f', '#6b5b45', '#2e3b2f', '#5a4632'].map((c) => new THREE.MeshStandardMaterial({ color: c, map: denimTex, roughness: 0.92 }));
   // 部品を集めて、材質ごとに 1 つの形にまとめる
   function seg() {
     const parts = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
@@ -343,14 +352,17 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(c, { repeat: false }), depthTest: false, transparent: true, toneMapped: false, fog: false })); s.scale.set(2, 0.5, 1); s.position.y = 2.25; s.renderOrder = 10; return s;
   }
   // 手 (手のひら・指 4 本・親指)。s = 1 (右) / -1 (左)、fist = にぎる
-  function addHand(S_, skin, y, s, fist) {
+  function addHand(GEO, S_, skin, y, s, fist, low) {
+    if (low) { S_.add(GEO.box, skin, [0, y - 0.02, 0], [0, 0, 0], [0.062, 0.1, 0.034]); return; }
     S_.add(GEO.box, skin, [0, y, 0], [0, 0, 0], [0.062, 0.075, 0.03]);
     for (let i = 0; i < 4; i++) { const x = (i - 1.5) * 0.016;
       if (fist) S_.add(GEO.cap(0.0085, 0.022), skin, [x, y - 0.042, -0.014], [Math.PI / 2, 0, 0]); else S_.add(GEO.cap(0.0085, 0.036 - Math.abs(i - 1.5) * 0.005), skin, [x, y - 0.06, 0], [0.15, 0, 0]); }
     S_.add(GEO.cap(0.009, 0.026), skin, [-s * 0.034, y - 0.012, -0.012], [0.4, 0, -s * 0.7]);          // 親指は体の内がわ
   }
-  function makeChar(color, name, isMe, seed = 1) {
-    const g = new THREE.Group();
+  // opts.npc: 通行人 (銃・名前なし、うでは下ろす、服の色いろいろ)。opts.lod = 'low': 軽い形
+  function makeChar(color, name, isMe, seed = 1, opts = {}) {
+    const low = opts.lod === 'low', GEO = low ? GEO_LOW : GEO_HI, npc = !!opts.npc;
+    const g = new THREE.Group(); g.rotation.order = 'YXZ'; // 向き (y) → かたむき (x・z) の順
     const jacket = new THREE.MeshStandardMaterial({ color, map: fabricTex.map, normalMap: fabricTex.normal, roughness: 0.82 });
     const jacketDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.55), map: fabricTex.map, roughness: 0.85 });
     const skin = skinOf(SKIN[seed % SKIN.length]), hair = hairOf(HAIR[(seed >>> 3) % HAIR.length]);
@@ -390,17 +402,19 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       const up = seg(); up.add(GEO.cap(0.058, 0.2), jacket, [0, -0.14, 0]); up.build(sh);
       const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
       const lo = seg(); lo.add(GEO.cap(0.05, 0.19), jacket, [0, -0.12, 0]); lo.add(GEO.cyl, jacketDark, [0, -0.225, 0], [0, 0, 0], [0.053, 0.035, 0.053]); // そで口
-      addHand(lo, skin, -0.29, s, fist); lo.build(el);
+      addHand(GEO, lo, skin, -0.29, s, fist, low); lo.build(el);
       return { sh, el };
     };
     const R_ = arm(1, true), L_ = arm(-1, true);
-    R_.sh.rotation.set(1.3, 0, -0.12); R_.el.rotation.x = 0.25; L_.sh.rotation.set(1.2, 0, 0.62); L_.el.rotation.x = 0.35; // うでは前へ (銃をかまえる)
+    if (npc) { R_.sh.rotation.set(0, 0, 0.08); L_.sh.rotation.set(0, 0, -0.08); R_.el.rotation.x = L_.el.rotation.x = 0.15; } // 通行人: うでを下ろす
+    else { R_.sh.rotation.set(1.3, 0, -0.12); R_.el.rotation.x = 0.25; L_.sh.rotation.set(1.2, 0, 0.62); L_.el.rotation.x = 0.35; } // うでは前へ (銃をかまえる)
     // ---- 足 (もも → ひざ → すね → スニーカー) ----
     const legs = [-1, 1].map((s) => {
       const hip = new THREE.Group(); hip.position.set(s * 0.1, 0.92, 0); g.add(hip);
-      const th = seg(); th.add(GEO.thigh, pantsMat); th.build(hip);
+      const pm = npc ? NPC_PANTS[(seed >>> 5) % NPC_PANTS.length] : pantsMat;
+      const th = seg(); th.add(GEO.thigh, pm); th.build(hip);
       const knee = new THREE.Group(); knee.position.y = -0.44; hip.add(knee);
-      const sh2 = seg(); sh2.add(GEO.shin, pantsMat);
+      const sh2 = seg(); sh2.add(GEO.shin, pm);
       sh2.add(GEO.box, soleMat, [0, -0.445, -0.045], [0, 0, 0], [0.11, 0.03, 0.29]);                         // くつ底
       sh2.add(GEO.ball, shoeMat, [0, -0.41, -0.06], [0, 0, 0], [0.058, 0.05, 0.14]);                        // くつ
       sh2.add(GEO.ball, shoeMat, [0, -0.39, 0.02], [0, 0, 0], [0.052, 0.06, 0.07]);
@@ -424,12 +438,16 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     G.add(GEO.box, gunAccent, [0, -0.01, 0.3], [0.05, 0, 0], [0.05, 0.09, 0.2]);                             // ストック
     G.build(gun);
     const tip = new THREE.Object3D(); tip.position.set(0, 0.01, -0.58); gun.add(tip);
-    if (!isMe) g.add(nameSprite(name));
+    if (npc) gun.visible = false; else if (!isMe) g.add(nameSprite(name));
     scene.add(g);
-    return { g, head, gun, tip, arm: R_.sh, punchArm: L_.sh, legs, L: L_, R: R_, walk: 0, prev: null };
+    const model = { g, head, gun, tip, arm: R_.sh, punchArm: L_.sh, legs, L: L_, R: R_, walk: 0, prev: null, npc, own: [jacket, jacketDark] };
+    // ふつうの姿勢を覚えておく (ラグドールのあとにもどす)
+    model.rest = [g, head, R_.sh, R_.el, L_.sh, L_.el, ...legs.flatMap((l) => [l.hip, l.knee])].map((o) => [o, o.quaternion.clone()]);
+    return model;
   }
   // 歩く・なぐる・やられる の動き
   function animateChar(m, now, dt, curbY = 0) {
+    if (m.ragdoll) return; // 倒れているあいだはラグドールが体を動かす
     const p = m.g.position;
     if (m.prev) { const sp = Math.hypot(p.x - m.prev.x, p.z - m.prev.z) / Math.max(dt, 1e-3); m.speed = (m.speed || 0) * 0.8 + Math.min(sp, 9) * 0.2; }
     m.prev = { x: p.x, z: p.z };
@@ -437,14 +455,53 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     m.walk += dt * (moving ? 4 + sp * 1.1 : 0);
     const amp = moving ? Math.min(0.7, 0.25 + sp * 0.07) : 0;
     m.legs.forEach((l, i) => { const ph = Math.sin(m.walk + i * Math.PI); l.hip.rotation.x = THREE.MathUtils.lerp(l.hip.rotation.x, ph * amp, 0.3); l.knee.rotation.x = THREE.MathUtils.lerp(l.knee.rotation.x, Math.max(0, -Math.cos(m.walk + i * Math.PI)) * amp * 1.2, 0.3); });
-    // なぐる (左うでを前に突き出す)
-    const t = m.swing ? (now - m.swing) / 260 : 1, k = t < 1 ? Math.sin(Math.PI * t) : 0; if (t >= 1) m.swing = 0;
-    m.L.sh.rotation.set(1.2 + k * 0.35, 0, 0.62 - k * 0.55); m.L.el.rotation.x = 0.35 - k * 0.35;
+    if (m.npc) { // 通行人: うでをふって歩く・パニックのときは頭の上・隠れるときは頭をかかえる
+      const sw = Math.sin(m.walk) * amp * 0.9, c = m.crouchK || 0;
+      if (m.panic && moving) { m.R.sh.rotation.set(-2.4 + sw * 0.3, 0, 0.3); m.L.sh.rotation.set(-2.4 - sw * 0.3, 0, -0.3); m.R.el.rotation.x = m.L.el.rotation.x = -1.2; }
+      else if (c > 0.05) { m.R.sh.rotation.set(-2.2 * c, 0, 0.5 * c); m.L.sh.rotation.set(-2.2 * c, 0, -0.5 * c); m.R.el.rotation.x = m.L.el.rotation.x = -1.9 * c; }
+      else { m.R.sh.rotation.set(-sw, 0, 0.08); m.L.sh.rotation.set(sw, 0, -0.08); m.R.el.rotation.x = m.L.el.rotation.x = 0.15 + Math.abs(sw) * 0.4; }
+    } else {
+      // なぐる (左うでを前に突き出す)
+      const t = m.swing ? (now - m.swing) / 260 : 1, k = t < 1 ? Math.sin(Math.PI * t) : 0; if (t >= 1) m.swing = 0;
+      m.L.sh.rotation.set(1.2 + k * 0.35, 0, 0.62 - k * 0.55); m.L.el.rotation.x = 0.35 - k * 0.35;
+    }
+    // しゃがむ (隠れる): ひざを曲げて低く
+    m.crouchK = THREE.MathUtils.lerp(m.crouchK || 0, m.crouch ? 1 : 0, Math.min(1, dt * 6));
+    const ck = m.crouchK;
+    if (ck > 0.02) m.legs.forEach((l) => { l.hip.rotation.x = -1.3 * ck; l.knee.rotation.x = 2.2 * ck; });
+    // 被弾のよろけ: 当たった向きに体がかたむき、少し後ずさる (強さは設定で変えられる)
+    let lean = 0, side = 0, push = 0;
+    if (m.react) { const t2 = (now - m.react.t0) / m.react.ms; if (t2 >= 1) m.react = null; else { const e = Math.sin(Math.PI * Math.min(1, t2 * 1.6)) * (1 - t2) * m.react.k; lean = m.react.lz * e; side = -m.react.lx * e; push = e; } }
+    m.g.rotation.x = lean * 0.45; m.g.rotation.z = side * 0.45;
+    if (m.react) m.head.rotation.x = -lean * 0.5;
+    // 起き上がる (0.7 秒): 低い姿勢から立つ
+    let rise = 0; if (m.rise) { const t3 = (now - m.rise) / 700; if (t3 >= 1) m.rise = 0; else rise = (1 - t3) * (1 - t3); }
+    m.g.rotation.x += rise * 0.9;
     m.bob = moving ? Math.abs(Math.sin(m.walk)) * 0.03 : 0;
-    m.g.position.y = (m.baseY ?? p.y) + curbY + (m.bob || 0);
+    m.g.position.y = (m.baseY ?? p.y) + curbY + (m.bob || 0) - ck * 0.42 - rise * 0.5;
+    void push;
+  }
+  // よろける (dir: 弾の向き。世界の向き → キャラの向きに直して使う)
+  function react(m, dir, k = 1, ms = 450) {
+    const yaw = m.g.rotation.y, c = Math.cos(-yaw), s = Math.sin(-yaw);
+    const lx = dir[0] * c - dir[2] * s, lz = dir[0] * s + dir[2] * c;
+    m.react = { t0: performance.now(), ms, k, lx, lz };
+  }
+  // ふつうの姿勢にもどす (ラグドールのあと・復活のとき)
+  function restPose(m) {
+    for (const [o, q] of m.rest) o.quaternion.copy(q);
+    m.ragdoll = null; m.react = null; m.crouch = false; m.crouchK = 0;
+    if (!m.npc) m.gun.visible = true;
+  }
+  // 通行人のモデルを消す (形・材質を捨てて、メモリを残さない)
+  function disposeChar(m) {
+    scene.remove(m.g);
+    m.g.traverse((o) => { if (o.isMesh) o.geometry.dispose(); if (o.isSprite) { o.material.map?.dispose(); o.material.dispose(); } });
+    for (const mat of m.own || []) mat.dispose();
+    for (const c of m.cut || []) { scene.remove(c); c.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); } // はなれた破片
   }
 
-  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, animateChar, quality: qName, qualities: Object.keys(QUALITY), sunDir,
+  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
     render() { composer.render(); },
     setQuality(q) { try { localStorage.setItem('arena_quality', q); } catch {} } };
 }
