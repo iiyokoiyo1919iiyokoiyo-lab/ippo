@@ -627,6 +627,18 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     G.add(GEO.ballLo, gunGrip, [0.08, 0.03, 0.1], [0, 0, 0], [0.016, 0.016, 0.016]);
     for (const x of [-0.012, 0.012]) G.add(GEO.cyl, gunMetal, [x, -0.03, -0.42], [Math.PI / 2, 0, 0], [0.006, 0.26, 0.006]); // 二脚 (たたんだ)
   }
+  // SMG (短い・折りたたみストック・長い弾倉・サプレッサー)。銃口は (0, 0.01, -0.42)
+  function smgParts(G, GEO) {
+    G.add(GEO.box, gunMetal, [0, 0, -0.02], [0, 0, 0], [0.058, 0.09, 0.3]);                              // 本体
+    G.add(GEO.box, gunMetal, [0, 0.055, -0.04], [0, 0, 0], [0.034, 0.02, 0.24]);                          // レール
+    G.add(GEO.cyl, gunGrip, [0, 0.01, -0.3], [Math.PI / 2, 0, 0], [0.024, 0.2, 0.024]);                   // サプレッサー
+    G.add(GEO.box, gunGrip, [0, 0.08, 0.02], [0, 0, 0], [0.026, 0.035, 0.06]);                           // 照準
+    G.add(GEO.box, gunGrip, [0, -0.16, -0.06], [0.08, 0, 0], [0.036, 0.22, 0.05]);                        // 長い弾倉
+    G.add(GEO.box, gunGrip, [0, -0.1, 0.09], [-0.3, 0, 0], [0.04, 0.12, 0.05]);                           // グリップ
+    G.add(GEO.torus, gunMetal, [0, -0.065, 0.04], [0, Math.PI / 2, 0], [0.03, 0.028, 0.028]);             // 用心金
+    for (const x of [-0.022, 0.022]) G.add(GEO.box, gunMetal, [x, 0.0, 0.22], [0, 0, 0], [0.008, 0.03, 0.2]); // 折りたたみストック (細い 2 本)
+    G.add(GEO.box, gunMetal, [0, 0.0, 0.32], [0, 0, 0], [0.05, 0.07, 0.015]);
+  }
   // 一人称の手と銃 (カメラの子にする)。小さくしてカメラのすぐ前に置く (壁にめりこまない)
   function makeViewModel(color, seed = 1) {
     const GEO = GEO_HI, vm = new THREE.Group(); vm.scale.setScalar(0.35);
@@ -643,6 +655,9 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const sGun = new THREE.Group(); sGun.position.set(0.13, -0.17, -0.42); sGun.visible = false; vm.add(sGun);
     const SG = seg(); sniperParts(SG, GEO); hand(SG, [0, -0.12, 0.12], 1); SG.build(sGun);
     const sTip = new THREE.Object3D(); sTip.position.set(0, 0.01, -0.93); sGun.add(sTip);
+    const mGun = new THREE.Group(); mGun.position.set(0.13, -0.17, -0.42); mGun.visible = false; vm.add(mGun);
+    const MG = seg(); smgParts(MG, GEO); hand(MG, [0, -0.11, 0.1], 1); MG.build(mGun);
+    const mTip = new THREE.Object3D(); mTip.position.set(0, 0.01, -0.42); mGun.add(mTip);
     const RA = seg(); limb(RA, [0.27, -0.5, 0.05], [0.14, -0.3, -0.29], 0.05, jacket); RA.add(GEO.cyl, cuff, [0.15, -0.31, -0.27], [1.0, 0, 0.5], [0.052, 0.04, 0.052]); RA.build(vm);
     // 左手 (ハンドガード) — なぐるときは前へ
     const left = new THREE.Group(); vm.add(left);
@@ -651,7 +666,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const st = { recoil: 0, walk: 0, punch: 0, reload: 0 };
     let cur = gun;
     const api = { g: vm, gun, tip, left, own: [jacket, cuff],
-      setWeapon(w) { const s2 = w === 'sniper'; gun.visible = !s2; sGun.visible = s2; cur = s2 ? sGun : gun; api.tip = s2 ? sTip : tip; st.swap = 1; },
+      setWeapon(w) { gun.visible = w === 'rifle'; sGun.visible = w === 'sniper'; mGun.visible = w === 'smg'; cur = w === 'sniper' ? sGun : w === 'smg' ? mGun : gun; api.tip = w === 'sniper' ? sTip : w === 'smg' ? mTip : tip; st.swap = 1; },
       kick(k = 1) { st.recoil = k; }, punch() { st.punch = performance.now(); },
       update(dt, { speed = 0, run = false, reloading = false, aim = 0 } = {}) {
         st.walk += dt * (speed > 0.3 ? 6 + speed : 0); st.recoil = Math.max(0, st.recoil - dt * 9);
@@ -749,12 +764,13 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const gun = new THREE.Group(); gun.position.set(0.17, 1.3, -0.42); g.add(gun);
     const G = seg(); gunParts(G, GEO); G.build(gun);
     const tip = new THREE.Object3D(); tip.position.set(0, 0.01, -0.58); gun.add(tip);
-    let sniper = null, sTip = null;
-    if (!npc) { sniper = new THREE.Group(); sniper.position.copy(gun.position); sniper.visible = false; g.add(sniper); const SG = seg(); sniperParts(SG, GEO); SG.build(sniper); sTip = new THREE.Object3D(); sTip.position.set(0, 0.01, -0.93); sniper.add(sTip); }
+    let sniper = null, sTip = null, smg = null, mTip = null;
+    if (!npc) { sniper = new THREE.Group(); sniper.position.copy(gun.position); sniper.visible = false; g.add(sniper); const SG = seg(); sniperParts(SG, GEO); SG.build(sniper); sTip = new THREE.Object3D(); sTip.position.set(0, 0.01, -0.93); sniper.add(sTip);
+      smg = new THREE.Group(); smg.position.copy(gun.position); smg.visible = false; g.add(smg); const MG = seg(); smgParts(MG, GEO); MG.build(smg); mTip = new THREE.Object3D(); mTip.position.set(0, 0.01, -0.42); smg.add(mTip); }
     if (npc) gun.visible = false; else if (!isMe) g.add(nameSprite(name));
     scene.add(g);
     const model = { g, head, gun, tip, sniper, arm: R_.sh, punchArm: L_.sh, legs, L: L_, R: R_, walk: 0, prev: null, npc, own: [jacket, jacketDark], w: 'rifle' };
-    model.setWeapon = (w) => { model.w = w; if (npc) return; gun.visible = w !== 'sniper'; sniper.visible = w === 'sniper'; model.tip = w === 'sniper' ? sTip : tip; };
+    model.setWeapon = (w) => { model.w = w; if (npc) return; gun.visible = w === 'rifle' || !w; sniper.visible = w === 'sniper'; smg.visible = w === 'smg'; model.tip = w === 'sniper' ? sTip : w === 'smg' ? mTip : tip; };
     // ふつうの姿勢を覚えておく (ラグドールのあとにもどす)
     model.rest = [g, head, R_.sh, R_.el, L_.sh, L_.el, ...legs.flatMap((l) => [l.hip, l.knee])].map((o) => [o, o.quaternion.clone()]);
     return model;

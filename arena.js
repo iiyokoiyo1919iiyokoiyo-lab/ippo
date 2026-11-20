@@ -24,6 +24,7 @@ const IMPACT = { body: 18, head: 40 }, BOT_IMPACT = { body: 10, head: 26 }, PUNC
 const WEAPONS = {
   rifle: { ms: FIRE_MS, dmg: DMG, imp: IMPACT, range: RANGE },
   sniper: { ms: 1300, dmg: { body: 75, head: 200 }, imp: { body: 60, head: 95 }, range: 220 },
+  smg: { ms: 75, dmg: { body: 14, head: 28 }, imp: { body: 12, head: 30 }, range: 70 }, // SMG: とても速い連射・1 発は軽い・近距離
 };
 const SWITCH_MS = 450; // 持ちかえてから撃てるまで
 const BOTS_MAX = process.env.ARENA_BOTS != null ? Math.max(0, Number(process.env.ARENA_BOTS) || 0) : 3; // テスト用: ARENA_BOTS=0 でボットなし

@@ -9,10 +9,10 @@
 //   ・エイムアシスト (スマホだけ・軽め): 撃つ / のぞくとき、照準のすぐ近くの相手へ少し寄せる
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=19';
+import { createGraphics } from './world.js?v=20';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
 import { NpcView } from './npcs.js?v=5';
-import { Sound } from './sound.js?v=4';
+import { Sound } from './sound.js?v=5';
 import { Gore } from './gore.js?v=2';
 import { Settings } from './settings.js?v=3';
 import { VehicleView } from './vehicles.js?v=2';
@@ -22,8 +22,8 @@ const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ<br>車の近くで「乗る」(どの車も乗れる)・通行人やコンビニの店員に銃を向けつづけると強盗'
-  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止<br>E で車に乗る / 降りる (WASD で運転・Space でブレーキ・V で運転席 / 後ろ)<br>通行人やコンビニの店員に銃を向けつづけると強盗';
+  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でライフル → SMG → スナイパー<br>スナイパーは「うつ」長押しでスコープ・離すと撃つ<br>車の近くで「乗る」(どの車も乗れる)・通行人やコンビニの店員に銃を向けつづけると強盗'
+  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー / 3 SMG (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止<br>E で車に乗る / 降りる (WASD で運転・Space でブレーキ・V で運転席 / 後ろ)<br>通行人やコンビニの店員に銃を向けつづけると強盗';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
 const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
@@ -61,11 +61,13 @@ if (parent !== window) { const b = document.createElement('button'); b.id = 'exi
   b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); exitFS(); parent.postMessage({ source: 'ippo-arena', type: 'exit' }, location.origin); }; document.body.append(b); }
 
 // ---------- 状態 ----------
-const me = { car: null, cash: 0, x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 30, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 30, sniper: 5 }, held: false };
+const me = { car: null, cash: 0, x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 30, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 30, sniper: 5, smg: 40 }, held: false };
 const canControl = () => me.alive && me.st === 0 && !me.car; // 硬直・転倒・行動不能・運転中は、歩く・撃つができない
 const MAG = 30, RELOAD_MS = 1400;
 // 武器: ライフル (連射・30 発) / スナイパー (1 発ずつ・5 発・スコープ)。間かくとダメージはサーバーが決める
-const WEAPON = { rifle: { name: 'ライフル', mag: 30, reload: 1400, ms: 130, auto: true }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
+const WEAPON = { rifle: { name: 'ライフル', mag: 30, reload: 1400, ms: 130, auto: true }, smg: { name: 'SMG', mag: 40, reload: 1500, ms: 75, auto: true, spread: 0.022 }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
+const WORDER = ['rifle', 'smg', 'sniper']; // 「武器」/ Q で順番に持ちかえ
+const nextW = () => WORDER[(WORDER.indexOf(me.w) + 1) % WORDER.length];
 const W = () => WEAPON[me.w] || WEAPON.rifle;
 let scoped = false, aiming = false, scopeK = 0, aimK = 0; // aiming: サイトをのぞく (両方の武器) / scoped: スナイパーのスコープ (黒いふち)
 let you = null, ws = null, playing = false, lastSend = 0, lastShot = 0, rules = { fireMs: 130 };
@@ -108,7 +110,7 @@ function freshModel(o, isMe) {
 // ---------- 入力 ----------
 const keys = new Set(); let firing = false;
 const move = { x: 0, y: 0, run: false };
-addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'KeyE') toggleCar(); if (e.code === 'Digit1') setWeapon('rifle'); if (e.code === 'Digit2') setWeapon('sniper'); if (e.code === 'KeyQ') setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
+addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'KeyE') toggleCar(); if (e.code === 'Digit1') setWeapon('rifle'); if (e.code === 'Digit2') setWeapon('sniper'); if (e.code === 'Digit3') setWeapon('smg'); if (e.code === 'KeyQ') setWeapon(nextW()); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
 addEventListener('keyup', (e) => keys.delete(e.code));
 const canvas = $('#c');
 canvas.addEventListener('mousedown', (e) => { if (!playing) return; if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; } if (e.button === 0) firing = true; if (e.button === 2) setScope(true); }); // 右クリック: サイトをのぞく (ライフルもスナイパーも)
@@ -136,16 +138,21 @@ if (isTouch) {
   canvas.addEventListener('touchend', lend); canvas.addEventListener('touchcancel', lend);
   // うつ: 押しながらなぞると、視点も動かせる
   // 「うつ」を長押し (0.25 秒) すると自動でのぞく。はなすと、自動でのぞいていたときだけやめる
-  const fire = $('#fire'); let fid = null, fp = null, holdT = 0, autoAim = false;
-  fire.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; fid = t.identifier; fp = [t.clientX, t.clientY]; firing = true;
+  // スナイパーだけ: 押しているあいだは撃たず、長押しでスコープをのぞく → 指を離したときに 1 発撃つ (短く押しても離したときに撃つ)
+  const fire = $('#fire'); let fid = null, fp = null, holdT = 0, autoAim = false, snipe = false;
+  fire.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; fid = t.identifier; fp = [t.clientX, t.clientY];
+    snipe = me.w === 'sniper'; firing = !snipe;
     clearTimeout(holdT); holdT = setTimeout(() => { if (fid !== null && !aiming) { setScope(true); autoAim = aiming; } }, 250); }, { passive: false });
   fire.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === fid) { const sk = scoped ? 0.3 : aiming ? 0.6 : 1; me.yaw -= (t.clientX - fp[0]) * 0.0045 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - fp[1]) * 0.0036 * sk)); fp = [t.clientX, t.clientY]; } }, { passive: false });
-  const fend = (e) => { for (const t of e.changedTouches) if (t.identifier === fid) { fid = null; firing = false; clearTimeout(holdT); if (autoAim && aiming) setScope(false); autoAim = false; } };
+  const fend = (e) => { for (const t of e.changedTouches) if (t.identifier === fid) {
+    fid = null; firing = false; clearTimeout(holdT);
+    if (snipe) { snipe = false; if (playing && canControl() && me.w === 'sniper') { me.held = false; tryShoot(performance.now()); me.held = false; } } // 離したときに撃つ
+    if (autoAim && aiming) { const was = me.w; setTimeout(() => { if (me.w === was && aiming) setScope(false); }, 140); } autoAim = false; } }; // 撃ったあと少ししてスコープをはずす
   fire.addEventListener('touchend', fend); fire.addEventListener('touchcancel', fend);
   $('#jump').addEventListener('touchstart', (e) => { e.preventDefault(); jump(); }, { passive: false });
   $('#reload').addEventListener('touchstart', (e) => { e.preventDefault(); reload(); }, { passive: false });
   $('#punch').addEventListener('touchstart', (e) => { e.preventDefault(); doPunch(); }, { passive: false });
-  $('#weapon').addEventListener('touchstart', (e) => { e.preventDefault(); setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); }, { passive: false });
+  $('#weapon').addEventListener('touchstart', (e) => { e.preventDefault(); setWeapon(nextW()); }, { passive: false }); // ライフル → SMG → スナイパー
   $('#aim').addEventListener('touchstart', (e) => { e.preventDefault(); setScope(!aiming); }, { passive: false }); // 左側の「のぞく」
   $('#act').addEventListener('touchstart', (e) => { e.preventDefault(); toggleCar(); }, { passive: false }); // 乗る / 降りる
   $('#vbtn').addEventListener('touchstart', (e) => { e.preventDefault(); settings.set('view', fps() ? 'tps' : 'fps'); }, { passive: false }); // 運転中の視点 (運転席 / 後ろから)
@@ -240,7 +247,8 @@ function tryShoot(now) {
   const tip = new THREE.Vector3(); (fps() && viewModel ? viewModel.tip : myModel.tip).getWorldPosition(tip);
   if (scoped) { tip.copy(camera.position).add(new THREE.Vector3(0.06, -0.08, 0).applyQuaternion(camera.quaternion)); } // スコープ中は目のすぐ下から
   const o = [tip.x, tip.y, tip.z], d = [aim[0] - o[0], aim[1] - o[1], aim[2] - o[2]], L = Math.hypot(...d) || 1;
-  const dn = d.map((v) => v / L);
+  let dn = d.map((v) => v / L);
+  if (W().spread) { const sp = W().spread * (aiming ? 0.35 : 1); dn = dn.map((v) => v + (Math.random() - 0.5) * sp); const l2 = Math.hypot(...dn); dn = dn.map((v) => v / l2); } // SMG は少しばらける (のぞくと小さく)
   const wall = A.rayWorld(map, o, dn, me.w === 'sniper' ? 220 : 120);
   if (!scoped) tracer(o, [o[0] + dn[0] * Math.min(wall, L + 40), o[1] + dn[1] * Math.min(wall, L + 40), o[2] + dn[2] * Math.min(wall, L + 40)], me.w);
   if (!scoped) muzzle(fps() && viewModel ? viewModel : myModel, me.w); viewModel?.kick(me.w === 'sniper' ? 2.2 : 1);
@@ -290,7 +298,7 @@ function connect() {
     else if (m.t === 'join') { addPlayer(m.p); renderScore(); if (m.p.sid !== you) feed(`${m.p.bot ? '🤖 ' : ''}${m.p.name} が来た`); }
     else if (m.t === 'leave') { const s = scores.get(m.sid); if (s) feed(`${s.name} が帰った`); removePlayer(m.sid); }
     else if (m.t === 'spawn') {
-      if (m.sid === you) { freshModel(null, true); me.mags = { rifle: WEAPON.rifle.mag, sniper: WEAPON.sniper.mag }; Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, yaw: m.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: W().mag, reloading: 0, st: 0 }); myModel?.setWeapon(me.w); $('#dead').style.display = 'none'; if (myModel) { myModel.g.visible = true; myModel.g.rotation.x = 0; } updHud(); }
+      if (m.sid === you) { freshModel(null, true); me.mags = { rifle: WEAPON.rifle.mag, sniper: WEAPON.sniper.mag, smg: WEAPON.smg.mag }; Object.assign(me, { x: m.x, y: m.y, z: m.z, vy: 0, yaw: m.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: W().mag, reloading: 0, st: 0 }); myModel?.setWeapon(me.w); $('#dead').style.display = 'none'; if (myModel) { myModel.g.visible = true; myModel.g.rotation.x = 0; } updHud(); }
       else { const o = others.get(m.sid); if (o) { freshModel(o, false); Object.assign(o, { tx: m.x, ty: m.y, tz: m.z, alive: true, st: 0 }); o.model.g.position.set(m.x, m.y, m.z); o.cy = m.y; o.model.g.visible = true; o.model.g.rotation.x = 0; } }
     } else if (m.t === 's') {
       for (const [sid, x, y, z, yaw, pitch, hp, alive, prot, st = 0] of m.p) {
@@ -310,7 +318,7 @@ function connect() {
     } else if (m.t === 'punch') {
       if (m.sid !== you) swing(others.get(m.sid)?.model);
     } else if (m.t === 'shot') {
-      if (m.sid !== you || m.w !== 'sniper') sound.play('shot', m.o[0], m.o[2], { heavy: m.w === 'sniper' }); if (!m.hit) sound.play('impact', m.e[0], m.e[2]);
+      if (m.sid !== you || m.w !== 'sniper') sound.play('shot', m.o[0], m.o[2], { heavy: m.w === 'sniper', light: m.w === 'smg' }); if (!m.hit) sound.play('impact', m.e[0], m.e[2]);
       if (m.sid === you) return;
       const o = others.get(m.sid); tracer(m.o, m.e, m.w); if (o) muzzle(o.model, m.w);
     } else if (m.t === 'hit') {
@@ -326,7 +334,7 @@ function connect() {
       for (const s of m.score) { const r = scores.get(s.sid); if (r) Object.assign(r, { kills: s.kills, deaths: s.deaths }); }
       renderScore();
       const k = scores.get(m.killer)?.name || '?', v = scores.get(m.victim)?.name || '?';
-      feed(`${k} ${m.melee ? '👊' : m.w === 'car' ? '🚗' : m.w === 'sniper' ? '🔭' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
+      feed(`${k} ${m.melee ? '👊' : m.w === 'car' ? '🚗' : m.w === 'sniper' ? '🔭' : m.w === 'smg' ? '🔫' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
       if (m.victim === you) { if (me.car) { setCabin(false); const cv = vehicles.get(me.car); if (cv) cv.local = false; me.car = null; document.body.classList.remove('driving'); } me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
       else { const o = others.get(m.victim); if (o) { o.alive = false; if (!o.model.ragdoll) o.model.g.rotation.x = -Math.PI / 2; } }
     } else if (m.t === 'fix') { Object.assign(me, { x: m.x, y: m.y, z: m.z }); }
@@ -389,7 +397,7 @@ function frame() {
     scopeK += ((scoped ? 1 : 0) - scopeK) * Math.min(1, dt * 12);
     aimK += ((aiming && !scoped ? 1 : 0) - aimK) * Math.min(1, dt * 12);
     // 視野: スナイパーのスコープは 16°・ライフルでのぞくと 48°
-    const fov = (innerWidth < innerHeight ? 82 : 70), want = fov + (16 - fov) * scopeK + (48 - fov) * aimK; if (Math.abs(camera.fov - want) > 0.05) { camera.fov = want; camera.updateProjectionMatrix(); }
+    const fov = (innerWidth < innerHeight ? 82 : 70), want = fov + (16 - fov) * scopeK + ((me.w === 'smg' ? 56 : 48) - fov) * aimK; if (Math.abs(camera.fov - want) > 0.05) { camera.fov = want; camera.updateProjectionMatrix(); }
     const firstP = (fps() || aiming) && !myModel.ragdoll && location.hash !== '#inspect';
     myModel.g.visible = !firstP;
     if (viewModel) viewModel.g.visible = firstP && me.alive && scopeK < 0.5;
