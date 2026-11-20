@@ -413,9 +413,9 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
         const sway = Math.min(1, speed / 5) * (1 - aim * 0.8), bx = Math.sin(st.walk) * 0.012 * sway, by = Math.abs(Math.cos(st.walk)) * 0.012 * sway;
         const pt = st.punch ? (performance.now() - st.punch) / 300 : 1, pk = pt < 1 ? Math.sin(Math.PI * pt) : 0; if (pt >= 1) st.punch = 0;
         st.swap = Math.max(0, (st.swap || 0) - dt * 3); // 持ちかえ: 下から上がってくる
-        cur.position.set(0.13 * (1 - aim) + bx + pk * 0.08, -0.17 + aim * 0.055 - by - (run ? 0.05 : 0) - st.reload * 0.06 - pk * 0.05 - st.swap * 0.25, -0.42 + aim * 0.06 + st.recoil * 0.05); // aim: 照準 (y 0.115) が目の高さに
+        cur.position.set(0.13 * (1 - aim) + bx + pk * 0.08, -0.17 + aim * 0.055 - by - (run ? 0.05 : 0) - st.reload * 0.06 - pk * 0.05 - st.swap * 0.25, -0.42 - aim * 0.16 + st.recoil * 0.05); // aim: 照準 (y 0.115) が目の高さに・少し前へ (画面をふさがない)
         cur.rotation.set(st.recoil * 0.08 + st.reload * 0.7 - (run ? 0.25 : 0) + st.swap * 0.6, (run ? 0.5 : 0) + pk * 0.3, st.reload * 0.3);
-        left.position.set(pk * -0.05 - aim * 0.13, -st.reload * 0.12 + pk * 0.08 - st.swap * 0.25 + aim * 0.055, -pk * 0.35 + st.reload * 0.15 + aim * 0.06);
+        left.position.set(pk * -0.05 - aim * 0.13, -st.reload * 0.12 + pk * 0.08 - st.swap * 0.25 + aim * 0.055, -pk * 0.35 + st.reload * 0.15 - aim * 0.16);
       } };
     return api;
   }

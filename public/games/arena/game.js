@@ -6,7 +6,7 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=11';
+import { createGraphics } from './world.js?v=12';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
 import { NpcView } from './npcs.js?v=3';
 import { Sound } from './sound.js?v=3';
