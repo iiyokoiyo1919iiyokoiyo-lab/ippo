@@ -9,21 +9,21 @@
 //   ・エイムアシスト (スマホだけ・軽め): 撃つ / のぞくとき、照準のすぐ近くの相手へ少し寄せる
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=14';
+import { createGraphics } from './world.js?v=16';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
-import { NpcView } from './npcs.js?v=4';
+import { NpcView } from './npcs.js?v=5';
 import { Sound } from './sound.js?v=4';
 import { Gore } from './gore.js?v=2';
 import { Settings } from './settings.js?v=3';
-import { VehicleView } from './vehicles.js?v=1';
+import { VehicleView } from './vehicles.js?v=2';
 import { DebugPanel } from './debug.js?v=1';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ<br>車の近くで「乗る」・通行人に銃を向けつづけると強盗'
-  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止<br>E で車に乗る / 降りる (WASD で運転・Space でブレーキ)・通行人に銃を向けつづけると強盗';
+  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ<br>車の近くで「乗る」(どの車も乗れる)・通行人やコンビニの店員に銃を向けつづけると強盗'
+  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止<br>E で車に乗る / 降りる (WASD で運転・Space でブレーキ・V で運転席 / 後ろ)<br>通行人やコンビニの店員に銃を向けつづけると強盗';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
 const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
@@ -148,6 +148,7 @@ if (isTouch) {
   $('#weapon').addEventListener('touchstart', (e) => { e.preventDefault(); setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); }, { passive: false });
   $('#aim').addEventListener('touchstart', (e) => { e.preventDefault(); setScope(!aiming); }, { passive: false }); // 左側の「のぞく」
   $('#act').addEventListener('touchstart', (e) => { e.preventDefault(); toggleCar(); }, { passive: false }); // 乗る / 降りる
+  $('#vbtn').addEventListener('touchstart', (e) => { e.preventDefault(); settings.set('view', fps() ? 'tps' : 'fps'); }, { passive: false }); // 運転中の視点 (運転席 / 後ろから)
 }
 // なぐる: 当たったかどうかはサーバーが決める。ここではうでをふる
 let lastPunch = 0;
@@ -232,6 +233,7 @@ function tryShoot(now) {
   camera.getWorldDirection(ray);
   const co = [camera.position.x, camera.position.y, camera.position.z], cd = [ray.x, ray.y, ray.z];
   let t = A.rayWorld(map, co, cd, me.w === 'sniper' ? 220 : 120);
+  for (const v of vehicles.list.values()) { if ((v.flags & 1) || !v.seen) continue; const tv = A.rayOBB(co, cd, { x: v.x, z: v.z, yaw: v.yaw, w: v.kind === 'ambulance' ? 2.1 : 1.9, l: v.kind === 'ambulance' ? 5.4 : 4.4, h: v.kind === 'ambulance' ? 2.45 : 1.5 }); if (tv < t) t = tv; } // 車は弾よけ
   for (const o of others.values()) { if (!o.alive) continue; const r = A.rayPlayer(co, cd, { x: o.model.g.position.x, y: o.model.g.position.y, z: o.model.g.position.z }); if (r && r.t < t) t = r.t; }
   const aim = [co[0] + cd[0] * t, co[1] + cd[1] * t, co[2] + cd[2] * t];
   // 撃つのは自分のブラスターの先から
@@ -275,13 +277,13 @@ function connect() {
     else if (m.t === 'dbg') debug.render(m.d);
     else if (m.t === 'cash') addCash(m.c);
     else if (m.t === 'cashgone') { const g = cashView.get(m.id); if (g) { scene.remove(g); cashView.delete(m.id); } if (m.sid === you) { me.cash = m.total; sound.play('cash'); feed(`💰 +¥${m.a}`, true); renderScore(); } }
-    else if (m.t === 'robbed') feed('🙌 手を上げた！ お金を落とすぞ', true);
+    else if (m.t === 'robbed') { feed('🙌 手を上げた！ お金を落とすぞ', true); const o = npcView.list.get(m.id); if (o) o.robbed = true; }
     else if (m.t === 'enter') {
-      if (m.sid === you) { const v = vehicles.get(m.id); me.car = m.id; firing = false; setScope(false); if (v) { v.local = true; car.sp = 0; car.x = v.x; car.z = v.z; car.yaw = v.yaw; } document.body.classList.add('driving'); }
+      if (m.sid === you) { const v = vehicles.get(m.id); me.car = m.id; firing = false; setScope(false); if (v) { v.local = true; car.sp = 0; car.x = v.x; car.z = v.z; car.yaw = v.yaw; me.yaw = v.yaw; me.pitch = 0; } document.body.classList.add('driving'); } // 乗ったら前を向く
       else { const o = others.get(m.sid); if (o) o.car = m.id; }
     } else if (m.t === 'exit') {
       const v = vehicles.get(m.id); if (v) { v.local = false; v.sp = 0; }
-      if (m.sid === you) { me.car = null; Object.assign(me, { x: m.x, z: m.z, y: 0, vy: 0 }); if (v) me.yaw = v.yaw; document.body.classList.remove('driving'); }
+      if (m.sid === you) { setCabin(false); me.car = null; Object.assign(me, { x: m.x, z: m.z, y: 0, vy: 0 }); if (v) me.yaw = v.yaw; document.body.classList.remove('driving'); }
       else { const o = others.get(m.sid); if (o) { o.car = 0; o.model.g.position.set(m.x, 0, m.z); } }
     } else if (m.t === 'cfix') { Object.assign(car, { x: m.x, z: m.z, yaw: m.yaw, sp: 0 }); }
     else if (m.t === 'weapon') { const o = others.get(m.sid); if (o) { o.w = m.w; o.model.setWeapon(m.w); } }
@@ -325,7 +327,7 @@ function connect() {
       renderScore();
       const k = scores.get(m.killer)?.name || '?', v = scores.get(m.victim)?.name || '?';
       feed(`${k} ${m.melee ? '👊' : m.w === 'car' ? '🚗' : m.w === 'sniper' ? '🔭' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
-      if (m.victim === you) { if (me.car) { const cv = vehicles.get(me.car); if (cv) cv.local = false; me.car = null; document.body.classList.remove('driving'); } me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
+      if (m.victim === you) { if (me.car) { setCabin(false); const cv = vehicles.get(me.car); if (cv) cv.local = false; me.car = null; document.body.classList.remove('driving'); } me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
       else { const o = others.get(m.victim); if (o) { o.alive = false; if (!o.model.ragdoll) o.model.g.rotation.x = -Math.PI / 2; } }
     } else if (m.t === 'fix') { Object.assign(me, { x: m.x, y: m.y, z: m.z }); }
   };
@@ -367,7 +369,7 @@ function frame() {
     if (now - lastSend > 50) { lastSend = now; send({ t: 'pos', x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3) }); }
   }
   if (playing && me.car && me.alive) driveCar(dt, now);
-  updateAct();
+  updateAct(); robHint(dt);
   // 自分のモデルとカメラ (肩ごしの三人称。壁があればカメラを近づける)
   if (myModel && me.car) { myModel.g.visible = false; if (viewModel) viewModel.g.visible = false; carCamera(dt); }
   else if (myModel) {
@@ -448,7 +450,8 @@ function driveCar(dt, now) {
   if (hand) car.sp *= Math.exp(-dt * 3);
   car.sp = Math.max(CARP.back, Math.min(CARP.max, car.sp));
   car.steer += (steer - car.steer) * Math.min(1, dt * 8);
-  car.yaw -= car.steer * CARP.turn * Math.max(-1, Math.min(1, car.sp / 6)) * (1 - Math.min(0.45, Math.abs(car.sp) / 60)) * dt;
+  const dyaw = -car.steer * CARP.turn * Math.max(-1, Math.min(1, car.sp / 6)) * (1 - Math.min(0.45, Math.abs(car.sp) / 60)) * dt;
+  car.yaw += dyaw; me.yaw += dyaw; // 見ている向きも車といっしょに回る
   car.x += -Math.sin(car.yaw) * car.sp * dt; car.z += -Math.cos(car.yaw) * car.sp * dt;
   // ぶつかる: 車の前・まん中・後ろの円を、建物・止まっている車・ほかの車から押しだす
   const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw); let px = 0, pz = 0, hit = 0;
@@ -459,12 +462,30 @@ function driveCar(dt, now) {
   }
   if (hit) { car.x += px; car.z += pz; if (Math.abs(car.sp) > 6) sound.play('crash', car.x, car.z); car.sp *= 0.55; }
   Object.assign(v, { x: car.x, z: car.z, yaw: car.yaw, sp: car.sp, steer: car.steer * 0.5, tx: car.x, tz: car.z, tyaw: car.yaw });
+  if (cabin) { cabin.wheel.rotation.z = -car.steer * 2.4; cabin.setSpeed(car.sp * 3.6); }
   Object.assign(me, { x: car.x, z: car.z, y: 0 });
   if (now - car.lastSend > 50) { car.lastSend = now; send({ t: 'drive', x: +car.x.toFixed(2), z: +car.z.toFixed(2), yaw: +car.yaw.toFixed(3), sp: +car.sp.toFixed(2) }); }
 }
-// 運転中のカメラ: 車の後ろの上から (壁があれば近づける)
+// 車の中 (運転席の視点のとき): 乗った車に付けて、外がわの車体はかくす
+let cabin = null, cabinCar = null;
+function setCabin(on) {
+  const v = me.car ? vehicles.get(me.car) : null;
+  if (cabin && (!on || cabinCar !== v)) { cabinCar?.model.g.remove(cabin.g); if (cabinCar) cabinCar.model.body.visible = true; cabin = null; cabinCar = null; }
+  if (on && v && !cabin) { cabin = GFX.makeCarInterior(v.kind, v.model.color); v.model.g.add(cabin.g); v.model.body.visible = false; cabinCar = v; }
+}
+// 運転中のカメラ: 一人称なら運転席から (見回せる・はなすと前にもどる)。三人称なら車の後ろの上から (壁があれば近づける)
 const camCar = new THREE.Vector3();
 function carCamera(dt) {
+  setCabin(fps());
+  if (cabin) {
+    const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = -fz, rz = fx, [ex, ey, ez] = cabin.eye;
+    camera.position.set(car.x + rx * ex - fx * ez, ey, car.z + rz * ex - fz * ez);
+    let look = me.yaw - car.yaw; look = Math.atan2(Math.sin(look), Math.cos(look)); look = Math.max(-1.4, Math.min(1.4, look)) * Math.exp(-dt * 1.5); me.yaw = car.yaw + look;
+    me.pitch = Math.max(-0.6, Math.min(0.4, me.pitch)) * Math.exp(-dt * 1.5);
+    camera.rotation.set(me.pitch - 0.05, me.yaw, 0, 'YXZ');
+    const fov = innerWidth < innerHeight ? 80 : 72; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    return;
+  }
   const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw), want = new THREE.Vector3(car.x - fx * 7.5, 3.4, car.z - fz * 7.5);
   const pv = [car.x, 1.6, car.z], d = [want.x - pv[0], want.y - pv[1], want.z - pv[2]], L = Math.hypot(...d), hitD = A.rayWorld(map, pv, d.map((v) => v / L), L);
   if (hitD < L) want.set(pv[0] + d[0] / L * (hitD - 0.3), pv[1] + d[1] / L * (hitD - 0.3), pv[2] + d[2] / L * (hitD - 0.3));
@@ -472,6 +493,25 @@ function carCamera(dt) {
   camera.position.copy(camCar); camera.lookAt(car.x + fx * 3, 1.2, car.z + fz * 3);
   const fov = innerWidth < innerHeight ? 82 : 70; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   me.yaw = car.yaw; me.pitch = -0.1;
+}
+// ---------- 強盗の進み具合 (照準の下に出す。決めるのはサーバー) ----------
+let robT = 0, robId = null;
+function robHint(dt) {
+  const el = $('#rob');
+  if (!playing || !canControl() || me.car) { if (robId) { robId = null; el.classList.remove('on'); } return; }
+  const cp = Math.cos(me.pitch), f = [-Math.sin(me.yaw) * cp, Math.sin(me.pitch), -Math.cos(me.yaw) * cp], eye = [me.x, me.y + 1.6, me.z];
+  let best = null, bc = Math.cos(10 * Math.PI / 180);
+  for (const o of npcView.list.values()) {
+    if ((o.r && o.r !== 'clerk') || o.s !== 0 || o.m === 4 || (o.f & 1) || o.robbed) continue;
+    const d = [o.x - eye[0], 1.2 - eye[1], o.z - eye[2]], L = Math.hypot(...d); if (L > 10 || L < 0.5) continue;
+    const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / L; if (c < bc) continue;
+    if (A.rayWorld(map, eye, d.map((v) => v / L), L) < L - 0.4) continue;
+    bc = c; best = o;
+  }
+  if (!best) { if (robId) { robId = null; robT = 0; el.classList.remove('on'); } return; }
+  if (best.id !== robId) { robId = best.id; robT = 0; }
+  robT += dt; el.classList.add('on'); el.style.setProperty('--p', Math.min(1, robT / 0.9));
+  $('#robtxt').textContent = robT < 0.9 ? (best.r === 'clerk' ? '🔫 レジのお金を出させる…' : '🔫 おどしている…') : '🙌';
 }
 // 「乗る」「降りる」のボタン (スマホ) と、案内 (パソコン)
 let actState = '';

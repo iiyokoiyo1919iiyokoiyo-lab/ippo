@@ -9,7 +9,7 @@
 // =====================================================================
 import { Ragdoll } from './ragdoll.js?v=3';
 
-const ROLE = { police: { color: '#22325a', cap: '#1a2440' }, medic: { color: '#eef1f4' } };
+const ROLE = { police: { color: '#22325a', cap: '#1a2440' }, medic: { color: '#eef1f4' }, clerk: { color: '#2f9e44' } }; // 店員は緑の制服
 const CLOTHES = ['#6c757d', '#1c3d5a', '#8d6e63', '#495057', '#b08968', '#2f4858', '#7f5539', '#e9ecef', '#5c677d', '#9c6644', '#386641', '#6d597a'];
 const SHOW = 130, KEEP = 170;
 export class NpcView {

@@ -183,7 +183,7 @@ class NpcSystem {
   }
   // 強盗: 銃を向けられて手を上げる → しばらくしてお金を落とす (arena.js の onDrop) → 逃げる
   holdup(n, robber, now) {
-    if (n.role || n.robbed || !Body.canMove(n.body)) return false;
+    if ((n.role && n.role !== 'clerk') || n.robbed || !Body.canMove(n.body)) return false; // 店員も強盗できる
     n.mode = 'surrender'; n.robber = { x: robber.x, z: robber.z, sid: robber.sid }; n.dropAt = now + 1400; n.robbed = true; n.pend = null; this.releaseCover(n);
     n.yaw = Math.atan2(-(robber.x - n.x), -(robber.z - n.z));
     this.send({ t: 'nfx', id: n.id, k: 'gasp' }); this.emit('robbery', n.x, n.z);

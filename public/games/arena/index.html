@@ -57,6 +57,11 @@ body:not(.is-touch) .touch{display:none!important}
 body.is-touch #act.show{display:grid}
 body.driving #fire,body.driving #jump,body.driving #punch,body.driving #weapon,body.driving #aim,body.driving #reload,body.driving #cross,body.driving #ammo{display:none!important} /* 運転中は撃たない */
 body.driving #act{right:22px;bottom:calc(90px + env(safe-area-inset-bottom))}
+#vbtn{position:fixed;z-index:8;right:30px;bottom:calc(190px + env(safe-area-inset-bottom));width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.18);color:#fff;font-weight:900;font-size:13px;place-items:center;display:none;touch-action:none}
+body.is-touch.driving #vbtn{display:grid}
+/* 強盗の進み具合 (照準の下) */
+#rob{left:50%;top:calc(50% + 26px);transform:translateX(-50%);display:none;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:900;text-shadow:0 1px 2px #000}
+#rob.on{display:flex}#rob i{display:block;width:90px;height:6px;border-radius:4px;background:linear-gradient(90deg,#ffd43b calc(var(--p,0)*100%),rgba(255,255,255,.25) 0)}
 #hint{left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--hud);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800}
 #hint:empty{display:none}
 #score .cash{color:#8ce99a;font-weight:900;margin-top:2px}
@@ -114,6 +119,8 @@ body.scoped #scopeov{display:block} body.scoped #cross{display:none}
 <div class="touch" id="aim">のぞく</div>
 <div class="touch" id="act">乗る</div>
 <div class="hud" id="hint"></div>
+<div class="touch" id="vbtn">視点</div>
+<div class="hud" id="rob"><i></i><span id="robtxt"></span></div>
 <div id="scopeov" aria-hidden="true"><i></i></div>
 <div id="center"><div>
   <h1>シティバトル</h1>
@@ -122,7 +129,7 @@ body.scoped #scopeov{display:block} body.scoped #cross{display:none}
   <p id="status" style="color:var(--accent)"></p>
   <button class="btn" id="start" disabled>じゅんび中…</button>
 </div></div>
-<script src="arena-map.js?v=2"></script>
-<script type="module" src="game.js?v=24"></script>
+<script src="arena-map.js?v=4"></script>
+<script type="module" src="game.js?v=27"></script>
 </body>
 </html>

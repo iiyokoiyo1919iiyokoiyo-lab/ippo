@@ -141,6 +141,21 @@ function tiledBox(w, h, d, tile = 3) {
   return geo;
 }
 
+// 建物の中の質感: 室内の壁・床 (タイル / 木)・天井・カウンター・棚と商品・看板 (少し明るめ: 中は日が当たらない)
+function makeInteriorMaterials(R) {
+  const lit = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, emissive: color, emissiveIntensity: 0.05, envMapIntensity: 0.35, ...extra });
+  const tileC = canvas(128), tg = tileC.getContext('2d'); tg.fillStyle = '#e9ecef'; tg.fillRect(0, 0, 128, 128); tg.strokeStyle = '#ced4da'; tg.lineWidth = 3; tg.strokeRect(0, 0, 128, 128); speckle(tg, 128, 128, 300, 1.5, ['#dee2e6', '#f8f9fa'], 0.5, R);
+  const woodC = canvas(128), wg = woodC.getContext('2d'); wg.fillStyle = '#9c6b3f'; wg.fillRect(0, 0, 128, 128); for (let i = 0; i < 8; i++) { wg.fillStyle = i % 2 ? '#8a5c34' : '#a9774a'; wg.fillRect(0, i * 16, 128, 15); } for (let i = 0; i < 300; i++) { wg.fillStyle = 'rgba(60,35,15,.2)'; wg.fillRect(R() * 128, R() * 128, 10 + R() * 20, 1); }
+  const goodsC = canvas(256, 64), gg = goodsC.getContext('2d'); gg.fillStyle = '#f1f3f5'; gg.fillRect(0, 0, 256, 64); for (let x = 2; x < 256; x += 10 + R() * 8) { const w = 6 + R() * 8, h = 30 + R() * 30; gg.fillStyle = ['#e03131', '#1971c2', '#f08c00', '#2f9e44', '#ae3ec9', '#ffd43b', '#0c8599'][Math.floor(R() * 7)]; gg.fillRect(x, 64 - h, w, h); gg.fillStyle = 'rgba(255,255,255,.5)'; gg.fillRect(x + 1, 64 - h + 3, w - 2, 4); }
+  const signMat = (text, bg, fg) => { const c = canvas(512, 110), g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, 512, 110); g.fillStyle = fg; g.font = '900 64px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 58); const t = tex(c, { repeat: false }); return new THREE.MeshStandardMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.9, roughness: 0.5 }); };
+  const tile = lit('#e6e6e6', { map: tex(tileC), roughness: 0.35 }), wood = lit('#ffffff', { map: tex(woodC), emissiveIntensity: 0.04 });
+  return { wall: lit('#d9d2c5'), ceiling: lit('#e9ecef', { emissiveIntensity: 0.1 }), tile, wood,
+    counter: lit('#495057'), counterTop: lit('#dee2e6', { roughness: 0.3 }), shelf: lit('#adb5bd', { metalness: 0.4 }), metal: lit('#868e96', { metalness: 0.7, roughness: 0.4 }),
+    goods: lit('#ffffff', { map: tex(goodsC, { repeat: false }), emissiveIntensity: 0.18 }), leaf: lit('#2f9e44', { flatShading: true }),
+    lamp: new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#fff8e6', emissiveIntensity: 1.4 }),
+    sign: { shop: signMat('コンビニ 24h', '#2b8a3e', '#ffffff'), cafe: signMat('CAFE ☕', '#5c3d2e', '#ffe8cc'), lobby: signMat('OFFICE', '#1c2b4a', '#e7f5ff') } };
+}
+
 // ---------- 描画のしくみ ----------
 export function createGraphics({ canvasEl, isTouch, map, A }) {
   let qName = (() => { try { return localStorage.getItem('arena_quality'); } catch { return null; } })();
@@ -219,18 +234,36 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   const rubber = new THREE.MeshStandardMaterial({ color: '#16171a', roughness: 0.85 }), chrome = new THREE.MeshStandardMaterial({ color: '#d0d4d8', metalness: 1, roughness: 0.2 });
   const lightMat = new THREE.MeshStandardMaterial({ color: '#fff6dd', emissive: '#fff1c9', emissiveIntensity: 2.2 }), tailMat = new THREE.MeshStandardMaterial({ color: '#7a0b0b', emissive: '#ff2a2a', emissiveIntensity: 0.9 });
   const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 20);
+  const groupFm = new Map(); // 建物の中があるビル: 上の箱と 1 階の壁で同じ外壁
+  const IN = makeInteriorMaterials(R);
   for (const b of map.boxes) {
     if (b.kind === 'building') {
-      const styles = ['brick', 'concrete', 'glass', 'plaster'], style = b.h >= 16 && R() < 0.6 ? 'glass' : styles[Math.floor(R() * 4)];
+      const styles = ['brick', 'concrete', 'glass', 'plaster'], style = (b.fullH || b.h) >= 16 && R() < 0.6 ? 'glass' : styles[Math.floor(R() * 4)];
       const col = PAL[style][Math.floor(R() * PAL[style].length)], fm = facade(style, col);
-      const bm = shadowy(new THREE.Mesh(tiledBox(b.w, b.h, b.d), [fm, fm, M.roof, M.roof, fm, fm])); bm.position.set(b.x, b.h / 2, b.z); scene.add(bm);
+      if (b.gid) groupFm.set(b.gid, fm);
+      const y0 = b.y0 || 0, top = y0 + b.h;
+      const bm = shadowy(new THREE.Mesh(tiledBox(b.w, b.h, b.d), [fm, fm, M.roof, b.upper ? IN.ceiling : M.roof, fm, fm])); bm.position.set(b.x, y0 + b.h / 2, b.z); scene.add(bm);
       // 1 階の入り口まわり (少し出っぱった帯)
-      const band = shadowy(new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.12, 0.5, b.d + 0.12), new THREE.MeshStandardMaterial({ color: '#4b4f54', roughness: 0.6 }))); band.position.set(b.x, 3.2, b.z); scene.add(band);
+      const band = shadowy(new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.12, 0.5, b.d + 0.12), new THREE.MeshStandardMaterial({ color: '#4b4f54', roughness: 0.6 }))); band.position.set(b.x, b.upper ? y0 + 0.05 : 3.2, b.z); scene.add(band);
       // 屋上のふち・機械・給水タンク
-      const par = shadowy(new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.5, b.d + 0.3), M.concrete)); par.position.set(b.x, b.h + 0.25, b.z); scene.add(par);
-      if (Q.props >= 1) for (let k = 0; k < 2; k++) { const ac = shadowy(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 1), roofBox)); ac.position.set(b.x + (R() - 0.5) * (b.w - 2), b.h + 0.45, b.z + (R() - 0.5) * (b.d - 2)); scene.add(ac); }
-      if (R() < 0.3) { const tank = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1.8, 16), new THREE.MeshStandardMaterial({ color: '#8b6b4a', roughness: 0.8 }))); tank.position.set(b.x + b.w / 4, b.h + 1.6, b.z - b.d / 4); scene.add(tank); }
-    } else if (b.kind === 'car') {
+      const par = shadowy(new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.3, 0.5, b.d + 0.3), M.concrete)); par.position.set(b.x, top + 0.25, b.z); scene.add(par);
+      if (Q.props >= 1) for (let k = 0; k < 2; k++) { const ac = shadowy(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 1), roofBox)); ac.position.set(b.x + (R() - 0.5) * (b.w - 2), top + 0.45, b.z + (R() - 0.5) * (b.d - 2)); scene.add(ac); }
+      if (R() < 0.3) { const tank = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1.8, 16), new THREE.MeshStandardMaterial({ color: '#8b6b4a', roughness: 0.8 }))); tank.position.set(b.x + b.w / 4, top + 1.6, b.z - b.d / 4); scene.add(tank); }
+    } else if (b.kind === 'iwall') { // 1 階の壁: 外がわは外壁・内がわは室内の壁
+      const fm = groupFm.get(b.gid) || M.concrete, w = IN.wall, faces = [w, w, w, w, w, w], idx = { px: 0, nx: 1, pz: 4, nz: 5 }[b.face];
+      faces[idx] = fm;
+      const m = shadowy(new THREE.Mesh(tiledBox(b.w, b.h, b.d), faces)); m.position.set(b.x, (b.y0 || 0) + b.h / 2, b.z); scene.add(m);
+    } else if (b.kind === 'floor') {
+      const fl = receive(new THREE.Mesh(new THREE.PlaneGeometry(b.w, b.d), b.type === 'cafe' ? IN.wood : IN.tile)); fl.rotation.x = -Math.PI / 2; fl.position.set(b.x, 0.02, b.z); scene.add(fl);
+      fl.geometry.attributes.uv.array.forEach((v, i, arr) => { arr[i] = v * (i % 2 ? b.d : b.w) / 1.2; });
+    } else if (b.kind === 'furn') {
+      const g = new THREE.Group(); g.position.set(b.x, 0, b.z); scene.add(g);
+      const box = (w, h, d, mat, y, x = 0, z = 0) => { const m = shadowy(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)); m.position.set(x, y, z); g.add(m); return m; };
+      if (b.part === 'counter') { box(b.w, b.h - 0.06, b.d, IN.counter, (b.h - 0.06) / 2); box(b.w + 0.06, 0.06, b.d + 0.06, IN.counterTop, b.h - 0.03); }
+      else if (b.part === 'shelf') { box(b.w, b.h, b.d, IN.shelf, b.h / 2); for (const y of [0.35, 0.8, 1.25]) box(b.w * 0.98, 0.3, b.d * 1.02, IN.goods, y); }
+      else if (b.part === 'table') { box(b.w, 0.05, b.d, IN.wood, b.h); box(0.08, b.h, 0.08, IN.metal, b.h / 2); }
+      else { const pot = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.17, 0.4, 12), IN.counter)); pot.position.y = 0.2; g.add(pot); const leaf = shadowy(new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 1), IN.leaf)); leaf.position.y = 0.8; g.add(leaf); }
+    } else if (b.kind === 'car' && !b.dyn) {
       // 車: 当たり判定の箱 (高さ 1.45) の中におさまる形
       const along = b.w > b.d, L = Math.max(b.w, b.d), W = Math.min(b.w, b.d), g = new THREE.Group();
       g.position.set(b.x, 0, b.z); g.rotation.y = along ? 0 : Math.PI / 2;
@@ -247,6 +280,11 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     } else if (b.kind === 'crate' || b.kind === 'wall' || b.kind === 'fence') {
       const m = shadowy(new THREE.Mesh(tiledBox(b.w, b.h, b.d, b.kind === 'crate' ? Math.max(b.w, b.h) : 3), b.kind === 'crate' ? M.crate : M.concrete)); m.position.set(b.x, b.y0 + b.h / 2, b.z); scene.add(m);
     }
+  }
+  // 建物の中: 天井の明かり・入口の上の看板
+  for (const r of map.interiors || []) {
+    for (const k of [-0.25, 0.25]) { const lp = new THREE.Mesh(new THREE.BoxGeometry(Math.min(2.4, r.w * 0.4), 0.04, 0.5), IN.lamp); lp.position.set(r.x + (r.inZ ? k * r.w * 0.6 : 0), A.FLOOR_H - 0.03, r.z + (r.inX ? k * r.d * 0.6 : 0)); if (r.inX) lp.rotation.y = Math.PI / 2; scene.add(lp); }
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.55, 0.08), IN.sign[r.type]); sign.position.set(r.door.x + r.door.nx * 0.06, 2.95, r.door.z + r.door.nz * 0.06); sign.rotation.y = Math.atan2(r.door.nx, r.door.nz); scene.add(sign);
   }
   // 街灯・街路樹・消火栓 (歩道のふち)
   {
@@ -685,7 +723,58 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.28, 12), chrome); cap.rotation.z = Math.PI / 2; pv.add(cap); wheels.push(pv);
     }
     scene.add(g);
-    return { g, wheels, bar, kind, front: wheels.filter((_, i) => i % 2 === 0) };
+    return { g, body, wheels, bar, kind, color, front: wheels.filter((_, i) => i % 2 === 0) };
+  }
+  // 車の中 (運転席から見る): ボンネット・ダッシュボード・メーター (速さ)・ハンドル・柱・天井・ドア・座席・ミラー。運転席は右 (x = +0.42)
+  function makeCarInterior(kind, color) {
+    const g = new THREE.Group(), van = kind === 'ambulance', W = van ? 2.1 : 1.9;
+    const dark = new THREE.MeshStandardMaterial({ color: '#202327', roughness: 0.85 }), dash = new THREE.MeshStandardMaterial({ color: '#2b2f35', roughness: 0.7 }), liner = new THREE.MeshStandardMaterial({ color: '#c9c4bb', roughness: 0.95 });
+    const paint = carPaint(kind === 'civ' ? color : '#f4f4f2'), seat = new THREE.MeshStandardMaterial({ color: '#3b3f46', map: fabricTex.map, roughness: 0.9 }), trim = new THREE.MeshStandardMaterial({ color: '#8a8f96', metalness: 0.7, roughness: 0.35 });
+    const box = (w, h, d, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m; };
+    const zf = van ? -1.55 : -0.85; // 前のガラスの下の位置
+    box(W * 0.96, 0.1, van ? 0.9 : 1.6, paint, 0, 0.95, zf - (van ? 0.45 : 0.8), 0.06);            // ボンネット
+    box(W * 0.94, 0.26, 0.55, dash, 0, 0.9, zf + 0.12);                                              // ダッシュボード
+    box(0.5, 0.08, 0.2, dark, 0.42, 1.17, zf + 0.36, -0.25);                                        // メーターのひさし
+    box(W * 0.94, 0.55, 0.06, dash, 0, 0.62, zf + 0.42);                                             // 足もとの前の板
+    box(W * 0.94, 0.05, 2.6, dark, 0, 0.36, 0.3);                                                    // 床
+    // メーター: 速さを絵 (canvas) に描いて、変わったときだけ書きなおす
+    const sc = canvas(256, 128), sg = sc.getContext('2d'), stex = tex(sc, { repeat: false });
+    const meter = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.21), new THREE.MeshBasicMaterial({ map: stex, toneMapped: false })); meter.position.set(0.42, 1.09, zf + 0.42); meter.rotation.x = -0.3; g.add(meter);
+    let last = -1;
+    const setSpeed = (kmh) => { const v = Math.round(Math.abs(kmh)); if (v === last) return; last = v;
+      sg.fillStyle = '#0b0d12'; sg.fillRect(0, 0, 256, 128); sg.strokeStyle = '#2b2f35'; sg.lineWidth = 6; sg.strokeRect(3, 3, 250, 122);
+      sg.strokeStyle = '#495057'; sg.lineWidth = 10; sg.beginPath(); sg.arc(70, 92, 52, Math.PI, Math.PI * 2); sg.stroke();
+      const a = Math.PI + Math.PI * Math.min(1, v / 120); sg.strokeStyle = v > 90 ? '#ff6b6b' : '#ffd43b'; sg.beginPath(); sg.arc(70, 92, 52, Math.PI, a); sg.stroke();
+      sg.strokeStyle = '#ff6b6b'; sg.lineWidth = 4; sg.beginPath(); sg.moveTo(70, 92); sg.lineTo(70 + Math.cos(a) * 46, 92 + Math.sin(a) * 46); sg.stroke();
+      sg.fillStyle = '#e9ecef'; sg.font = '900 50px system-ui,sans-serif'; sg.textAlign = 'right'; sg.fillText(String(v), 240, 70); sg.font = '700 22px system-ui,sans-serif'; sg.fillStyle = '#adb5bd'; sg.fillText('km/h', 240, 104);
+      stex.needsUpdate = true; };
+    setSpeed(0);
+    // ハンドル (回る)
+    const wheel = new THREE.Group(); wheel.position.set(0.42, 0.93, zf + 0.62); wheel.rotation.x = -1.2; g.add(wheel);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.024, 10, 36), dark); wheel.add(rim);
+    for (const a of [0, Math.PI * 0.75, Math.PI * 1.25]) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.17, 0.02), dark); sp.position.set(Math.sin(a) * 0.085, -Math.cos(a) * 0.085, 0); sp.rotation.z = a; wheel.add(sp); }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.05, 16), trim); hub.rotation.x = Math.PI / 2; wheel.add(hub);
+    box(0.06, 0.06, 0.4, dark, 0.42, 0.86, zf + 0.45, 0.6);                                        // ハンドルの軸
+    // 柱 (前・まん中)・天井・前のガラスの上の枠・ドア・ひじかけ
+    const top = van ? 1.75 : 1.5;
+    for (const sx of [-1, 1]) {
+      box(0.05, 0.72, 0.06, paint, sx * (W / 2 - 0.05), 1.23, zf + 0.26, -0.62);                     // 前の柱 (ななめ)
+      box(0.1, top - 0.9, 0.12, paint, sx * (W / 2 - 0.06), (top + 0.9) / 2, 0.95);                  // まん中の柱
+      box(0.06, 0.66, 1.8, dash, sx * (W / 2 - 0.04), 0.7, 0.1);                                     // ドア
+      box(0.12, 0.06, 0.6, liner, sx * (W / 2 - 0.12), 0.98, 0.25);                                  // ひじかけ
+    }
+    box(W * 0.94, 0.05, 2.1, liner, 0, top, 0.2);                                                    // 天井
+    box(W * 0.94, 0.08, 0.1, paint, 0, top - 0.03, zf + 0.5);                                        // 前のガラスの上
+    box(0.18, 0.05, 0.02, dark, 0, top - 0.1, zf + 0.6);                                             // ルームミラー
+    for (const sx of [-1, 1]) box(0.16, 0.1, 0.06, paint, sx * (W / 2 + 0.1), 1.05, zf + 0.3);       // サイドミラー
+    for (const sx of [-0.42, 0.42]) { box(0.5, 0.12, 0.55, seat, sx, 0.62, 0.45); box(0.5, 0.7, 0.12, seat, sx, 0.95, 0.75, 0.15); }  // 座席
+    box(0.05, 0.22, 0.05, trim, 0, 0.78, zf + 0.75, 0.3);                                            // シフトレバー
+    // 前のガラス (うっすら映りこみ)
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.9, 0.62), new THREE.MeshStandardMaterial({ color: '#9fb3c8', transparent: true, opacity: 0.1, roughness: 0.05, metalness: 0.9, envMapIntensity: 1.5, depthWrite: false }));
+    glass.position.set(0, (top + 1.05) / 2, zf + 0.28); glass.rotation.x = -0.62; g.add(glass);
+    if (kind !== 'civ') { const radio = box(0.3, 0.12, 0.2, dark, -0.05, 0.98, zf + 0.25); radio.rotation.x = -0.3; }
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+    return { g, wheel, setSpeed, eye: [0.42, van ? 1.32 : 1.13, 0.35] };
   }
   // 担架 (運ばれる人の下)
   function makeStretcher() { const s = new THREE.Group(); const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 2.0), new THREE.MeshStandardMaterial({ color: '#e8590c', roughness: 0.6 })); s.add(m1); const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 1.9), new THREE.MeshStandardMaterial({ color: '#f1f3f5', roughness: 0.8 })); m2.position.y = 0.05; s.add(m2); scene.add(s); return s; }
@@ -694,7 +783,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   function makeCash() { const g = new THREE.Group(); for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.03, 0.16), cashMat); m.position.y = 0.05 + i * 0.035; m.rotation.y = i * 0.3; g.add(m); } scene.add(g); return g; }
 
   scene.add(camera); // 一人称の手と銃をカメラの子にするため
-  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, makeVehicle, makeStretcher, makeCash, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
+  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, makeVehicle, makeCarInterior, makeStretcher, makeCash, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
     render() { const now = performance.now(); adapt(now); wind.value = now / 1000; if (grade) grade.material.uniforms.uTime.value = now / 1000; composer.render(); },
     get pixelRatio() { return PR; },
     setQuality(q) { try { localStorage.setItem('arena_quality', q); } catch {} } };

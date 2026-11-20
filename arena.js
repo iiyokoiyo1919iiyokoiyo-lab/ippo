@@ -30,7 +30,7 @@ const BOTS_MAX = process.env.ARENA_BOTS != null ? Math.max(0, Number(process.env
 const PUNCH = { range: 2.4, cos: Math.cos((55 * Math.PI) / 180), dmg: 35, ms: 600, kb: 7 }; // なぐる: 前 2.4m・左右 55° いないの相手に 35 ダメージ + ふっとばし
 const MAX_SPEED = 9.5; // 走る速さ (8) + ゆとり
 const CAR = { max: 34, enter: 4.4, run: 3, civ: 6 }; // 車: 速さの上限 (m/s)・乗れる距離・はねる速さ・乗れる車の数
-const ROB = { range: 10, cos: Math.cos((10 * Math.PI) / 180), need: 0.9, cash: [20, 200], keepMs: 90000 }; // 強盗: 10m いない・照準から 10° いないで 0.9 秒向けつづける
+const ROB = { range: 10, cos: Math.cos((10 * Math.PI) / 180), need: 0.9, cash: [20, 200], shopCash: [300, 1200], keepMs: 90000 }; // 強盗: 10m いない・照準から 10° いないで 0.9 秒向けつづける
 const BOT_NAMES = ['ボット・ミケ', 'ボット・ポチ', 'ボット・タマ', 'ボット・ハチ', 'ボット・コロ'];
 const COLORS = ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#da77f2', '#ff922b', '#3bc9db', '#f783ac', '#a9e34b', '#748ffc'];
 
@@ -56,8 +56,9 @@ module.exports = function install(app, ctx) {
   npcs.panicAt = (x, z) => incidents.levelAt(x, z);
   npcs.threatNear = (x, z, r) => incidents.nearest(x, z, r);
   npcs.vehicleNear = (x, z, r) => traffic.near(x, z, r);
-  // 乗れる一般車: 道路のまん中あたり (止まっている車から離して)
-  { const used = [...traffic.parked]; let k = 0;
+  // 乗れる一般車: 道ばたの車 (マップの車の場所・色) + 道路のまん中あたりに 6 台
+  for (const b of map.boxes) if (b.kind === 'car') traffic.add('civ', b.x, b.z, b.w > b.d ? (Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (Math.random() < 0.5 ? 0 : Math.PI), { color: b.color });
+  { const used = map.boxes.filter((b) => b.kind === 'car').map((b) => ({ x: b.x, z: b.z })); let k = 0;
     for (let t = 0; t < 200 && k < CAR.civ; t++) {
       const n = traffic.nodes[crypto.randomInt(0, traffic.nodes.length)], dir = crypto.randomInt(0, 4), dx = [1, -1, 0, 0][dir], dz = [0, 0, 1, -1][dir], L = 9 + Math.random() * 8;
       const x = n.x + dx * L + dz * 1.9, z = n.z + dz * L - dx * 1.9;
@@ -65,10 +66,27 @@ module.exports = function install(app, ctx) {
       used.push({ x, z }); traffic.add('civ', x, z, Math.atan2(-dx, -dz), { color: ['#c92a2a', '#1864ab', '#2b8a3e', '#e67700', '#212529', '#862e9c'][k] }); k++;
     } }
   const cash = new Map(); let cashSeq = 0;
-  npcs.onDrop = (n) => { // 強盗: お金を落とす
-    const c = { id: 'c' + (++cashSeq), x: +n.x.toFixed(2), z: +n.z.toFixed(2), a: crypto.randomInt(ROB.cash[0], ROB.cash[1] + 1), at: Date.now() };
+  npcs.onDrop = (n) => { // 強盗: お金を落とす (店員はレジのお金なので多い・カウンターの手前に置く)
+    const shop = n.role === 'clerk' ? shops.find((s) => s.clerk === n) : null, at = shop ? shop.drop : n, range = shop ? ROB.shopCash : ROB.cash;
+    const c = { id: 'c' + (++cashSeq), x: +at.x.toFixed(2), z: +at.z.toFixed(2), a: crypto.randomInt(range[0], range[1] + 1), at: Date.now() };
     cash.set(c.id, c); all({ t: 'cash', c });
   };
+  // コンビニの店員 (レジのうしろに立つ)。やられたら 40 秒後に新しい人。強盗されたら 2 分は空 (お金がない)
+  const shops = (map.interiors || []).filter((r) => r.type === 'shop').map((r) => ({ room: r, clerk: null, goneAt: 0, drop: { x: r.register.x + r.door.nx * 1.1, z: r.register.z + r.door.nz * 1.1 } }));
+  function clerkStep(now) {
+    for (const s of shops) {
+      let c = s.clerk;
+      if (c && c.gone) { s.clerk = c = null; s.goneAt = now; }
+      if (!c) { if (now - s.goneAt > 40000 || !s.goneAt) { c = s.clerk = npcs.spawnRole('clerk', s.room.clerk.x, s.room.clerk.z); Object.assign(c, { hidden: false, yaw: s.room.clerk.yaw, mode: 'walking' }); } continue; }
+      if (!Body.canMove(c.body)) continue;
+      if (c.mode === 'surrender') {
+        if (c.robber) c.yaw = Math.atan2(-(c.robber.x - c.x), -(c.robber.z - c.z));
+        if (now >= c.dropAt && !c.dropped) { c.dropped = true; npcs.onDrop(c); incidents.report('robbery', c.x, c.z, { sev: 3 }); }
+        if (now >= c.dropAt + 8000) { c.mode = 'walking'; c.yaw = s.room.clerk.yaw; c.robbedAt = now; }
+      } else if (c.robbed && now - (c.robbedAt || now) > 120000) { c.robbed = false; c.dropped = false; }
+      c.x = s.room.clerk.x; c.z = s.room.clerk.z; // レジのうしろから動かない
+    }
+  }
   let tickMs = 0;
 
   // 出てくる場所: 交差点のうち、ほかのプレイヤーからいちばん遠いところ (候補 8 つから)
@@ -89,7 +107,7 @@ module.exports = function install(app, ctx) {
   // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近いプレイヤーに当たる
   // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近い相手 (プレイヤー・通行人) に当たる
   function fire(p, o, d, dmgTable, weapon = 'rifle') {
-    const W = WEAPONS[weapon] || WEAPONS.rifle, wallT = M.rayWorld(map, o, d, W.range);
+    const W = WEAPONS[weapon] || WEAPONS.rifle, wallT = Math.min(M.rayWorld(map, o, d, W.range), traffic.rayHit(o, d, W.range)); // 壁・車で止まる
     let hit = null;
     for (const q of players.values()) {
       if (q === p || !q.alive || q.protectUntil > Date.now()) continue;
@@ -183,6 +201,7 @@ module.exports = function install(app, ctx) {
       if (now - b.stuckAt > 2000) { if (Math.hypot(b.x - b.stuckPos.x, b.z - b.stuckPos.z) < 0.6) b.goal = null; b.stuckAt = now; b.stuckPos = { x: b.x, z: b.z }; }
     }
     M.collide(map, b); b.y = M.groundAt(map, b.x, b.z, b.y);
+    for (const c of traffic.near(b.x, b.z, 2)) { const dx = b.x - c.x, dz = b.z - c.z, d = Math.hypot(dx, dz) || 0.01, r = c.r + M.PLAYER_R; if (d < r) { b.x += dx / d * (r - d); b.z += dz / d * (r - d); } } // 車をすりぬけない
   }
   function syncBots() {
     const h = humans().length, want = h ? Math.max(0, Math.min(BOTS_MAX, 4 - h)) : 0, bots = [...players.values()].filter((p) => p.bot);
@@ -231,7 +250,7 @@ module.exports = function install(app, ctx) {
       const cp = Math.cos(p.pitch || 0), f = [-Math.sin(p.yaw) * cp, Math.sin(p.pitch || 0), -Math.cos(p.yaw) * cp], eye = [p.x, p.y + 1.6, p.z];
       let best = null, bc = ROB.cos;
       for (const n of npcs.near(p.x, p.z, ROB.range)) {
-        if (n.role || n.robbed || n.hidden || !Body.canMove(n.body)) continue;
+        if ((n.role && n.role !== 'clerk') || n.robbed || n.hidden || !Body.canMove(n.body)) continue; // 通行人と店員
         const d = [n.x - eye[0], 1.2 - eye[1], n.z - eye[2]], L = Math.hypot(...d); if (L > ROB.range || L < 0.5) continue;
         const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / L; if (c < bc) continue;
         if (M.rayWorld(map, eye, d.map((v) => v / L), L) < L - 0.4) continue;
@@ -280,7 +299,7 @@ module.exports = function install(app, ctx) {
     if (tickN % 20 === 1) npcs.sync(pl);
     const withNpc = tickN % 2 === 0;
     runOver(now);
-    if (withNpc) { npcs.update(now, 0.1, pl); incidents.update(now, 0.1); services.update(now, 0.1, pl); robbery(now); }
+    if (withNpc) { npcs.update(now, 0.1, pl); incidents.update(now, 0.1); services.update(now, 0.1, pl); clerkStep(now); robbery(now); }
     if (tickN % 10 === 0) { const d = [...players.values()].filter((p) => p.dbg && p.admin); if (d.length) { const m = { t: 'dbg', d: debugState() }; for (const p of d) send(p, m); } }
     tickMs = tickMs * 0.95 + Number(process.hrtime.bigint() - t0) / 1e6 * 0.05;
     const prow = [...players.values()].map((p) => [p.sid, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +(p.pitch || 0).toFixed(3), p.hp, p.alive ? 1 : 0, p.protectUntil > now ? 1 : 0, Body.CODE[p.body.state]]);

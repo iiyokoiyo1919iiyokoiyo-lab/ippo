@@ -13,13 +13,14 @@ const line = (i) => -M.HALF + ROAD / 2 + i * STEP;
 const KIND = { civ: 0, police: 1, ambulance: 2 };
 const LEN = { civ: 1.35, police: 1.4, ambulance: 1.75 }; // 当たりの円 3 つの間かく (前後)
 const CAR_R = 1.05;
+const DIM = { civ: { w: 1.9, l: 4.4, h: 1.5 }, police: { w: 1.9, l: 4.4, h: 1.55 }, ambulance: { w: 2.1, l: 5.4, h: 2.45 } }; // 弾が当たる箱
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 class Traffic {
   constructor(map) {
     this.map = map; this.vehicles = new Map(); this.seq = 0;
-    this.parked = map.solid.filter((b) => b.kind === 'car');
+    // 止まっている車 (道ばたの車も乗れる車。動いていない車を「よける車」として使う)
     this.nodes = []; for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) this.nodes.push({ i, j, x: line(i), z: line(j) });
   }
   node(i, j) { return this.nodes[clamp(i, 0, N) * (N + 1) + clamp(j, 0, N)]; }
@@ -47,7 +48,7 @@ class Traffic {
       const ux = dx / L, uz = dz / L, ox = uz * LANE, oz = -ux * LANE; // 左の車線
       // この区間の止まっている車 (車線の上・区間の中)
       const blocks = [];
-      for (const b of this.parked) {
+      for (const b of this.parkedBoxes()) {
         const rx = b.x - prev.x, rz = b.z - prev.z, along = rx * ux + rz * uz, side = rx * ox / LANE + rz * oz / LANE;
         if (along < -3 || along > L + 3) continue;
         if (Math.abs(side - LANE) < 1.6) blocks.push(along);
@@ -72,6 +73,10 @@ class Traffic {
     v.wp = this.waypoints({ x: v.x, z: v.z }, pts); v.wi = 0; v.arrived = false; v.dest = dest;
     return dest;
   }
+  // いま止まっている一般車を、向きに合わせた箱にする (道をよけるため)
+  parkedBoxes() { const out = []; for (const v of this.vehicles.values()) { if (v.kind !== 'civ' || v.driver || v.hidden || Math.abs(v.speed) > 0.5) continue; const ax = Math.abs(Math.sin(v.yaw)) > 0.7; out.push({ x: v.x, z: v.z, w: ax ? 4.4 : 1.9, d: ax ? 1.9 : 4.4 }); } return out; }
+  // 弾が車に当たるまでの距離 (車は弾よけになる)
+  rayHit(o, d, max) { let best = max; for (const v of this.vehicles.values()) { if (v.hidden) continue; const dx = v.x - o[0], dz = v.z - o[2]; if (dx * dx + dz * dz > (max + 4) ** 2) continue; const t = M.rayOBB(o, d, { x: v.x, z: v.z, yaw: v.yaw, ...DIM[v.kind] }); if (t < best) best = t; } return best; }
   add(kind, x, z, yaw = 0, extra = {}) {
     const v = { id: 'v' + (++this.seq), kind, x, z, yaw, speed: 0, hidden: false, siren: false, driver: null, wp: [], wi: 0, arrived: true, blockedMs: 0, color: extra.color || null, ...extra };
     this.vehicles.set(v.id, v); return v;
@@ -123,4 +128,4 @@ class Traffic {
   // 端の道 (マップから出入りする場所): いちばん近い外周の交差点
   edgeNode(x, z) { let best = null, bd = 1e9; for (const n of this.nodes) { if (n.i !== 0 && n.i !== N && n.j !== 0 && n.j !== N) continue; const d = (n.x - x) ** 2 + (n.z - z) ** 2; if (d < bd) { bd = d; best = n; } } return best; }
 }
-module.exports = { Traffic, KIND, LANE, line, N, CAR_R };
+module.exports = { Traffic, KIND, LANE, line, N, CAR_R, DIM };
