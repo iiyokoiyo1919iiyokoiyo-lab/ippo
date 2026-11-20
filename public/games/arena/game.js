@@ -313,6 +313,7 @@ function frame() {
       camera.lookAt(me.x, me.y + curb + 1.35, me.z);
     }
   }
+  if (window.__camOverride) { const c = window.__camOverride; camera.position.set(...c.pos); camera.lookAt(...c.at); } // 確認用 (#debug のテストだけが使う)
   // ほかのプレイヤー (なめらかに追いかける)
   const k = 1 - Math.exp(-dt * 14);
   for (const o of others.values()) {
