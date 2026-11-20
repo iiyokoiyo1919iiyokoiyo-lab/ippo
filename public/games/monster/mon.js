@@ -732,7 +732,7 @@
         $$('[data-bid]', root).forEach((b) => b.onclick = () => ws.send(JSON.stringify({ t: 'bid', amount: Number(b.dataset.bid) })));
       } else {
         const left = Math.max(0, state.next - Date.now()), mm = Math.floor(left / 60000), ss = Math.floor(left / 1000) % 60;
-        root.innerHTML = `<div class="card center"><b>次のセリ</b><div class="auc-time">${esc(fmtTime(state.next))} から (あと ${mm}分${String(ss).padStart(2, '0')}秒)</div><p class="small muted">毎時 5 分に開催。メスが産んだモンスターを出品できます (モンスターの画面の「セリに出す」から)</p></div>
+        root.innerHTML = `<div class="card center"><b>次のセリ</b><div class="auc-time">${esc(fmtTime(state.next))} から (あと ${mm}分${String(ss).padStart(2, '0')}秒)</div><p class="small muted">15 分ごと (毎時 5・20・35・50 分) に開催。メスが産んだモンスターを出品できます (モンスターの画面の「セリに出す」から)</p></div>
           <div class="card"><h2>出品されているモンスター (${state.queue.length})</h2>${state.queue.length ? '' : '<p class="empty">まだ出品はありません</p>'}</div>${state.queue.map(lotCard).join('')}`;
       }
     };
@@ -813,7 +813,7 @@
       <h2>⚔️ バトル</h2><p>コイントスで先攻を決めます。毎ラウンド <b>${catalog.rules.inputMs / 1000} 秒</b> で十字キーのコマンドを入力して「決定！」。先攻から技を出し、どちらかの HP がなくなったら終わりです。コマンドがまちがっていると不発になります。</p>
       <p>🛡️ <b>ぼうぎょ</b> (${arrows(guardSkill().cmd)}) はどのモンスターも使えます。相手が<b>同じラウンドの同じ回</b> (1 つ目どうし・2 つ目どうし…) に技を撃ってきたら、その技を<b>無効</b>にします。撃ってこなければ空振りです。</p>
       <p>直殴り (2〜4 キー) はモンスター自身の属性、魔法 (3〜8 キー)・大技 (10 キー前後) は技ごとの属性です。</p>
-      <h2>💰 市場価値とセリ</h2><p>市場価値 (戦績スコア) は対人戦で上がります (勝ち +${catalog.rules.score.pvp.win}・負け +${catalog.rules.score.pvp.lose})。CPU 戦は 0.6 倍。メスが産んだ子は、<b>毎時 5 分</b>のセリに出品できます。コインはぶんぼうぐバトラーズと共通です。</p>
+      <h2>💰 市場価値とセリ</h2><p>市場価値 (戦績スコア) は対人戦で上がります (勝ち +${catalog.rules.score.pvp.win}・負け +${catalog.rules.score.pvp.lose})。CPU 戦は 0.6 倍。メスが産んだ子は、<b>15 分ごと (毎時 5・20・35・50 分)</b>のセリに出品できます。コインはぶんぼうぐバトラーズと共通です。</p>
       <h2>🔥 相性 (攻撃 → 受ける側)</h2><div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;text-align:center"><tr><th></th>${ids.map((d) => `<th>${T[d].icon}</th>`).join('')}</tr>${ids.map((a) => `<tr><th>${T[a].icon}${T[a].name}</th>${ids.map((d) => { const v = catalog.typeTable[a][d]; return `<td style="padding:3px 6px;font-weight:800;color:${v > 1 ? '#e03131' : v < 1 ? '#1c7ed6' : 'var(--muted)'}">${v === 1 ? '-' : '×' + v}</td>`; }).join('')}</tr>`).join('')}</table></div>
       <p>強さ評価: C → B → A → S → SS → Z</p></div>`;
   }

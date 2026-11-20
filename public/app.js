@@ -2915,7 +2915,7 @@ function viewGames() {
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/monster" id="mon-game" style="display:none">
       <span class="game-card-art mb-art" aria-hidden="true">🧬</span>
-      <span class="game-card-body"><b>ブリードモンスターズ <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>モンスターを配合して強い子を作り、十字キーのコマンドを打ちこんで戦う。毎時 5 分にはリアルタイムのセリも</span>
+      <span class="game-card-body"><b>ブリードモンスターズ <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>モンスターを配合して強い子を作り、十字キーのコマンドを打ちこんで戦う。15 分ごとにリアルタイムのセリも</span>
         <span class="chip chip-accent">🧬 配合・コマンドバトル・セリ</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card" href="#/games/cards">
       <span class="game-card-art cb-art" aria-hidden="true">${CBArt.svg('gold', 'N')}</span>

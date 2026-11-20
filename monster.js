@@ -8,7 +8,7 @@
 // ・バトル: コイントスで先攻を決め、毎ラウンド 10 秒で十字キーのコマンドを入力 → 決定。先攻から技を出す
 //   直殴りは 2〜4 キー (そのモンスターの属性)、魔法は 3〜8 キー、大技は 10 キー前後 (どちらも技ごとの属性)
 // ・繁殖入りすると、もう戦えない。市場価値 (戦績スコア) が一定以上のオスは種モンとして、ほかの人のメスと配合できる
-// ・メスが産んだ子は、毎時 5 分のセリ (リアルタイム) に出せる。父と母の戦績と受けついだ技が見られる
+// ・メスが産んだ子は、15 分ごと (毎時 5・20・35・50 分) のセリ (リアルタイム) に出せる。父と母の戦績と受けついだ技が見られる
 // ・市場価値は対人戦で上がる。CPU 戦でも上がるが 0.6 倍
 // ・乱数・判定はすべてサーバー側 (端末から来るのは、押したキーの並びと選んだものだけ)
 // =====================================================================
@@ -583,9 +583,9 @@ module.exports = function install(app, ctx) {
     res.json({ top: rows.map((m, i) => ({ rank: i + 1, monster: monView(m), owner: userView(m.owner_id) })) });
   });
 
-  // ======================= セリ (毎時 5 分・リアルタイム) =======================
+  // ======================= セリ (15 分ごと: 毎時 5・20・35・50 分・リアルタイム) =======================
   // テストのときは MON_AUCTION_PERIOD_MS / MON_AUCTION_OFFSET_MS で間隔を変えられる
-  const PERIOD = Number(process.env.MON_AUCTION_PERIOD_MS) || 3600_000, OFFSET = Number(process.env.MON_AUCTION_OFFSET_MS) || 5 * 60_000;
+  const PERIOD = Number(process.env.MON_AUCTION_PERIOD_MS) || 15 * 60_000, OFFSET = Number(process.env.MON_AUCTION_OFFSET_MS) || 5 * 60_000;
   const LOT_MS = Number(process.env.MON_LOT_MS) || 25_000, EXTEND_MS = 8_000, MIN_PRICE = 10;
   function nextSlot(now = Date.now()) { const base = Math.floor((now - OFFSET) / PERIOD) * PERIOD + OFFSET; return base > now ? base : base + PERIOD; }
   // 起動したときに預かったままのコイン (前の起動中のセリ) は返す
@@ -673,7 +673,7 @@ module.exports = function install(app, ctx) {
     scheduleLotEnd(); broadcastAuction();
     return null;
   }
-  // 毎時 5 分にセリを始める
+  // 15 分ごと (毎時 5・20・35・50 分) にセリを始める
   let slotTimer = null;
   const armSlot = () => { clearTimeout(slotTimer); const at = nextSlot(); slotTimer = setTimeout(() => { if (!auction) startAuction(at); armSlot(); }, Math.max(100, at - Date.now())); slotTimer.unref?.(); };
   armSlot();

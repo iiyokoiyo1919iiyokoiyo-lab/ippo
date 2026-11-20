@@ -44,7 +44,7 @@
 - 売却: モンスターの詳細から。値段は強さの 8% + 市場価値の 2% (10〜500 コイン。`monster.js` の `SELL`)。状態を `sold` にしてデータは残す (血統のため。自分の一覧・数・ランキングには出ない)。セリ中・バトル中・最後の 1 体は売れない
 - ぶんバトに連れていく: `cards.js` の表 `card_monsters` (カード ID は `m:`)。評価 → レア度 (`MONCARD_RARITY`: C→N・B→R・A→SR・S/SS→SSR・Z→MR)、属性 → 相性・わざ (`MONCARD_TYPE` / `MONCARD_SKILL`)。能力はモンスターの能力に比例 (上限なし。`MONCARD_SCALE`: はじめのモンスターで R の平均くらい)。突然変異 R 以上は「限定級」(限定キャラ `MONCARD_LIMITED` の平均より下にならず、倍率 1.2)。計算を変えたら `MONCARD_FORMULA` を上げる (起動時に連れてきたカードを計算し直す)。1 体 1 枚、連れてきたあとも「最新の強さにする」で写し直せる (レベルはそのまま)。絵は `GET /api/cards/mon-art/:id` (サーバーで mon-art.js を動かして SVG)
 - 血統書シェア: モンスターの詳細 → `#pedigree/<id>` で 3 世代の家系図を画像 (1080×1350) にして保存・タイムラインに投稿 (`GET /api/mon/monster/:id/pedigree`。未発見の変異は出さない)
-- セリは毎時 5 分 (テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
+- セリは 15 分ごと (毎時 5・20・35・50 分。`monster.js` の `PERIOD`。テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
 
 ## そのほか
 - 既存の機能を消さない・データベースの構造を勝手に変えない (表の追加・列の追加は `db.migrate` で)・認証やアクセス制御を弱めない
