@@ -14,6 +14,7 @@ import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from './vendor/jsm/postprocessing/GTAOPass.js';
 import { FXAAShader } from './vendor/jsm/shaders/FXAAShader.js';
 import { Sky } from './vendor/jsm/objects/Sky.js';
+import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
 
 const BLOCK = 18, ROAD = 8, N = 5, CURB = 0.15;
 const QUALITY = {
@@ -295,42 +296,134 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   // 歩道の上は少し高い (見た目だけ。当たり判定は変えない)
   function curbAt(x, z) { const lx = ((x + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD), lz = ((z + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD); return lx >= ROAD && lz >= ROAD && Math.abs(x) < A.HALF - 0.5 && Math.abs(z) < A.HALF - 0.5 ? CURB : 0; }
 
-  // ---------- キャラクター (人の形・歩く・なぐる) ----------
-  const skinMats = ['#e8c39e', '#c99b74', '#8d5a3b', '#f1d3b5'].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6 }));
-  const pants = new THREE.MeshStandardMaterial({ color: '#2b3448', roughness: 0.9 }), shoes = new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.7 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: '#2a1d14', roughness: 0.8 }), gunMetal = new THREE.MeshStandardMaterial({ color: '#2a2d31', metalness: 0.75, roughness: 0.38 }), gunGrip = new THREE.MeshStandardMaterial({ color: '#141518', roughness: 0.8 });
-  const cap = (r, len, mat) => shadowy(new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat));
+  // ---------- キャラクター (高精細: 顔・髪・服の細部・指まで。部位ごとに 1 つにまとめて軽く描く) ----------
+  // 布・デニム・革・髪の質感 (色は材質の color でつける。絵は白に近い灰色)
+  const fabricTex = (() => { const s = 128, c = canvas(s), g = c.getContext('2d'), hc = canvas(s), hg = hc.getContext('2d'); g.fillStyle = '#e8e8e8'; g.fillRect(0, 0, s, s); hg.fillStyle = '#808080'; hg.fillRect(0, 0, s, s);
+    for (let y = 0; y < s; y += 2) { g.fillStyle = y % 4 ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.06)'; g.fillRect(0, y, s, 1); hg.fillStyle = y % 4 ? '#707070' : '#909090'; hg.fillRect(0, y, s, 1); }
+    for (let x = 0; x < s; x += 2) { g.fillStyle = 'rgba(0,0,0,.04)'; g.fillRect(x, 0, 1, s); }
+    speckle(g, s, s, s * 6, 1, ['#d0d0d0', '#f4f4f4'], 0.4, R); return { map: tex(c), normal: tex(normalFrom(hc, 1.2), { srgb: false }) }; })();
+  const denimTex = (() => { const s = 128, c = canvas(s), g = c.getContext('2d'); g.fillStyle = '#d8dbe2'; g.fillRect(0, 0, s, s);
+    for (let i = -s; i < s; i += 3) { g.strokeStyle = 'rgba(40,50,80,.18)'; g.beginPath(); g.moveTo(i, 0); g.lineTo(i + s, s); g.stroke(); } speckle(g, s, s, s * 8, 1, ['#ffffff', '#b8bdc8'], 0.35, R); return tex(c); })();
+  const hairTex = (() => { const s = 128, c = canvas(s), g = c.getContext('2d'), hc = canvas(s), hg = hc.getContext('2d'); g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, s, s); hg.fillStyle = '#808080'; hg.fillRect(0, 0, s, s);
+    for (let i = 0; i < s * 3; i++) { const x = R() * s, v = R(); g.strokeStyle = v > 0.5 ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.3)'; hg.strokeStyle = v > 0.5 ? '#b0b0b0' : '#505050'; g.beginPath(); hg.beginPath(); g.moveTo(x, 0); hg.moveTo(x, 0); const x2 = x + (R() - 0.5) * 10; g.lineTo(x2, s); hg.lineTo(x2, s); g.stroke(); hg.stroke(); }
+    return { map: tex(c), normal: tex(normalFrom(hc, 2), { srgb: false }) }; })();
+  const SKIN = ['#e9c4a0', '#d2a37c', '#9a6847', '#f3d6bb', '#b98560'], HAIR = ['#1d1612', '#3a291c', '#6a4a2a', '#a6804c', '#2b2b2e', '#5a2e1c'];
+  const pantsMat = new THREE.MeshStandardMaterial({ color: '#33415e', map: denimTex, roughness: 0.92 });
+  const soleMat = new THREE.MeshStandardMaterial({ color: '#e9e9e6', roughness: 0.7 }), shoeMat = new THREE.MeshStandardMaterial({ color: '#232326', roughness: 0.55, metalness: 0.05 });
+  const beltMat = new THREE.MeshStandardMaterial({ color: '#1c1a19', roughness: 0.45 }), metalMat = new THREE.MeshStandardMaterial({ color: '#c8ccd0', metalness: 1, roughness: 0.25 });
+  const scleraMat = new THREE.MeshStandardMaterial({ color: '#f4f1ec', roughness: 0.3 }), irisMat = new THREE.MeshStandardMaterial({ color: '#2b1c12', roughness: 0.15 }), lipMat = new THREE.MeshStandardMaterial({ color: '#9b5a50', roughness: 0.5 });
+  const gunMetal = new THREE.MeshStandardMaterial({ color: '#2a2d31', metalness: 0.8, roughness: 0.35 }), gunGrip = new THREE.MeshStandardMaterial({ color: '#141518', roughness: 0.75 }), gunAccent = new THREE.MeshStandardMaterial({ color: '#5c4a36', roughness: 0.6 });
+  const skinMats = new Map(), hairMats = new Map();
+  const skinOf = (c) => { if (!skinMats.has(c)) skinMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.55 })); return skinMats.get(c); };
+  const hairOf = (c) => { if (!hairMats.has(c)) hairMats.set(c, new THREE.MeshStandardMaterial({ color: c, map: hairTex.map, normalMap: hairTex.normal, roughness: 0.6 })); return hairMats.get(c); };
+  // 形のもと (使いまわす)
+  const GEO = {
+    ball: new THREE.SphereGeometry(1, 32, 24), hairCap: new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), ballLo: new THREE.SphereGeometry(1, 16, 12), box: new THREE.BoxGeometry(1, 1, 1),
+    cyl: new THREE.CylinderGeometry(1, 1, 1, 24), cone: new THREE.ConeGeometry(1, 1, 16), torus: new THREE.TorusGeometry(1, 0.22, 10, 32),
+    cap: (r, len) => new THREE.CapsuleGeometry(r, len, 8, 20),
+    // 体 (胸が広く、腰が細い。前後はうすい)
+    torso: new THREE.LatheGeometry([[0, 0.9], [0.16, 0.9], [0.172, 0.95], [0.158, 1.04], [0.175, 1.16], [0.192, 1.28], [0.19, 1.37], [0.165, 1.44], [0.11, 1.49], [0.065, 1.51], [0, 1.515]].map(([x, y]) => new THREE.Vector2(x, y)), 32),
+    thigh: new THREE.LatheGeometry([[0, 0.02], [0.07, 0.02], [0.082, -0.08], [0.088, -0.2], [0.078, -0.36], [0.066, -0.44], [0, -0.46]].map(([x, y]) => new THREE.Vector2(x, y)), 20),
+    shin: new THREE.LatheGeometry([[0, 0.02], [0.065, 0.02], [0.07, -0.08], [0.064, -0.2], [0.052, -0.36], [0.05, -0.4], [0, -0.41]].map(([x, y]) => new THREE.Vector2(x, y)), 20),
+  };
+  // 部品を集めて、材質ごとに 1 つの形にまとめる
+  function seg() {
+    const parts = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+    return {
+      add(geo, mat, [x = 0, y = 0, z = 0] = [], [rx = 0, ry = 0, rz = 0] = [], [sx = 1, sy = 1, sz = 1] = []) {
+        m4.compose(new THREE.Vector3(x, y, z), q.setFromEuler(e.set(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
+        const g2 = (geo.index ? geo : geo).clone().applyMatrix4(m4); for (const k of Object.keys(g2.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g2.deleteAttribute(k);
+        if (!parts.has(mat)) parts.set(mat, []); parts.get(mat).push(g2);
+      },
+      build(parent) { for (const [mat, list] of parts) { const mesh = shadowy(new THREE.Mesh(mergeGeometries(list, false), mat)); parent.add(mesh); } return parent; },
+    };
+  }
   function nameSprite(name) {
     const c = canvas(256, 64), g = c.getContext('2d'); g.font = '800 28px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(name, 128, 32); g.fillStyle = '#fff'; g.fillText(name, 128, 32);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(c, { repeat: false }), depthTest: false, transparent: true, toneMapped: false, fog: false })); s.scale.set(2, 0.5, 1); s.position.y = 2.25; s.renderOrder = 10; return s;
   }
+  // 手 (手のひら・指 4 本・親指)。s = 1 (右) / -1 (左)、fist = にぎる
+  function addHand(S_, skin, y, s, fist) {
+    S_.add(GEO.box, skin, [0, y, 0], [0, 0, 0], [0.062, 0.075, 0.03]);
+    for (let i = 0; i < 4; i++) { const x = (i - 1.5) * 0.016;
+      if (fist) S_.add(GEO.cap(0.0085, 0.022), skin, [x, y - 0.042, -0.014], [Math.PI / 2, 0, 0]); else S_.add(GEO.cap(0.0085, 0.036 - Math.abs(i - 1.5) * 0.005), skin, [x, y - 0.06, 0], [0.15, 0, 0]); }
+    S_.add(GEO.cap(0.009, 0.026), skin, [s * 0.034, y - 0.012, -0.012], [0.4, 0, s * 0.7]);
+  }
   function makeChar(color, name, isMe, seed = 1) {
-    const g = new THREE.Group(), jacket = new THREE.MeshStandardMaterial({ color, roughness: 0.75 }), skin = skinMats[seed % skinMats.length];
-    // 足 (ももの付け根から: もも → ひざ → すね → くつ)
-    const legs = [-1, 1].map((s) => { const hip = new THREE.Group(); hip.position.set(s * 0.11, 0.93, 0); const th = cap(0.085, 0.32, pants); th.position.y = -0.22; hip.add(th);
-      const knee = new THREE.Group(); knee.position.y = -0.45; hip.add(knee); const sh = cap(0.075, 0.3, pants); sh.position.y = -0.2; knee.add(sh);
-      const shoe = shadowy(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.09, 0.27), shoes)); shoe.position.set(0, -0.42, -0.05); knee.add(shoe); g.add(hip); return { hip, knee }; });
-    // 体 (ジャケット)・首・頭・髪
-    const torso = cap(0.17, 0.36, jacket); torso.scale.set(1.25, 1, 0.82); torso.position.y = 1.2; g.add(torso);
-    const belt = shadowy(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.07, 14), new THREE.MeshStandardMaterial({ color: '#1d1d1f', roughness: 0.5 }))); belt.scale.set(1.18, 1, 0.82); belt.position.y = 0.95; g.add(belt);
-    const neck = cap(0.055, 0.06, skin); neck.position.y = 1.5; g.add(neck);
-    const head = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 16), skin)); head.scale.set(1, 1.12, 1.05); head.position.y = 1.66; g.add(head);
-    const hair = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.132, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat)); hair.scale.set(1, 1.1, 1.08); hair.position.set(0, 1.68, 0.01); g.add(hair);
-    // うで: 右は銃を持つ・左はなぐる
-    const arm = (s) => { const sh = new THREE.Group(); sh.position.set(s * 0.26, 1.42, 0); const up = cap(0.06, 0.24, jacket); up.position.y = -0.15; sh.add(up);
-      const el = new THREE.Group(); el.position.y = -0.3; sh.add(el); const lo = cap(0.052, 0.22, jacket); lo.position.y = -0.13; el.add(lo); const hand = shadowy(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skin)); hand.position.y = -0.29; el.add(hand); g.add(sh); return { sh, el, hand }; };
-    const R_ = arm(1), L_ = arm(-1);
+    const g = new THREE.Group();
+    const jacket = new THREE.MeshStandardMaterial({ color, map: fabricTex.map, normalMap: fabricTex.normal, roughness: 0.82 });
+    const jacketDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.55), map: fabricTex.map, roughness: 0.85 });
+    const skin = skinOf(SKIN[seed % SKIN.length]), hair = hairOf(HAIR[(seed >>> 3) % HAIR.length]);
+    // ---- 体 (ジャケット・えり・ファスナー・ポケット・ベルト) ----
+    const body = seg();
+    body.add(GEO.torso, jacket, [0, 0, 0], [0, 0, 0], [1.08, 1, 0.74]);
+    body.add(GEO.torus, jacketDark, [0, 1.47, 0], [Math.PI / 2, 0, 0], [0.085, 0.07, 0.06]);                  // えり
+    body.add(GEO.box, metalMat, [0, 1.2, -0.143], [0.05, 0, 0], [0.008, 0.5, 0.006]);                       // ファスナー
+    for (const s of [-1, 1]) { body.add(GEO.box, jacketDark, [s * 0.1, 1.02, -0.128], [0.12, 0, 0], [0.085, 0.07, 0.012]); body.add(GEO.box, jacketDark, [s * 0.1, 1.05, -0.134], [0.12, 0, 0], [0.086, 0.012, 0.012]); } // ポケット
+    body.add(GEO.cyl, beltMat, [0, 0.93, 0], [0, 0, 0], [0.188, 0.045, 0.14]);
+    body.add(GEO.box, metalMat, [0, 0.93, -0.142], [0, 0, 0], [0.05, 0.035, 0.01]);                          // バックル
+    for (const s of [-1, 1]) body.add(GEO.ball, jacket, [s * 0.2, 1.415, 0], [0, 0, 0], [0.066, 0.058, 0.064]); // 肩
+    body.add(GEO.cyl, skin, [0, 1.535, 0], [0, 0, 0], [0.048, 0.07, 0.048]);                                  // 首
+    body.build(g);
+    // ---- 頭 (顔・目・まゆ・鼻・口・耳・髪) ----
+    const head = new THREE.Group(); head.position.y = 1.66; g.add(head);
+    const H = seg();
+    H.add(GEO.ball, skin, [0, 0, 0], [0, 0, 0], [0.112, 0.132, 0.12]);
+    H.add(GEO.ball, skin, [0, -0.058, -0.022], [0, 0, 0], [0.085, 0.06, 0.09]);                              // あご
+    for (const s of [-1, 1]) {
+      H.add(GEO.ballLo, scleraMat, [s * 0.04, 0.012, -0.1], [0, 0, 0], [0.019, 0.013, 0.012]);
+      H.add(GEO.ballLo, irisMat, [s * 0.04, 0.012, -0.111], [0, 0, 0], [0.0095, 0.0095, 0.004]);
+      H.add(GEO.box, hair, [s * 0.042, 0.04, -0.106], [0, 0, s * -0.12], [0.036, 0.008, 0.01]);            // まゆ
+      H.add(GEO.ballLo, skin, [s * 0.113, 0.0, 0.005], [0, 0, 0], [0.016, 0.03, 0.022]);                    // 耳
+    }
+    H.add(GEO.cone, skin, [0, -0.012, -0.122], [-Math.PI / 2 + 0.25, 0, 0], [0.016, 0.04, 0.016]);          // 鼻
+    H.add(GEO.box, lipMat, [0, -0.052, -0.108], [0, 0, 0], [0.038, 0.009, 0.008]);                          // 口
+    // 髪 (上と後ろ・前髪・横)
+    H.add(GEO.hairCap, hair, [0, 0.022, 0.006], [0.38, 0, 0], [0.122, 0.13, 0.13]);                      // 上 (前は額まで・後ろは下まで)
+    H.add(GEO.ball, hair, [0, -0.025, 0.058], [0, 0, 0], [0.112, 0.1, 0.075]);                             // 後ろ
+    for (let i = -2; i <= 2; i++) H.add(GEO.ballLo, hair, [i * 0.034, 0.085, -0.092], [0.5, 0, i * 0.15], [0.038, 0.026, 0.03]);  // 前髪
+    for (const s of [-1, 1]) H.add(GEO.ballLo, hair, [s * 0.105, 0.04, 0.015], [0, 0, 0], [0.025, 0.06, 0.065]);   // 横
+    H.build(head);
+    // ---- うで (肩 → ひじ → 手) ----
+    const arm = (s, fist) => {
+      const sh = new THREE.Group(); sh.position.set(s * 0.225, 1.42, 0); g.add(sh);
+      const up = seg(); up.add(GEO.cap(0.058, 0.2), jacket, [0, -0.14, 0]); up.build(sh);
+      const el = new THREE.Group(); el.position.y = -0.29; sh.add(el);
+      const lo = seg(); lo.add(GEO.cap(0.05, 0.19), jacket, [0, -0.12, 0]); lo.add(GEO.torus, jacketDark, [0, -0.235, 0], [Math.PI / 2, 0, 0], [0.05, 0.05, 0.05]); // そで口
+      addHand(lo, skin, -0.29, s, fist); lo.build(el);
+      return { sh, el };
+    };
+    const R_ = arm(1, true), L_ = arm(-1, true);
     R_.sh.rotation.x = -1.35; R_.el.rotation.x = -0.25; L_.sh.rotation.set(-1.15, 0, 0.55); L_.el.rotation.x = -0.75;
-    // 銃 (本体・銃身・弾倉・グリップ・照準)
-    const gun = new THREE.Group(); gun.position.set(0.2, 1.32, -0.42); g.add(gun);
-    const part = (geo, mat, x, y, z, rx = 0) => { const m = shadowy(new THREE.Mesh(geo, mat)); m.position.set(x, y, z); m.rotation.x = rx; gun.add(m); return m; };
-    part(new THREE.BoxGeometry(0.07, 0.11, 0.5), gunMetal, 0, 0, 0);
-    part(new THREE.CylinderGeometry(0.018, 0.018, 0.34, 10), gunMetal, 0, 0.02, -0.4, Math.PI / 2);
-    part(new THREE.BoxGeometry(0.05, 0.16, 0.07), gunGrip, 0, -0.12, 0.05, 0.2);
-    part(new THREE.BoxGeometry(0.045, 0.14, 0.06), gunGrip, 0, -0.1, 0.19, -0.25);
-    part(new THREE.BoxGeometry(0.03, 0.04, 0.12), gunMetal, 0, 0.08, -0.05);
-    part(new THREE.BoxGeometry(0.06, 0.09, 0.2), gunGrip, 0, -0.01, 0.32);
-    const tip = new THREE.Object3D(); tip.position.set(0, 0.02, -0.58); gun.add(tip);
+    // ---- 足 (もも → ひざ → すね → スニーカー) ----
+    const legs = [-1, 1].map((s) => {
+      const hip = new THREE.Group(); hip.position.set(s * 0.1, 0.92, 0); g.add(hip);
+      const th = seg(); th.add(GEO.thigh, pantsMat); th.build(hip);
+      const knee = new THREE.Group(); knee.position.y = -0.44; hip.add(knee);
+      const sh2 = seg(); sh2.add(GEO.shin, pantsMat);
+      sh2.add(GEO.box, soleMat, [0, -0.445, -0.045], [0, 0, 0], [0.11, 0.03, 0.29]);                         // くつ底
+      sh2.add(GEO.ball, shoeMat, [0, -0.41, -0.06], [0, 0, 0], [0.058, 0.05, 0.14]);                        // くつ
+      sh2.add(GEO.ball, shoeMat, [0, -0.39, 0.02], [0, 0, 0], [0.052, 0.06, 0.07]);
+      for (let i = 0; i < 3; i++) sh2.add(GEO.box, soleMat, [0, -0.37 - i * 0.012, -0.1 - i * 0.025], [0.5, 0, 0], [0.05, 0.005, 0.006]); // くつひも
+      sh2.build(knee);
+      return { hip, knee };
+    });
+    // ---- 銃 (本体・銃身・マズル・レール・照準・弾倉・グリップ・用心金・ストック) ----
+    const gun = new THREE.Group(); gun.position.set(0.17, 1.3, -0.42); g.add(gun);
+    const G = seg();
+    G.add(GEO.box, gunMetal, [0, 0, 0], [0, 0, 0], [0.065, 0.1, 0.42]);
+    G.add(GEO.box, gunMetal, [0, 0.062, -0.02], [0, 0, 0], [0.04, 0.022, 0.36]);                             // レール
+    for (let i = 0; i < 8; i++) G.add(GEO.box, gunGrip, [0, 0.075, -0.17 + i * 0.045], [0, 0, 0], [0.042, 0.008, 0.02]);
+    G.add(GEO.cyl, gunMetal, [0, 0.01, -0.36], [Math.PI / 2, 0, 0], [0.016, 0.3, 0.016]);                    // 銃身
+    G.add(GEO.cyl, gunGrip, [0, 0.01, -0.53], [Math.PI / 2, 0, 0], [0.026, 0.07, 0.026]);                    // マズル
+    G.add(GEO.box, gunAccent, [0, -0.005, -0.27], [0, 0, 0], [0.07, 0.07, 0.16]);                            // ハンドガード
+    G.add(GEO.box, gunGrip, [0, 0.095, 0.05], [0, 0, 0], [0.03, 0.04, 0.09]);                                // 照準
+    G.add(GEO.box, gunGrip, [0, -0.12, -0.03], [0.18, 0, 0], [0.045, 0.15, 0.065]);                          // 弾倉
+    G.add(GEO.box, gunGrip, [0, -0.1, 0.12], [-0.3, 0, 0], [0.042, 0.13, 0.055]);                            // グリップ
+    G.add(GEO.torus, gunMetal, [0, -0.07, 0.06], [0, Math.PI / 2, 0], [0.035, 0.03, 0.03]);                  // 用心金
+    G.add(GEO.box, gunAccent, [0, -0.01, 0.3], [0.05, 0, 0], [0.05, 0.09, 0.2]);                             // ストック
+    G.build(gun);
+    const tip = new THREE.Object3D(); tip.position.set(0, 0.01, -0.58); gun.add(tip);
     if (!isMe) g.add(nameSprite(name));
     scene.add(g);
     return { g, head, gun, tip, arm: R_.sh, punchArm: L_.sh, legs, L: L_, R: R_, walk: 0, prev: null };

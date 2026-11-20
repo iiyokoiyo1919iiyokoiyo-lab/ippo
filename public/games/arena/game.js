@@ -6,7 +6,7 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js';
+import { createGraphics } from './world.js?v=5';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
@@ -252,6 +252,10 @@ function frame() {
     camera.position.copy(pivot).addScaledVector(dir, Math.max(0.4, Math.min(dist, hit - 0.25)));
     if (camera.position.y < 0.45) camera.position.y = 0.45; // 地面の下には行かない
     camera.rotation.set(me.pitch, me.yaw, 0, 'YXZ');
+    if (location.hash === '#inspect') { // 確認用: 自分のキャラを前から近くで見る
+      camera.position.set(me.x - Math.sin(me.yaw) * 1.25 + Math.cos(me.yaw) * 0.35, me.y + curb + 1.55, me.z - Math.cos(me.yaw) * 1.25 - Math.sin(me.yaw) * 0.35);
+      camera.lookAt(me.x, me.y + curb + 1.35, me.z);
+    }
   }
   // ほかのプレイヤー (なめらかに追いかける)
   const k = 1 - Math.exp(-dt * 14);
