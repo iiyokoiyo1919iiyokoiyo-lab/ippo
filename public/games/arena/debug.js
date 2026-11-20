@@ -36,8 +36,9 @@ export class DebugPanel {
     for (const [k, v] of [['NPC の総数', `${n.total} (通行人 ${n.civilians}・警官 ${n.roles.police || 0}・隊員 ${n.roles.medic || 0})`], ['いまの事件', `${inc.length} 件`], ['パトカー出動中', `${d.services.police.filter((u) => u.state !== 'patrolling').length} / ${d.services.police.length}`], ['救急車出動中', `${d.services.ems.filter((a) => a.state !== 'available').length} / ${d.services.ems.length}`]]) { const r = E('div'); r.append(E('span', k), E('b', v)); sum.append(r); }
     el.append(sum);
     // パニックレベル (6×6。上が北 = z が小さい)
-    el.append(E('h4', 'パニックレベル (街を 6×6 に分けたエリア)'));
-    const grid = E('div', null, 'dbg-grid'), me = this.getPos(), G = 6, cell = (x) => Math.max(0, Math.min(G - 1, Math.floor((x + 69) / 23)));
+    el.append(E('h4', `パニックレベル (街を ${d.grid}×${d.grid} に分けたエリア)`));
+    const G = d.grid || 6, CW = (d.half * 2) / G, grid = E('div', null, 'dbg-grid'), me = this.getPos(), cell = (x) => Math.max(0, Math.min(G - 1, Math.floor((x + d.half) / CW)));
+    grid.style.gridTemplateColumns = `repeat(${G},1fr)`;
     for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) { const l = d.panic[i * G + j], c = E('div', String(l)); c.style.background = LCOL[l]; c.title = `${LEVEL[l]} (熱さ ${d.heat[i * G + j]})`; if (cell(me.x) === i && cell(me.z) === j) c.classList.add('me'); grid.append(c); }
     el.append(grid);
     const lg = E('div', null, 'dbg-legend'); LEVEL.forEach((t, l) => { const s = E('span', `${l} ${t}`); s.style.borderColor = LCOL[l]; lg.append(s); }); el.append(lg);

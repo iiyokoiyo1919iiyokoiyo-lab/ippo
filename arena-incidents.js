@@ -8,7 +8,7 @@
 // =====================================================================
 const M = require('./public/games/arena/arena-map.js');
 
-const GRID = 6, CELL = M.SIZE / GRID, MERGE_R = 22, MERGE_MS = 90000, MAX = 16;
+const GRID = 10, CELL = M.SIZE / GRID, MERGE_R = 22, MERGE_MS = 90000, MAX = 16;
 const SEV = { shots: 1, assault: 2, down: 2, injury: 3, robbery: 2, crash: 2, officer: 3, test: 3 };
 const HEAT = [0, 3, 9, 18, 32]; // この熱さ以上でレベル 1〜4
 const LEVEL_NAME = ['平常', '警戒', '不安', '混乱', 'パニック'];

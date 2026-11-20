@@ -17,7 +17,7 @@ const crypto = require('crypto');
 const Body = require('./arena-body');
 const M = require('./public/games/arena/arena-map.js');
 
-const BLOCK = 18, ROAD = 8, N = 5, INSET = 0.5;
+const BLOCK = 18, ROAD = 8, N = M.N, INSET = 0.5;
 // 行動の番号 (ブラウザに送る): 4 手を上げる・5 処置 (しゃがむ)・6 注意をうながす・7 運ぶ
 const MODE = { walking: 0, alert: 1, fleeing: 2, hiding: 3, surrender: 4, treat: 5, warn: 6, carry: 7 };
 const PERSONA = {
@@ -56,7 +56,9 @@ class NpcSystem {
     // 消えた点への参照を付け直す
     const re = new Map(nodes.map((n, k) => [k, n])); for (const n of this.nodes) n.nb = n.nb.map((k) => re.get(k)).filter((x) => x && x.nb.length);
   }
-  clear(a, b) { const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz); return M.rayWorld(this.map, [a.x, 0.6, a.z], [dx / L, 0, dz / L], L) >= L - 0.05; }
+  clear(a, b) { // 道がつながっているか (自動販売機は歩きながらよけるので、道を切らない)
+    if (!this.walkMap) this.walkMap = { solid: this.map.solid.filter((x) => x.kind !== 'vend') };
+    const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz); return M.rayWorld(this.walkMap, [a.x, 0.6, a.z], [dx / L, 0, dz / L], L) >= L - 0.05; }
   // 隠れる場所: ビル・壁の角のそば (歩道の上)。cap: 1 か所に隠れられる人数
   buildCover() {
     this.cover = [];

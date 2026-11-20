@@ -9,14 +9,14 @@
 //   ・エイムアシスト (スマホだけ・軽め): 撃つ / のぞくとき、照準のすぐ近くの相手へ少し寄せる
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=16';
+import { createGraphics } from './world.js?v=19';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
 import { NpcView } from './npcs.js?v=5';
 import { Sound } from './sound.js?v=4';
 import { Gore } from './gore.js?v=2';
 import { Settings } from './settings.js?v=3';
 import { VehicleView } from './vehicles.js?v=2';
-import { DebugPanel } from './debug.js?v=1';
+import { DebugPanel } from './debug.js?v=2';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)

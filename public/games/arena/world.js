@@ -19,7 +19,8 @@ import { SMAAPass } from './vendor/jsm/postprocessing/SMAAPass.js';
 import { Sky } from './vendor/jsm/objects/Sky.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
 
-const BLOCK = 18, ROAD = 8, N = 5, CURB = 0.15;
+const BLOCK = 18, ROAD = 8, CURB = 0.15;
+let N = 9; // ブロックの数 (arena-map.js の N。createGraphics で受けとる)
 const QUALITY = {
   low: { pr: 1, shadow: 0, bloom: false, ao: false, texSize: 256, props: 0.5 },
   medium: { pr: 1.5, shadow: 1024, bloom: true, ao: false, texSize: 512, props: 1 },
@@ -158,6 +159,9 @@ function makeInteriorMaterials(R) {
 
 // ---------- 描画のしくみ ----------
 export function createGraphics({ canvasEl, isTouch, map, A }) {
+  N = A.N;
+  const inParkBlock = (i, j) => i >= A.PARK.i0 && i <= A.PARK.i1 && j >= A.PARK.j0 && j <= A.PARK.j1;
+  const inHankaBlock = (i, j) => i >= A.HANKA.i0 && i <= A.HANKA.i1 && j >= A.HANKA.j0 && j <= A.HANKA.j1;
   let qName = (() => { try { return localStorage.getItem('arena_quality'); } catch { return null; } })();
   if (!QUALITY[qName]) qName = isTouch ? 'high' : 'ultra';
   const Q = QUALITY[qName];
@@ -172,7 +176,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   const R = rng(9137);
 
   // 空と太陽 (夕方の少し前・あたたかい光)
-  const sky = new Sky(); sky.scale.setScalar(1000); scene.add(sky);
+  const sky = new Sky(); sky.scale.setScalar(1000); sky.userData.keep = true; scene.add(sky);
   const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 24), THREE.MathUtils.degToRad(215));
   sky.material.uniforms.turbidity.value = 3.2; sky.material.uniforms.rayleigh.value = 2.4; sky.material.uniforms.mieCoefficient.value = 0.004; sky.material.uniforms.mieDirectionalG.value = 0.86;
   sky.material.uniforms.sunPosition.value.copy(sunDir);
@@ -199,10 +203,15 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   // 歩道 (ブロックごとに少し高く)・公園の草・白線・横断歩道
   const blockOrigin = (i) => -A.HALF + ROAD + i * (BLOCK + ROAD);
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (inParkBlock(i, j)) continue; // 大きな公園は、あとで草の地面をまとめて
     const geo = tiledBox(BLOCK, CURB, BLOCK, 2); const sw = receive(new THREE.Mesh(geo, [M.curb, M.curb, M.sidewalk, M.curb, M.curb, M.curb]));
     sw.position.set(blockOrigin(i) + BLOCK / 2, CURB / 2, blockOrigin(j) + BLOCK / 2); scene.add(sw);
   }
   for (const b of map.boxes.filter((x) => x.kind === 'grass')) {
+    if (b.bigpark) { // 大きな公園: 歩道と同じ高さの草の地面 (ふちは縁石)
+      const geo = tiledBox(b.w, CURB, b.d, 4), gm = receive(new THREE.Mesh(geo, [M.curb, M.curb, M.grass, M.curb, M.curb, M.curb])); gm.position.set(b.x, CURB / 2, b.z); scene.add(gm);
+      continue;
+    }
     const geo = new THREE.PlaneGeometry(b.w - 3, b.d - 3); geo.attributes.uv.array.forEach((v, i, arr) => { arr[i] = v * (b.w - 3) / 4; });
     const gm = receive(new THREE.Mesh(geo, M.grass)); gm.rotation.x = -Math.PI / 2; gm.position.set(b.x, CURB + 0.01, b.z); scene.add(gm);
   }
@@ -212,10 +221,11 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       const c = -A.HALF + ROAD / 2 + i * (BLOCK + ROAD);
       for (let t = -A.HALF + 1; t < A.HALF - 1; t += 3) {
         const local = ((t + A.HALF) % (BLOCK + ROAD)); if (local < ROAD + 1 || local > ROAD + BLOCK - 1) continue; // 交差点はぬかす
-        dash.push([c, t, 0], [t, c, Math.PI / 2]);
+        if (!A.inPark(c, t, 1)) dash.push([c, t, 0]); if (!A.inPark(t, c, 1)) dash.push([t, c, Math.PI / 2]); // 大きな公園の中には道路がない
       }
       for (let j = 0; j <= N; j++) { // 横断歩道 (交差点の 4 方向)
         const cz = -A.HALF + ROAD / 2 + j * (BLOCK + ROAD);
+        if (A.inPark(c, cz, 6)) continue;
         for (let s = -3; s <= 3; s += 1) { cross.push([c + s, cz + ROAD / 2 + 1.1, 0], [c + s, cz - ROAD / 2 - 1.1, 0], [c + ROAD / 2 + 1.1, cz + s, Math.PI / 2], [c - ROAD / 2 - 1.1, cz + s, Math.PI / 2]); }
       }
     }
@@ -224,6 +234,107 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     put(dash, 0.15, 1.5); put(cross, 0.5, 2.2);
   }
 
+
+  // ---------- 当たり判定の箱の近く (マス目で探す) ----------
+  const nearSolid = (x, z, m) => { const L = map.grid ? map.grid.get(Math.floor(x / 10) * 4096 + Math.floor(z / 10)) || [] : map.solid; return L.some((b) => Math.abs(x - b.x) < b.w / 2 + m && Math.abs(z - b.z) < b.d / 2 + m); };
+  // 大きな公園の小道 (まん中で十字・神社へ)
+  const PB = A.PARK_BOX, pcx = (PB.x0 + PB.x1) / 2, pcz = (PB.z0 + PB.z1) / 2;
+  const onPath = (x, z) => A.inPark(x, z) && (Math.abs(x - pcx) < 1.4 || Math.abs(z - pcz) < 1.4 || (Math.abs(x - (pcx + 16)) < 1.4 && z < pcz));
+  { const pathMat = new THREE.MeshStandardMaterial({ color: '#cbb994', roughness: 0.95 });
+    for (const [x, z, w, d] of [[pcx, pcz, 2.6, PB.z1 - PB.z0], [pcx, pcz, PB.x1 - PB.x0, 2.6], [pcx + 16, (PB.z0 + pcz) / 2, 2.6, pcz - PB.z0]]) { const m = receive(new THREE.Mesh(new THREE.PlaneGeometry(w, d), pathMat)); m.rotation.x = -Math.PI / 2; m.position.set(x, CURB + 0.012, z); scene.add(m); } }
+  // ---------- 大きな公園のもの (池・神社・鳥居・灯籠・噴水・ベンチ) と自動販売機 ----------
+  const stone = new THREE.MeshStandardMaterial({ color: '#a29d93', roughness: 0.9 }), water = new THREE.MeshStandardMaterial({ color: '#1f4d63', roughness: 0.05, metalness: 0.2, envMapIntensity: 1.4 });
+  const vermilion = new THREE.MeshStandardMaterial({ color: '#d9480f', roughness: 0.55 }), blackWood = new THREE.MeshStandardMaterial({ color: '#1f1b1a', roughness: 0.7 }), woodMat = new THREE.MeshStandardMaterial({ color: '#7b4b2a', roughness: 0.8 }), tileRoof = new THREE.MeshStandardMaterial({ color: '#3d4148', roughness: 0.6, metalness: 0.2 });
+  const glow = new THREE.MeshStandardMaterial({ color: '#fff3bf', emissive: '#ffd8a8', emissiveIntensity: 1.6 });
+  const put = (geo, mat, x, y, z, ry = 0, rx = 0, rz = 0) => { const m = shadowy(new THREE.Mesh(geo, mat)); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); scene.add(m); return m; };
+  const vendTex = (() => { const c = canvas(128, 256), g = c.getContext('2d'); g.fillStyle = '#f1f3f5'; g.fillRect(0, 0, 128, 256); g.fillStyle = '#111'; g.fillRect(10, 20, 108, 130);
+    for (let r2 = 0; r2 < 4; r2++) for (let k = 0; k < 6; k++) { g.fillStyle = ['#e03131', '#1971c2', '#2f9e44', '#f08c00', '#ae3ec9', '#0c8599'][(r2 * 6 + k * 5) % 6]; g.fillRect(16 + k * 17, 28 + r2 * 30, 11, 22); }
+    g.fillStyle = '#495057'; g.fillRect(30, 170, 68, 30); g.fillStyle = '#212529'; g.fillRect(20, 215, 88, 26); return tex(c, { repeat: false }); })();
+  const PARKS = {
+    pond(b) { const T = 0.6; for (const [x, z, w, d] of [[b.x, b.z - b.d / 2 + T / 2, b.w, T], [b.x, b.z + b.d / 2 - T / 2, b.w, T], [b.x - b.w / 2 + T / 2, b.z, T, b.d], [b.x + b.w / 2 - T / 2, b.z, T, b.d]]) put(new THREE.BoxGeometry(w, b.h, d), stone, x, b.h / 2, z);
+      const wt = receive(new THREE.Mesh(new THREE.PlaneGeometry(b.w - 2 * T, b.d - 2 * T), water)); wt.rotation.x = -Math.PI / 2; wt.position.set(b.x, b.h - 0.18, b.z); scene.add(wt);
+      for (let k = 0; k < 7; k++) put(new THREE.CylinderGeometry(0.35, 0.35, 0.02, 10), new THREE.MeshStandardMaterial({ color: '#2b8a3e', roughness: 0.7 }), b.x + (R() - 0.5) * (b.w - 3), b.h - 0.16, b.z + (R() - 0.5) * (b.d - 3)); }, // 蓮の葉
+    shrine(b) { put(new THREE.BoxGeometry(b.w + 1.2, 0.5, b.d + 1.2), stone, b.x, 0.25, b.z);
+      put(new THREE.BoxGeometry(b.w - 0.4, 2.4, b.d - 0.4), woodMat, b.x, 1.7, b.z);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) put(new THREE.CylinderGeometry(0.14, 0.14, 2.6, 10), vermilion, b.x + sx * (b.w / 2 - 0.15), 1.8, b.z + sz * (b.d / 2 - 0.15));
+      for (const s2 of [-1, 1]) put(new THREE.BoxGeometry(b.w + 1.6, 0.18, b.d / 2 + 1.1), tileRoof, b.x, 3.55, b.z + s2 * (b.d / 4 + 0.25), 0, s2 * 0.42); // 屋根 (切妻)
+      put(new THREE.BoxGeometry(b.w + 1.8, 0.2, 0.25), blackWood, b.x, 3.95, b.z); // 棟
+      put(new THREE.BoxGeometry(1.2, 0.7, 0.1), new THREE.MeshStandardMaterial({ color: '#c92a2a', roughness: 0.6 }), b.x, 2.6, b.z + b.d / 2 + 0.02); },
+    torii(b) { put(new THREE.CylinderGeometry(0.2, 0.24, b.h, 14), vermilion, b.x, b.h / 2, b.z); },
+    lantern(b) { put(new THREE.CylinderGeometry(0.28, 0.34, 0.3, 8), stone, b.x, 0.15, b.z); put(new THREE.CylinderGeometry(0.1, 0.12, 0.6, 8), stone, b.x, 0.6, b.z); put(new THREE.BoxGeometry(0.42, 0.34, 0.42), glow, b.x, 1.05, b.z); put(new THREE.ConeGeometry(0.42, 0.3, 4), stone, b.x, 1.36, b.z, Math.PI / 4); },
+    fountain(b) { put(new THREE.CylinderGeometry(b.w / 2, b.w / 2 + 0.1, b.h, 24), stone, b.x, b.h / 2, b.z); const wt = put(new THREE.CylinderGeometry(b.w / 2 - 0.2, b.w / 2 - 0.2, 0.05, 24), water, b.x, b.h - 0.05, b.z); wt.castShadow = false;
+      put(new THREE.CylinderGeometry(0.18, 0.25, 1.6, 12), stone, b.x, b.h + 0.6, b.z); put(new THREE.CylinderGeometry(0.6, 0.2, 0.25, 16), stone, b.x, b.h + 1.4, b.z); },
+    bench(b) { const along = b.w > b.d; put(new THREE.BoxGeometry(b.w, 0.07, b.d), woodMat, b.x, b.h, b.z); for (const s2 of [-1, 1]) put(new THREE.BoxGeometry(along ? 0.08 : b.w * 0.9, b.h, along ? b.d * 0.9 : 0.08), blackWood, b.x + (along ? s2 * (b.w / 2 - 0.15) : 0), b.h / 2, b.z + (along ? 0 : s2 * (b.d / 2 - 0.15))); },
+    vend(b) { const lines = Array.from({ length: N + 1 }, (_, i) => A.lineAt(i)), lx = lines.reduce((p2, c2) => (Math.abs(c2 - b.x) < Math.abs(p2 - b.x) ? c2 : p2)), sx = Math.sign(lx - b.x) || 1;
+      const front = new THREE.MeshStandardMaterial({ map: vendTex, emissive: '#ffffff', emissiveMap: vendTex, emissiveIntensity: 0.35, roughness: 0.4 }), body = new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.4, metalness: 0.3 });
+      const faces = [body, body, body, body, body, body]; faces[sx > 0 ? 0 : 1] = front; put(new THREE.BoxGeometry(b.w, b.h, b.d), faces, b.x, b.h / 2, b.z); },
+  };
+  // ---------- 繁華街: たて看板 (ネオン)・横の看板・赤ちょうちん・電柱と電線・入口のアーチ ----------
+  function decorateHanka() {
+    const WORDS = ['居酒屋', 'ラーメン', 'カラオケ', '焼肉', '寿司', 'BAR', '焼鳥', '麻雀', '喫茶', 'ゲーム', '漫画喫茶', '薬', 'ホテル', '餃子', 'うどん', 'そば'], COLS = ['#ff6b6b', '#ffd43b', '#4dabf7', '#69db7c', '#f783ac', '#ffa94d', '#e599f7'];
+    const vCache = new Map(), hCache = new Map();
+    const vSign = (k) => { if (vCache.has(k)) return vCache.get(k); const w = WORDS[k % WORDS.length], col = COLS[(k >> 2) % COLS.length], c = canvas(96, 384), g = c.getContext('2d');
+      g.fillStyle = '#16161c'; g.fillRect(0, 0, 96, 384); g.strokeStyle = col; g.lineWidth = 6; g.strokeRect(6, 6, 84, 372); g.fillStyle = col; g.shadowColor = col; g.shadowBlur = 10;
+      const ch = [...w], fs = Math.min(70, 340 / ch.length); g.font = `900 ${fs}px system-ui,sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; ch.forEach((t, i) => g.fillText(t, 48, 192 - ((ch.length - 1) / 2 - i) * fs * 1.02));
+      const t = tex(c, { repeat: false }), m = new THREE.MeshStandardMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 1.3, roughness: 0.5 }); vCache.set(k, m); return m; };
+    const hSign = (k) => { const key = (k + 3) % WORDS.length; if (hCache.has(key)) return hCache.get(key); const w = WORDS[key], bg = ['#c92a2a', '#1864ab', '#2b8a3e', '#5f3dc4', '#e8590c', '#212529'][key % 6], c = canvas(512, 96), g = c.getContext('2d');
+      g.fillStyle = bg; g.fillRect(0, 0, 512, 96); g.fillStyle = '#fff'; g.font = '900 60px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(w, 256, 52);
+      const t = tex(c, { repeat: false }), m = new THREE.MeshStandardMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.6, roughness: 0.5 }); hCache.set(key, m); return m; };
+    const dark = new THREE.MeshStandardMaterial({ color: '#2b2d31', roughness: 0.6 }), red = new THREE.MeshStandardMaterial({ color: '#e03131', emissive: '#ff6b6b', emissiveIntensity: 0.8, roughness: 0.6 });
+    const lines = Array.from({ length: N + 1 }, (_, i) => A.lineAt(i)), nl = (v) => lines.reduce((p2, c2) => (Math.abs(c2 - v) < Math.abs(p2 - v) ? c2 : p2));
+    for (const b of map.boxes) {
+      if (b.kind !== 'building' || b.district !== 'hanka') continue;
+      const lx = nl(b.x), lz = nl(b.z), useX = Math.abs(lx - b.x) - b.w / 2 < Math.abs(lz - b.z) - b.d / 2, s2 = useX ? Math.sign(lx - b.x) || 1 : Math.sign(lz - b.z) || 1;
+      const nx = useX ? s2 : 0, nz = useX ? 0 : s2, tx = useX ? 0 : 1, tz = useX ? 1 : 0, half = (useX ? b.w : b.d) / 2, len = useX ? b.d : b.w;
+      const fx = b.x + nx * half, fz = b.z + nz * half, top = (b.y0 || 0) + b.h, k = b.sign || 0;
+      // たて看板 (壁から直角に出る)
+      const Hs = Math.min(top - 4.6, 5.5); if (Hs > 1.5) for (const sd of (k & 2) ? [-1, 1] : [(k & 1) ? 1 : -1]) { // 1〜2 枚。壁から直角に出て、道の向きから読める
+        const off = (len / 2 - 0.6) * sd, m = vSign(k + (sd > 0 ? 7 : 0)), faces = [m, m, dark, dark, dark, dark];
+        const g2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, Hs, 0.8), faces); g2.position.set(fx + nx * 0.45 + tx * off, 4.4 + Hs / 2, fz + nz * 0.45 + tz * off); g2.rotation.y = Math.atan2(nx, nz); scene.add(g2); }
+      // 横の看板 (2 階の高さ)
+      { const m = hSign(k), g2 = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.7, 0.14), [dark, dark, dark, dark, m, dark]); g2.position.set(fx + nx * 0.08, 3.95, fz + nz * 0.08); g2.rotation.y = Math.atan2(nx, nz); scene.add(g2); }
+      // 赤ちょうちん
+      if ((k % 3) === 0) for (const sd of [-1, 1]) { const x = fx + nx * 0.35 + tx * sd * (len / 2 - 0.4), z = fz + nz * 0.35 + tz * sd * (len / 2 - 0.4); const l = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), red); l.scale.y = 1.45; l.position.set(x, 2.55, z); scene.add(l); const cp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 10), dark); cp.position.set(x, 2.89, z); scene.add(cp); }
+    }
+    // 電柱と電線
+    const poleMat = new THREE.MeshStandardMaterial({ color: '#8f8a80', roughness: 0.9 }), wireMat = new THREE.LineBasicMaterial({ color: '#15171a' }), byX = new Map();
+    for (const [x, z] of map.deco?.poles || []) { put(new THREE.CylinderGeometry(0.13, 0.16, 8.5, 10), poleMat, x, 4.25, z); put(new THREE.BoxGeometry(1.6, 0.1, 0.1), dark, x, 7.8, z); if (!byX.has(x)) byX.set(x, []); byX.get(x).push(z); }
+    const pts = [], sag = (t) => 7.75 - Math.sin(Math.PI * t) * 0.45;
+    for (const [x, zs] of byX) { zs.sort((a2, b2) => a2 - b2); for (let i = 0; i + 1 < zs.length; i++) { if (zs[i + 1] - zs[i] > 16) continue; for (const off of [-0.65, 0, 0.65]) for (let k = 0; k < 6; k++) { const t0 = k / 6, t1 = (k + 1) / 6; pts.push(x + off, sag(t0), zs[i] + (zs[i + 1] - zs[i]) * t0, x + off, sag(t1), zs[i] + (zs[i + 1] - zs[i]) * t1); } } } // たるんだ電線 3 本
+    if (pts.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); scene.add(new THREE.LineSegments(geo, wireMat)); }
+    // 入口のアーチ (繁華街)・鳥居の上の木 (公園)
+    for (const gt of map.deco?.gates || []) {
+      if (gt.hanka) { const c = canvas(512, 96), g = c.getContext('2d'); g.fillStyle = '#c92a2a'; g.fillRect(0, 0, 512, 96); g.fillStyle = '#ffe066'; g.font = '900 62px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('IppO 横丁', 256, 52);
+        const t = tex(c, { repeat: false }), sm = new THREE.MeshStandardMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: 0.9 }), rot = gt.rot || 0, ax = Math.cos(rot), az = -Math.sin(rot);
+        for (const sd of [-1, 1]) put(new THREE.CylinderGeometry(0.16, 0.16, gt.h, 10), dark, gt.x + ax * sd * gt.w / 2, gt.h / 2, gt.z + az * sd * gt.w / 2);
+        const bd = new THREE.Mesh(new THREE.BoxGeometry(gt.w + 0.4, 1.0, 0.2), [dark, dark, dark, dark, sm, sm]); bd.position.set(gt.x, gt.h - 0.3, gt.z); bd.rotation.y = rot; scene.add(bd); }
+      else { put(new THREE.BoxGeometry(gt.w + 1.4, 0.28, 0.5), blackWood, gt.x, gt.h + 0.1, gt.z); put(new THREE.BoxGeometry(gt.w + 0.8, 0.22, 0.32), vermilion, gt.x, gt.h - 0.15, gt.z); put(new THREE.BoxGeometry(gt.w + 0.4, 0.2, 0.26), vermilion, gt.x, gt.h - 0.8, gt.z); put(new THREE.BoxGeometry(0.5, 0.65, 0.08), blackWood, gt.x, gt.h - 0.45, gt.z + 0.15); }
+    }
+  }
+  // ---------- 動かないものを材質ごとにまとめる (ビル・歩道・家具・看板など。数千 → 数十回の描画に) ----------
+  function batchStatic() {
+    scene.updateMatrixWorld(true);
+    const buckets = new Map(), olds = [];
+    const addPart = (geo, mat, o) => { const key = mat.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : ''); if (!buckets.has(key)) buckets.set(key, { mat, cast: o.castShadow, recv: o.receiveShadow, list: [] }); buckets.get(key).list.push(geo); };
+    scene.traverse((o) => {
+      if (!o.isMesh || o.isInstancedMesh || o.userData.keep) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      if (mats.some((m) => m.transparent)) return;
+      let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      if (!g.attributes.uv) return;
+      g.applyMatrix4(o.matrixWorld);
+      if (!Array.isArray(o.material)) addPart(g, o.material, o);
+      else for (const gr of g.groups) { // 面ごとの材質: その面だけ切りだす
+        const sub = new THREE.BufferGeometry();
+        for (const k of ['position', 'normal', 'uv']) { const a = g.attributes[k]; sub.setAttribute(k, new THREE.BufferAttribute(a.array.slice(gr.start * a.itemSize, (gr.start + gr.count) * a.itemSize), a.itemSize)); }
+        addPart(sub, o.material[gr.materialIndex], o);
+      }
+      olds.push(o);
+    });
+    for (const o of olds) { o.parent.remove(o); o.geometry.dispose(); }
+    for (const b of buckets.values()) { const geo = mergeGeometries(b.list, false); for (const g of b.list) g.dispose(); if (!geo) continue; const m = new THREE.Mesh(geo, b.mat); m.castShadow = b.cast; m.receiveShadow = b.recv; m.matrixAutoUpdate = false; scene.add(m); }
+  }
   // ビル (外壁 4 種類 × 色)・屋上の機械・まわりの壁・木箱・車
   const PAL = { brick: ['#8d4a3a', '#a0573f', '#7a3f33', '#9b6b52'], concrete: ['#b7b2a8', '#9fa3a6', '#c4bdb0', '#8e9295'], glass: ['#5b6670', '#4a5560', '#6c7782'], plaster: ['#d9cdb4', '#c9b79c', '#e2d6c1', '#b9c3c9'] };
   const facadeCache = new Map();
@@ -277,6 +388,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       for (const sz of [-1, 1]) { const hl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.34), lightMat); hl.position.set(L / 2, 0.72, sz * W * 0.32); g.add(hl); const tl = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.3), tailMat); tl.position.set(-L / 2, 0.75, sz * W * 0.34); g.add(tl); }
       const bump = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.18, W * 0.98), chrome); bump.position.set(L / 2 + 0.02, 0.45, 0); g.add(bump);
       scene.add(g);
+    } else if (PARKS[b.kind]) { PARKS[b.kind](b);
     } else if (b.kind === 'crate' || b.kind === 'wall' || b.kind === 'fence') {
       const m = shadowy(new THREE.Mesh(tiledBox(b.w, b.h, b.d, b.kind === 'crate' ? Math.max(b.w, b.h) : 3), b.kind === 'crate' ? M.crate : M.concrete)); m.position.set(b.x, b.y0 + b.h / 2, b.z); scene.add(m);
     }
@@ -292,7 +404,9 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const hydMat = new THREE.MeshStandardMaterial({ color: '#b3261e', roughness: 0.5, metalness: 0.2 });
     const lights = [], trees = [], hyd = [];
     for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      if (inParkBlock(i, j)) continue;
       const x0 = blockOrigin(i), z0 = blockOrigin(j);
+      if (inHankaBlock(i, j)) { for (const [x, z, r] of [[x0 + 0.5, z0 + BLOCK / 2, Math.PI], [x0 + BLOCK - 0.5, z0 + BLOCK / 2, 0]]) lights.push([x, z, r]); continue; } // 繁華街: 木はなし
       const park = map.boxes.some((b) => b.kind === 'grass' && Math.abs(b.x - (x0 + BLOCK / 2)) < 1 && Math.abs(b.z - (z0 + BLOCK / 2)) < 1);
       for (const [x, z, r] of [[x0 + 0.5, z0 + BLOCK / 2, Math.PI], [x0 + BLOCK - 0.5, z0 + BLOCK / 2, 0], [x0 + BLOCK / 2, z0 + 0.5, Math.PI / 2], [x0 + BLOCK / 2, z0 + BLOCK - 0.5, -Math.PI / 2]]) lights.push([x, z, r]);
       if (!park) for (const [x, z] of [[x0 + 1.2, z0 + 4], [x0 + BLOCK - 1.2, z0 + BLOCK - 4], [x0 + 4, z0 + BLOCK - 1.2], [x0 + BLOCK - 4, z0 + 1.2]]) {
@@ -310,11 +424,23 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const leafGeo = new THREE.IcosahedronGeometry(1, 1); { const p = leafGeo.attributes.position; for (let i = 0; i < p.count; i++) { const s = 0.82 + R() * 0.36; p.setXYZ(i, p.getX(i) * s, p.getY(i) * s, p.getZ(i) * s); } leafGeo.computeVertexNormals(); }
     inst(new THREE.CylinderGeometry(0.13, 0.2, 2.6, 8), new THREE.MeshStandardMaterial({ color: '#5a4030', roughness: 0.95 }), trees, (o, [x, z]) => { o.position.set(x, CURB + 1.3, z); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1); });
     const leafMat = new THREE.MeshStandardMaterial({ color: '#3d6b2a', roughness: 0.9, flatShading: true });
+    for (const t of map.deco?.trees || []) trees.push(t); // 大きな公園の木
     const leafList = trees.flatMap(([x, z]) => [[x, z, 0], [x + 0.6, z + 0.3, 1], [x - 0.4, z - 0.5, 2]]);
     const lm = inst(leafGeo, leafMat, leafList, (o, [x, z, k]) => { const s = [1.5, 1.1, 1.2][k]; o.position.set(x, CURB + [3.4, 3.0, 3.8][k], z); o.scale.set(s, s * 0.9, s); o.rotation.set(R(), R(), 0); });
     const tc = new THREE.Color(); leafList.forEach((_, k) => { tc.setHSL(0.24 + R() * 0.07, 0.45 + R() * 0.2, 0.22 + R() * 0.1); lm.setColorAt(k, tc); });
     inst(new THREE.CylinderGeometry(0.13, 0.15, 0.7, 10), hydMat, hyd, (o, [x, z]) => { o.position.set(x, CURB + 0.35, z); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1); });
   }
+  // 桜 (大きな公園): 幹 + ピンクの花のかたまり 3 つ
+  { const sk = map.deco?.sakura || [];
+    if (sk.length) {
+      const o = new THREE.Object3D(), trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.2, 2.4, 8), new THREE.MeshStandardMaterial({ color: '#4a3328', roughness: 0.95 }), sk.length);
+      sk.forEach(([x, z], k) => { o.position.set(x, CURB + 1.2, z); o.rotation.set(0, 0, (R() - 0.5) * 0.2); o.scale.set(1, 1, 1); o.updateMatrix(); trunk.setMatrixAt(k, o.matrix); }); shadowy(trunk); scene.add(trunk);
+      const blob = new THREE.IcosahedronGeometry(1, 1), list = sk.flatMap(([x, z]) => [[x, z, 0], [x + 0.8, z + 0.2, 1], [x - 0.6, z - 0.6, 2], [x, z + 0.8, 3]]);
+      const pink = new THREE.InstancedMesh(blob, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, flatShading: true, emissive: '#f783ac', emissiveIntensity: 0.08 }), list.length), c = new THREE.Color();
+      list.forEach(([x, z, k], n) => { const s = [1.6, 1.1, 1.2, 1.0][k]; o.position.set(x, CURB + [3.0, 2.6, 3.3, 2.9][k], z); o.scale.set(s, s * 0.8, s); o.rotation.set(R(), R(), 0); o.updateMatrix(); pink.setMatrixAt(n, o.matrix); c.setHSL(0.94 + R() * 0.03, 0.75 + R() * 0.2, 0.7 + R() * 0.08); pink.setColorAt(n, c); });
+      shadowy(pink); scene.add(pink);
+    } }
+  decorateHanka(); // 繁華街の看板・ちょうちん・電柱と電線・入口のアーチ
   // 遠くのビル群 (かべの外。当たり判定なし・霧でかすむ)
   { const mat = new THREE.MeshStandardMaterial({ color: '#7d8590', roughness: 0.9 }), list = [];
     for (let k = 0; k < 90; k++) { const a = R() * Math.PI * 2, r = A.HALF + 30 + R() * 120; list.push([Math.cos(a) * r, Math.sin(a) * r, 6 + R() * 7, 6 + R() * 7, 10 + R() * 60]); }
@@ -335,9 +461,9 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
         vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0); float sway = sin(uWind * 1.7 + wp.x * 0.35 + wp.z * 0.21) * 0.5 + sin(uWind * 3.1 + wp.x * 0.9) * 0.25;
         transformed.x += sway * 0.06 * position.y * 3.0; transformed.z += sway * 0.03 * position.y * 3.0;`); };
     for (const b of map.boxes.filter((x) => x.kind === 'grass')) {
-      const W = b.w - 3.4, D = b.d - 3.4, n = Math.floor(W * D * 9), im = new THREE.InstancedMesh(bg, gmat, n), o = new THREE.Object3D(), c = new THREE.Color(); let k = 0;
+      const W = b.w - 3.4, D = b.d - 3.4, n = Math.floor(W * D * (b.bigpark ? 4 : 9)), im = new THREE.InstancedMesh(bg, gmat, n), o = new THREE.Object3D(), c = new THREE.Color(); let k = 0;
       for (let t = 0; t < n; t++) { const x = b.x + (R() - 0.5) * W, z = b.z + (R() - 0.5) * D;
-        if (map.solid.some((s) => Math.abs(x - s.x) < s.w / 2 + 0.2 && Math.abs(z - s.z) < s.d / 2 + 0.2)) continue;
+        if (nearSolid(x, z, 0.2) || onPath(x, z)) continue;
         o.position.set(x, CURB + 0.01, z); o.rotation.set(0, R() * 6.28, 0); const s = 0.7 + R() * 0.7; o.scale.set(s, s * (0.8 + R() * 0.5), s); o.updateMatrix(); im.setMatrixAt(k, o.matrix);
         c.setHSL(0.23 + R() * 0.06, 0.45 + R() * 0.2, 0.2 + R() * 0.1); im.setColorAt(k, c); k++; }
       im.count = k; im.frustumCulled = false; receive(im); scene.add(im);
@@ -349,10 +475,11 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     for (let k = 0; k < 7; k++) { const x = s2 * (0.3 + R() * 0.4), y = s2 * (0.3 + R() * 0.4), r = s2 * (0.12 + R() * 0.14), gr = pg.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, '#fff'); gr.addColorStop(0.75, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); pg.fillStyle = gr; pg.beginPath(); pg.arc(x, y, r, 0, 7); pg.fill(); }
     const pmat = new THREE.MeshStandardMaterial({ color: '#0d0e11', roughness: 0.03, metalness: 0, alphaMap: tex(pc, { srgb: false, repeat: false }), transparent: true, opacity: 0.92, depthWrite: false, envMapIntensity: 1.6, polygonOffset: true, polygonOffsetFactor: -2 });
     const pgeo = new THREE.PlaneGeometry(1, 1); let made = 0;
-    for (let t = 0; t < 200 && made < 28; t++) { const x = (R() - 0.5) * (A.SIZE - 4), z = (R() - 0.5) * (A.SIZE - 4);
+    for (let t = 0; t < 400 && made < 70; t++) { const x = (R() - 0.5) * (A.SIZE - 4), z = (R() - 0.5) * (A.SIZE - 4);
       if (curbAt(x, z) || map.solid.some((b) => Math.abs(x - b.x) < b.w / 2 + 1.5 && Math.abs(z - b.z) < b.d / 2 + 1.5)) continue;
       const pm = receive(new THREE.Mesh(pgeo, pmat)); pm.rotation.set(-Math.PI / 2, 0, R() * 6.28); pm.scale.set(1.5 + R() * 2.5, 1.2 + R() * 2, 1); pm.position.set(x, 0.006, z); scene.add(pm); made++; }
   }
+  batchStatic(); // 動かないものを材質ごとに 1 つにまとめる (描く回数を減らして軽く)
   // 街の映りこみ: 街のまん中の上から 6 方向を 1 回だけ撮って、ガラス・車・水たまりに映す
   if (Q.envCity) {
     const cubeRT = new THREE.WebGLCubeRenderTarget(Q.texSize >= 1024 ? 512 : 256, { type: THREE.HalfFloatType });
@@ -413,7 +540,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   // 影は自分のまわりだけ (太陽の影のカメラを、自分についていかせる)
   function follow(x, z) { if (!Q.shadow) return; const sx = Math.round(x / 4) * 4, sz = Math.round(z / 4) * 4; sun.target.position.set(sx, 0, sz); sun.position.set(sx + sunDir.x * 90, sunDir.y * 90, sz + sunDir.z * 90); }
   // 歩道の上は少し高い (見た目だけ。当たり判定は変えない)
-  function curbAt(x, z) { const lx = ((x + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD), lz = ((z + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD); return lx >= ROAD && lz >= ROAD && Math.abs(x) < A.HALF - 0.5 && Math.abs(z) < A.HALF - 0.5 ? CURB : 0; }
+  function curbAt(x, z) { if (A.inPark(x, z)) return CURB; const lx = ((x + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD), lz = ((z + A.HALF) % (BLOCK + ROAD) + (BLOCK + ROAD)) % (BLOCK + ROAD); return lx >= ROAD && lz >= ROAD && Math.abs(x) < A.HALF - 0.5 && Math.abs(z) < A.HALF - 0.5 ? CURB : 0; }
 
   // ---------- キャラクター (高精細: 顔・髪・服の細部・指まで。部位ごとに 1 つにまとめて軽く描く) ----------
   // 布・デニム・革・髪の質感 (色は材質の color でつける。絵は白に近い灰色)

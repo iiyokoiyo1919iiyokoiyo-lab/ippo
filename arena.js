@@ -13,7 +13,7 @@ const Body = require('./arena-body');
 const Config = require('./arena-config');
 const { NpcSystem } = require('./arena-npc');
 const { Traffic } = require('./arena-traffic');
-const { Incidents } = require('./arena-incidents');
+const { Incidents, GRID } = require('./arena-incidents');
 const { Services } = require('./arena-services');
 
 const MAX_HUMANS = 16, TICK_MS = 50, RESPAWN_MS = 3000, PROTECT_MS = 2000, HP = 100;
@@ -62,7 +62,7 @@ module.exports = function install(app, ctx) {
     for (let t = 0; t < 200 && k < CAR.civ; t++) {
       const n = traffic.nodes[crypto.randomInt(0, traffic.nodes.length)], dir = crypto.randomInt(0, 4), dx = [1, -1, 0, 0][dir], dz = [0, 0, 1, -1][dir], L = 9 + Math.random() * 8;
       const x = n.x + dx * L + dz * 1.9, z = n.z + dz * L - dx * 1.9;
-      if (Math.abs(x) > M.HALF - 3 || Math.abs(z) > M.HALF - 3 || used.some((b) => Math.hypot(b.x - x, b.z - z) < 7)) continue;
+      if (M.inPark(x, z, 3) || Math.abs(x) > M.HALF - 3 || Math.abs(z) > M.HALF - 3 || used.some((b) => Math.hypot(b.x - x, b.z - z) < 7)) continue;
       used.push({ x, z }); traffic.add('civ', x, z, Math.atan2(-dx, -dz), { color: ['#c92a2a', '#1864ab', '#2b8a3e', '#e67700', '#212529', '#862e9c'][k] }); k++;
     } }
   const cash = new Map(); let cashSeq = 0;
@@ -194,7 +194,11 @@ module.exports = function install(app, ctx) {
         fire(b, o, d.map((v) => v / dl), BOT_DMG);
       }
     } else {
-      if (!b.goal) { const nb = map.nodes.filter((n) => Math.abs(n.i - b.node.i) + Math.abs(n.j - b.node.j) === 1); b.goal = nb[crypto.randomInt(0, nb.length)]; }
+      if (!b.goal) { // 広い街: たいてい (7 割) はいちばん近い人間のほうへ向かう (出会えるように)。残りは気ままに
+        const nb = map.nodes.filter((n) => Math.abs(n.i - b.node.i) + Math.abs(n.j - b.node.j) === 1), hs = humans().filter((h) => h.alive);
+        if (!nb.length) { b.node = map.nodes.reduce((p2, n) => (dist2(n, b) < dist2(p2, b) ? n : p2)); }
+        else if (hs.length && Math.random() < 0.7) { const h = hs.reduce((p2, q) => (dist2(q, b) < dist2(p2, b) ? q : p2)); b.goal = nb.reduce((p2, n) => (dist2(n, h) < dist2(p2, h) ? n : p2)); }
+        else b.goal = nb[crypto.randomInt(0, nb.length)]; }
       const dx = b.goal.x - b.x, dz = b.goal.z - b.z, L = Math.hypot(dx, dz);
       if (L < 0.8) { b.node = b.goal; b.goal = null; }
       else { const s = Math.min(L, 4.5 * dt); b.x += (dx / L) * s; b.z += (dz / L) * s; b.yaw = Math.atan2(-dx, -dz); }
@@ -272,13 +276,13 @@ module.exports = function install(app, ctx) {
   }
   // ---------- デバッグ (管理者) ----------
   function debugState() {
-    return { npc: npcs.debug(), panic: incidents.levels(), heat: [...incidents.heat].map((h) => +h.toFixed(1)), incidents: incidents.debug(), services: services.debug(),
+    return { grid: GRID, half: M.HALF, npc: npcs.debug(), panic: incidents.levels(), heat: [...incidents.heat].map((h) => +h.toFixed(1)), incidents: incidents.debug(), services: services.debug(),
       vehicles: [...traffic.vehicles.values()].map((v) => ({ id: v.id, kind: v.kind, x: Math.round(v.x), z: Math.round(v.z), sp: +v.speed.toFixed(1), hidden: v.hidden, driver: v.driver ? players.get(v.driver)?.name || v.driver : '' })), tickMs: +tickMs.toFixed(2), humans: humans().length };
   }
   function debugCmd(p, m) {
     const at = (x, z) => ({ x: Number.isFinite(Number(x)) ? Number(x) : p.x, z: Number.isFinite(Number(z)) ? Number(z) : p.z });
     if (m.k === 'panic' || m.k === 'random') {
-      const pts = m.k === 'panic' ? [at(m.x, m.z)] : Array.from({ length: 3 }, () => { const n = traffic.nodes[crypto.randomInt(0, traffic.nodes.length)]; return { x: n.x + (Math.random() - 0.5) * 10, z: n.z + (Math.random() - 0.5) * 10 }; });
+      const pts = m.k === 'panic' ? [at(m.x, m.z)] : Array.from({ length: 3 }, () => { const n = traffic.open[crypto.randomInt(0, traffic.open.length)]; return { x: n.x + (Math.random() - 0.5) * 10, z: n.z + (Math.random() - 0.5) * 10 }; });
       for (const q of pts) { incidents.report('test', q.x, q.z); for (let i = 0; i < 3; i++) npcs.emit('shot', q.x, q.z); npcs.emit('scream', q.x, q.z); all({ t: 'shot', sid: 'sys', w: 'rifle', o: [q.x, 2, q.z], e: [q.x, 6, q.z], hit: false }); }
     } else if (m.k === 'injure') { // テスト: 近くの通行人を行動不能にする (救急が来る)
       const q = at(m.x, m.z); let best = null, bd = 40 * 40;

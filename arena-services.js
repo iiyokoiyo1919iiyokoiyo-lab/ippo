@@ -14,14 +14,14 @@
 // =====================================================================
 const Body = require('./arena-body');
 
-const POLICE_UNITS = 3, AMBULANCES = 2;
+const POLICE_UNITS = 5, AMBULANCES = 3; // 広い街 (9×9 ブロック) なので多め
 const rand = (a, b) => a + Math.random() * (b - a);
 
 class Services {
   constructor({ npcs, traffic, incidents, cfg, send }) {
     Object.assign(this, { npcs, traffic, incidents, cfg, send });
     this.police = []; this.ems = []; this.log = [];
-    const pick = () => this.traffic.nodes[Math.floor(Math.random() * this.traffic.nodes.length)];
+    const pick = () => this.traffic.open[Math.floor(Math.random() * this.traffic.open.length)];
     for (let k = 0; k < POLICE_UNITS; k++) {
       const n = pick(), v = this.traffic.add('police', n.x, n.z, 0, { color: '#f8f9fa' });
       const u = { id: 'P' + (k + 1), v, crew: [], state: 'patrolling', inc: null, at: 0, slot: 0 };
@@ -43,7 +43,7 @@ class Services {
   board(u, n) { n.hidden = true; n.x = u.v.x; n.z = u.v.z; n.mode = 'walking'; }
   // 降りる: 車の左右のドアから (右 = (-fz, fx))
   unboard(u, n, k) { const fx = -Math.sin(u.v.yaw), fz = -Math.cos(u.v.yaw), side = k ? 1 : -1; n.hidden = false; n.x = u.v.x - fz * side * 1.6 + fx * 0.4; n.z = u.v.z + fx * side * 1.6 + fz * 0.4; n.mode = 'walking'; n.y = 0; }
-  patrol(u) { const n = this.traffic.nodes[Math.floor(Math.random() * this.traffic.nodes.length)]; this.traffic.plan(u.v, n.x, n.z); u.v.siren = false; u.v.lights = false; }
+  patrol(u) { const n = this.traffic.open[Math.floor(Math.random() * this.traffic.open.length)]; this.traffic.plan(u.v, n.x, n.z); u.v.siren = false; u.v.lights = false; }
   // 遠い車は簡易処理 (まわりを見ない)
   far(v, players) { for (const p of players) if ((p.x - v.x) ** 2 + (p.z - v.z) ** 2 < 120 * 120) return false; return true; }
   obstacles(v, players) {
@@ -84,7 +84,7 @@ class Services {
   // 止める場所: 事件のそばの道路。何台目かで前後にずらす
   parkSpot(e, slot) {
     const p = this.traffic.roadPoint(e.x, e.z), along = slot === 0 ? 0 : slot === 1 ? 8 : -8;
-    const onVertical = this.traffic.nodes.some((n) => Math.abs(n.x - p.x) < 0.01); // x が道の線の上 → z の向きにずらす
+    const onVertical = p.edge[0].i === p.edge[1].i; // 縦の道 → z の向きにずらす
     return onVertical ? { x: p.x, z: p.z + along } : { x: p.x + along, z: p.z };
   }
   // ---------- 警察 ----------

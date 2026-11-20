@@ -8,7 +8,7 @@
 // =====================================================================
 const M = require('./public/games/arena/arena-map.js');
 
-const BLOCK = 18, ROAD = 8, N = 5, STEP = BLOCK + ROAD, LANE = 1.9;
+const BLOCK = 18, ROAD = 8, N = M.N, STEP = BLOCK + ROAD, LANE = 1.9;
 const line = (i) => -M.HALF + ROAD / 2 + i * STEP;
 const KIND = { civ: 0, police: 1, ambulance: 2 };
 const LEN = { civ: 1.35, police: 1.4, ambulance: 1.75 }; // 当たりの円 3 つの間かく (前後)
@@ -21,23 +21,30 @@ class Traffic {
   constructor(map) {
     this.map = map; this.vehicles = new Map(); this.seq = 0;
     // 止まっている車 (道ばたの車も乗れる車。動いていない車を「よける車」として使う)
-    this.nodes = []; for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) this.nodes.push({ i, j, x: line(i), z: line(j) });
+    this.nodes = []; for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) this.nodes.push({ i, j, x: line(i), z: line(j), nb: [] });
+    // 通れる道 (大きな公園の中の道路はない)
+    this.edges = [];
+    for (const a of this.nodes) for (const [di, dj] of [[1, 0], [0, 1]]) { const b = this.node(a.i + di, a.j + dj); if (b === a || a.i + di > N || a.j + dj > N || !M.roadOpen(a, b)) continue; a.nb.push(b); b.nb.push(a); this.edges.push([a, b]); }
+    this.open = this.nodes.filter((n) => n.nb.length);
   }
   node(i, j) { return this.nodes[clamp(i, 0, N) * (N + 1) + clamp(j, 0, N)]; }
-  nearestNode(x, z) { return this.node(Math.round((x - line(0)) / STEP), Math.round((z - line(0)) / STEP)); }
-  // いちばん近い道路のまん中の線の上の点
+  nearestNode(x, z) { let b = this.open[0], bd = 1e9; for (const n of this.open) { const d = (n.x - x) ** 2 + (n.z - z) ** 2; if (d < bd) { bd = d; b = n; } } return b; }
+  // いちばん近い「通れる道路」のまん中の線の上の点 (どの区間か: edge)
   roadPoint(x, z) {
-    const i = clamp(Math.round((x - line(0)) / STEP), 0, N), j = clamp(Math.round((z - line(0)) / STEP), 0, N);
-    const a = { x: line(i), z: clamp(z, line(0), line(N)) }, b = { x: clamp(x, line(0), line(N)), z: line(j) };
-    return Math.hypot(a.x - x, a.z - z) < Math.hypot(b.x - x, b.z - z) ? a : b;
+    let best = null, bd = 1e9;
+    for (const [a, b] of this.edges) {
+      const ex = b.x - a.x, ez = b.z - a.z, L2 = ex * ex + ez * ez, t = clamp(((x - a.x) * ex + (z - a.z) * ez) / L2, 0, 1), px = a.x + ex * t, pz = a.z + ez * t, d = (px - x) ** 2 + (pz - z) ** 2;
+      if (d < bd) { bd = d; best = { x: px, z: pz, edge: [a, b] }; }
+    }
+    return best;
   }
-  // 交差点の道順 (L 字。たまに先に縦)
-  nodePath(a, b, zFirst = Math.random() < 0.5) {
-    const out = [a]; let i = a.i, j = a.j;
-    const stepI = () => { while (i !== b.i) { i += Math.sign(b.i - i); out.push(this.node(i, j)); } };
-    const stepJ = () => { while (j !== b.j) { j += Math.sign(b.j - j); out.push(this.node(i, j)); } };
-    if (zFirst) { stepJ(); stepI(); } else { stepI(); stepJ(); }
-    return out;
+  // 交差点の道順: 通れる道だけで、いちばん近い道 (同じ長さなら毎回少しちがう道)
+  nodePath(a, b) {
+    if (a === b) return [a];
+    const prev = new Map([[a, null]]); let q = [a];
+    while (q.length && !prev.has(b)) { const nq = []; for (const n of q) for (const m of [...n.nb].sort(() => Math.random() - 0.5)) if (!prev.has(m)) { prev.set(m, n); nq.push(m); } q = nq; }
+    if (!prev.has(b)) return [a];
+    const out = []; for (let n = b; n; n = prev.get(n)) out.unshift(n); return out;
   }
   // 道順 → 走る点 (左の車線)。止まっている車があれば、反対の車線へよける点を足す
   waypoints(from, pts) {
@@ -65,8 +72,9 @@ class Traffic {
   }
   // (x, z) から (tx, tz) の近くの道路の点まで
   plan(v, tx, tz) {
-    const dest = this.roadPoint(tx, tz), a = this.nearestNode(v.x, v.z), b = this.nearestNode(dest.x, dest.z);
-    const nodes = this.nodePath(a, b);
+    const dest = this.roadPoint(tx, tz), a = this.nearestNode(v.x, v.z);
+    // 行き先の区間の両はしのうち、近いほうの交差点まで → そこから行き先へ
+    const [e0, e1] = dest.edge, p0 = this.nodePath(a, e0), p1 = this.nodePath(a, e1), nodes = p0.length <= p1.length ? p0 : p1;
     // 最後の交差点と行き先が同じ道の上にあるように (ちがえば 1 つ手前の交差点で曲がる)
     const pts = nodes.map((n) => ({ x: n.x, z: n.z }));
     pts.push({ x: dest.x, z: dest.z, end: true });
@@ -126,6 +134,6 @@ class Traffic {
   // [id, x, z, yaw, 速さ, flags (1: 見えない・2: サイレン・4: 赤色灯), 運転している人]
   snapshot() { const out = []; for (const v of this.vehicles.values()) out.push([v.id, +v.x.toFixed(2), +v.z.toFixed(2), +v.yaw.toFixed(3), +v.speed.toFixed(1), (v.hidden ? 1 : 0) | (v.siren ? 2 : 0) | (v.lights ? 4 : 0), v.driver || 0]); return out; }
   // 端の道 (マップから出入りする場所): いちばん近い外周の交差点
-  edgeNode(x, z) { let best = null, bd = 1e9; for (const n of this.nodes) { if (n.i !== 0 && n.i !== N && n.j !== 0 && n.j !== N) continue; const d = (n.x - x) ** 2 + (n.z - z) ** 2; if (d < bd) { bd = d; best = n; } } return best; }
+  edgeNode(x, z) { let best = null, bd = 1e9; for (const n of this.open) { if (n.i !== 0 && n.i !== N && n.j !== 0 && n.j !== N) continue; const d = (n.x - x) ** 2 + (n.z - z) ** 2; if (d < bd) { bd = d; best = n; } } return best; }
 }
 module.exports = { Traffic, KIND, LANE, line, N, CAR_R, DIM };
