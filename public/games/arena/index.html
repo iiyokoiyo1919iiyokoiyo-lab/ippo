@@ -45,10 +45,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0b0d1a;color:var(--in
 body:not(.is-touch) .touch{display:none!important}
 #stick{position:fixed;left:18px;bottom:calc(70px + env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);z-index:8;touch-action:none}
 #stick i{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
-#fire,#jump,#reload,#punch{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
+#fire,#jump,#reload,#punch,#weapon,#scope{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
 #fire{right:22px;bottom:calc(84px + env(safe-area-inset-bottom));width:86px;height:86px;background:rgba(255,107,107,.55);font-size:15px}
 #jump{right:122px;bottom:calc(70px + env(safe-area-inset-bottom));width:60px;height:60px;background:rgba(255,255,255,.18);font-size:12px}
 #punch{right:126px;bottom:calc(150px + env(safe-area-inset-bottom));width:66px;height:66px;background:rgba(255,146,43,.55);font-size:13px}
+#weapon{right:126px;bottom:calc(228px + env(safe-area-inset-bottom));width:56px;height:56px;background:rgba(255,255,255,.18);font-size:12px}
+#scope{right:36px;bottom:calc(250px + env(safe-area-inset-bottom));width:52px;height:52px;background:rgba(116,192,252,.35);font-size:10px}
+/* スコープ: まわりは黒・まん中に十字 */
+#scopeov{position:fixed;inset:0;z-index:4;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent min(34vw,34vh),rgba(0,0,0,.92) calc(min(34vw,34vh) + 2px))}
+#scopeov i{position:absolute;left:50%;top:50%;width:min(68vw,68vh);height:min(68vw,68vh);transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 40px rgba(0,0,0,.8);background:linear-gradient(#000,#000) center/1px 100% no-repeat,linear-gradient(#000,#000) center/100% 1px no-repeat}
+body.scoped #scopeov{display:block} body.scoped #cross{display:none}
 #reload{right:36px;bottom:calc(186px + env(safe-area-inset-bottom));width:52px;height:52px;background:rgba(255,255,255,.18);font-size:11px}
 @media (prefers-reduced-motion:reduce){#feed div,#hitmark.on{animation:none}}
 /* 設定 */
@@ -80,6 +86,9 @@ body:not(.is-touch) .touch{display:none!important}
 <div class="touch" id="jump">ジャンプ</div>
 <div class="touch" id="reload">リロード</div>
 <div class="touch" id="punch">なぐる</div>
+<div class="touch" id="weapon">武器</div>
+<div class="touch" id="scope">スコープ</div>
+<div id="scopeov" aria-hidden="true"><i></i></div>
 <div id="center"><div>
   <h1>シティバトル</h1>
   <p>街じゅうのプレイヤーと撃ちあうバトル。<br>たおした数をきそおう！ やられても 3 秒で復活します。</p>
@@ -88,6 +97,6 @@ body:not(.is-touch) .touch{display:none!important}
   <button class="btn" id="start" disabled>じゅんび中…</button>
 </div></div>
 <script src="arena-map.js?v=1"></script>
-<script type="module" src="game.js?v=15"></script>
+<script type="module" src="game.js?v=16"></script>
 </body>
 </html>

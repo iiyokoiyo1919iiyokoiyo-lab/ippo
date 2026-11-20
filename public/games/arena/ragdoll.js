@@ -37,7 +37,7 @@ export class Ragdoll {
     const hitY = head ? P[J.head].y : P[J.chest].y;
     P.forEach((p, i) => { const k = Math.max(0, 1 - Math.abs(p.y - hitY) / 1.4); const kick = d.clone().multiplyScalar(f * (0.25 + k)); this.q[i].addScaledVector(kick, -STEP); });
     this.q[J.kneeL].y += 0.02; this.q[J.kneeR].y += 0.02; // ひざが少し先に落ちる
-    model.gun.visible = false; // 銃は手から離れる
+    model.gun.visible = false; if (model.sniper) model.sniper.visible = false; // 銃は手から離れる
     model.ragdoll = this;
   }
   // 苦しむ: level 0 (なし)〜1 (強い)。体を丸める・傷口を押さえる・寝返り・手をのばす・足をばたつかせる

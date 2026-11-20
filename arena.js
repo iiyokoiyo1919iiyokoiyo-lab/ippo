@@ -17,6 +17,12 @@ const MAX_HUMANS = 16, TICK_MS = 50, RESPAWN_MS = 3000, PROTECT_MS = 2000, HP = 
 const FIRE_MS = 130, RANGE = 90, DMG = { body: 22, head: 45 }, BOT_DMG = { body: 12, head: 24 };
 // 被弾の衝撃 (転倒するかどうか。arena-config の downImpact 以上で転倒): 体 18・頭 40・パンチ 34。ボットは弱め
 const IMPACT = { body: 18, head: 40 }, BOT_IMPACT = { body: 10, head: 26 }, PUNCH_IMPACT = 34;
+// 武器: ライフル (連射) と スナイパー (1 発が重い・遠くまで)。連射の間かく・ダメージ・衝撃・届く距離はサーバーが決める
+const WEAPONS = {
+  rifle: { ms: FIRE_MS, dmg: DMG, imp: IMPACT, range: RANGE },
+  sniper: { ms: 1300, dmg: { body: 75, head: 200 }, imp: { body: 60, head: 95 }, range: 220 },
+};
+const SWITCH_MS = 450; // 持ちかえてから撃てるまで
 const BOTS_MAX = process.env.ARENA_BOTS != null ? Math.max(0, Number(process.env.ARENA_BOTS) || 0) : 3; // テスト用: ARENA_BOTS=0 でボットなし
 const PUNCH = { range: 2.4, cos: Math.cos((55 * Math.PI) / 180), dmg: 35, ms: 600, kb: 7 }; // なぐる: 前 2.4m・左右 55° いないの相手に 35 ダメージ + ふっとばし
 const MAX_SPEED = 9.5; // 走る速さ (8) + ゆとり
@@ -35,7 +41,7 @@ module.exports = function install(app, ctx) {
   const pubCfg = () => ({ ...cfg });
   const nameOf = (uid) => { const u = db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(uid); return u ? String(u.display_name || u.username).slice(0, 20) : '???'; };
   const humans = () => [...players.values()].filter((p) => !p.bot);
-  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths });
+  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths, w: p.w || 'rifle' });
   const send = (p, m) => { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(m)); };
   const all = (m) => { const s = JSON.stringify(m); for (const p of players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(s); };
   const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
@@ -57,8 +63,8 @@ module.exports = function install(app, ctx) {
 
   // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近いプレイヤーに当たる
   // 撃つ: o (撃った位置) から d (向き) へ。壁より手前のいちばん近い相手 (プレイヤー・通行人) に当たる
-  function fire(p, o, d, dmgTable) {
-    const wallT = M.rayWorld(map, o, d, RANGE);
+  function fire(p, o, d, dmgTable, weapon = 'rifle') {
+    const W = WEAPONS[weapon] || WEAPONS.rifle, wallT = M.rayWorld(map, o, d, W.range);
     let hit = null;
     for (const q of players.values()) {
       if (q === p || !q.alive || q.protectUntil > Date.now()) continue;
@@ -67,14 +73,14 @@ module.exports = function install(app, ctx) {
     }
     for (const n of npcs.targets()) { const r = M.rayPlayer(o, d, Body.isDown(n.body) ? { x: n.x, y: -1.2, z: n.z } : n); if (r && r.t < wallT && (!hit || r.t < hit.t)) hit = { ...r, q: n, npc: true }; }
     const t = hit ? hit.t : wallT, e = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
-    all({ t: 'shot', sid: p.sid, o: o.map((v) => +v.toFixed(2)), e: e.map((v) => +v.toFixed(2)), hit: !!hit });
+    all({ t: 'shot', sid: p.sid, w: weapon, o: o.map((v) => +v.toFixed(2)), e: e.map((v) => +v.toFixed(2)), hit: !!hit });
     npcs.emit('shot', p.x, p.z); npcs.emit('impact', e[0], e[2]); // 銃声と着弾は、まわりの通行人に伝わる
     if (!hit) return;
-    const imp = dmgTable === BOT_DMG ? BOT_IMPACT : IMPACT;
-    damage(p, hit.q, hit.head ? dmgTable.head : dmgTable.body, { head: hit.head, impact: hit.head ? imp.head : imp.body, dir: d.map((v) => +v.toFixed(3)), npc: hit.npc });
+    const imp = dmgTable === BOT_DMG ? BOT_IMPACT : W.imp;
+    damage(p, hit.q, hit.head ? dmgTable.head : dmgTable.body, { head: hit.head, impact: hit.head ? imp.head : imp.body, dir: d.map((v) => +v.toFixed(3)), npc: hit.npc, weapon });
   }
   // 当たったとき: 体の状態 (arena-body.js) で、硬直・転倒・行動不能を決める。プレイヤーも通行人も同じ
-  function damage(p, q, dmg, { head = false, melee = false, kb = null, impact = 0, dir = null, npc = false } = {}) {
+  function damage(p, q, dmg, { head = false, melee = false, kb = null, impact = 0, dir = null, npc = false, weapon = 'rifle' } = {}) {
     const now = Date.now();
     if (npc) {
       const res = npcs.hit(q, { dmg, impact, dir, from: { x: p.x, z: p.z } });
@@ -89,7 +95,7 @@ module.exports = function install(app, ctx) {
     npcs.emit(res === 'stagger' ? 'hit' : 'down', q.x, q.z);
     if (res === 'incap') {
       q.alive = false; q.deaths++; p.kills++; q.respawnAt = now + RESPAWN_MS;
-      all({ t: 'kill', killer: p.sid, victim: q.sid, head, melee, score: [pub(p), pub(q)] });
+      all({ t: 'kill', killer: p.sid, victim: q.sid, head, melee, w: melee ? 'punch' : weapon, score: [pub(p), pub(q)] });
     }
   }
   // なぐる: 前にいる、いちばん近い相手 (壁ごしはだめ)。当たると相手をふっとばす
@@ -191,7 +197,7 @@ module.exports = function install(app, ctx) {
     spawn(p);
     npcs.sync([...players.values()].map((q) => ({ x: q.x, z: q.z })));
     p.admin = isAdmin(user);
-    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
+    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, weapons: Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, { ms: w.ms, dmg: w.dmg, range: w.range }])), switchMs: SWITCH_MS, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
     all({ t: 'join', p: pub(p) });
     console.log(`[arena] @${user.username} が入った (人間 ${humans().length} 人)`);
     ws.on('message', (raw) => {
@@ -214,14 +220,17 @@ module.exports = function install(app, ctx) {
         console.log(`[arena] 設定を変更: ${JSON.stringify(Config.sanitize(m.patch))}`);
       } else if (m.t === 'punch' && p.alive && Body.canAct(p.body)) {
         punch(p);
+      } else if (m.t === 'weapon' && WEAPONS[m.w] && m.w !== p.w) { // 武器の持ちかえ (みんなに知らせる)
+        p.w = m.w; p.switchAt = now; all({ t: 'weapon', sid: p.sid, w: p.w });
       } else if (m.t === 'shoot' && p.alive && Body.canAct(p.body)) {
-        if (now - (p.lastShot || 0) < FIRE_MS - 20) return; p.lastShot = now;
+        const W = WEAPONS[p.w || 'rifle'];
+        if (now - (p.lastShot || 0) < W.ms - 20 || now - (p.switchAt || 0) < SWITCH_MS - 20) return; p.lastShot = now;
         const o = Array.isArray(m.o) ? m.o.map(Number) : [], d = Array.isArray(m.d) ? m.d.map(Number) : [];
         if (o.length !== 3 || d.length !== 3 || ![...o, ...d].every(Number.isFinite)) return;
         if (Math.hypot(o[0] - p.x, o[1] - (p.y + 1.4), o[2] - p.z) > 2.5) return; // 自分の体から撃つ
         const L = Math.hypot(...d); if (L < 0.5) return;
         p.protectUntil = 0; // 撃ったら無敵は終わり
-        fire(p, o, d.map((v) => v / L), DMG);
+        fire(p, o, d.map((v) => v / L), W.dmg, p.w || 'rifle');
       }
     });
     ws.on('close', () => {

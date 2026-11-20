@@ -43,9 +43,9 @@ export class Sound {
     if (!this.ctx || !this.on) return;
     const c = this.ctx, t = c.currentTime;
     if (kind === 'shot') { // 銃声: パンという破裂音 + 低い響き。遠いほどこもる
-      const pos = this.place(x, z, 140); if (!pos) return; const o = this.out(pos, 0.9);
+      const pos = this.place(x, z, opt.heavy ? 220 : 140); if (!pos) return; const o = this.out(pos, opt.heavy ? 1.2 : 0.9);
       this.noiseBurst(o, 0.12, 6000 - Math.min(5000, pos.d * 40), 600, 'lowpass', 0.5);
-      this.noiseBurst(o, 0.45 + pos.d * 0.004, 900, 80, 'lowpass', 0.3);
+      this.noiseBurst(o, (opt.heavy ? 1.3 : 0.45) + pos.d * 0.004, opt.heavy ? 700 : 900, opt.heavy ? 45 : 80, 'lowpass', 0.3); // スナイパーは重く長く響く
     } else if (kind === 'impact') { const pos = this.place(x, z, 45); if (!pos) return; this.noiseBurst(this.out(pos, 0.25), 0.05, 3500, 1500, 'bandpass', 2); }
     else if (kind === 'flesh') { // 体に当たる: 低くにぶい音
       const pos = this.place(x, z, 50); if (!pos) return; const o = this.out(pos, 0.6);
