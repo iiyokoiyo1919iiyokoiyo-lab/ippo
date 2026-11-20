@@ -17,7 +17,7 @@ const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
+  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
   : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
@@ -127,10 +127,12 @@ if (isTouch) {
   const lend = (e) => { send0(e); for (const t of e.changedTouches) look.delete(t.identifier); };
   canvas.addEventListener('touchend', lend); canvas.addEventListener('touchcancel', lend);
   // うつ: 押しながらなぞると、視点も動かせる
-  const fire = $('#fire'); let fid = null, fp = null;
-  fire.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; fid = t.identifier; fp = [t.clientX, t.clientY]; firing = true; }, { passive: false });
-  fire.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === fid) { me.yaw -= (t.clientX - fp[0]) * 0.0045; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - fp[1]) * 0.0036)); fp = [t.clientX, t.clientY]; } }, { passive: false });
-  const fend = (e) => { for (const t of e.changedTouches) if (t.identifier === fid) { fid = null; firing = false; } };
+  // 「うつ」を長押し (0.25 秒) すると自動でのぞく。はなすと、自動でのぞいていたときだけやめる
+  const fire = $('#fire'); let fid = null, fp = null, holdT = 0, autoAim = false;
+  fire.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; fid = t.identifier; fp = [t.clientX, t.clientY]; firing = true;
+    clearTimeout(holdT); holdT = setTimeout(() => { if (fid !== null && !aiming) { setScope(true); autoAim = aiming; } }, 250); }, { passive: false });
+  fire.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === fid) { const sk = scoped ? 0.3 : aiming ? 0.6 : 1; me.yaw -= (t.clientX - fp[0]) * 0.0045 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - fp[1]) * 0.0036 * sk)); fp = [t.clientX, t.clientY]; } }, { passive: false });
+  const fend = (e) => { for (const t of e.changedTouches) if (t.identifier === fid) { fid = null; firing = false; clearTimeout(holdT); if (autoAim && aiming) setScope(false); autoAim = false; } };
   fire.addEventListener('touchend', fend); fire.addEventListener('touchcancel', fend);
   $('#jump').addEventListener('touchstart', (e) => { e.preventDefault(); jump(); }, { passive: false });
   $('#reload').addEventListener('touchstart', (e) => { e.preventDefault(); reload(); }, { passive: false });
