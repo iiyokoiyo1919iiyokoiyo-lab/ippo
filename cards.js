@@ -492,6 +492,34 @@ CREATE TABLE card_horses (
 );
 CREATE INDEX card_horses_user ON card_horses(user_id, created_at);
 `;
+// ブリードモンスターズのモンスターを連れてきたカード (カードの ID は 'm:' + id)。連れてきた時の姿・強さを写しとる (あとから「最新の強さにする」で写し直せる)
+const MONCARD_MIGRATION = `
+CREATE TABLE card_monsters (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  monster_id TEXT NOT NULL,                              -- ブリードモンスターズのモンスター
+  name TEXT NOT NULL, look TEXT NOT NULL, mon_type TEXT NOT NULL, mon_rank TEXT NOT NULL,   -- 絵と表示用
+  type TEXT NOT NULL, skill TEXT NOT NULL, rarity TEXT NOT NULL,
+  hp INTEGER NOT NULL, atk INTEGER NOT NULL, def INTEGER NOT NULL, spd INTEGER NOT NULL,   -- Lv1・レア度の倍率をかける前
+  level INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  UNIQUE (user_id, monster_id)
+);
+CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
+`;
+// モンスターの評価 → カードのレア度。強さは「そのレア度のカードの平均」を基準に、モンスターの能力の形 (HP 型・攻撃型など) で ±15%
+const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'UR' };
+// 属性 → 相性 (火 > 草 > 水 > 火 が、きる > つつむ > おもい > きる と同じ向きになるように)
+const MONCARD_TYPE = { fire: 'cut', grass: 'wrap', water: 'heavy', light: 'cut', dark: 'wrap', king: 'heavy' };
+const MONCARD_SKILL = { fire: 'power', water: 'heal', grass: 'drain', light: 'barrier', dark: 'pierce', king: 'power' };
+function monCardBase(m) {
+  const rarity = MONCARD_RARITY[m.rank] || 'N', baseR = rarity === 'UR' ? 'SSR' : rarity;
+  const cs = CARD_LIST.filter((c) => c[3] === baseR), avg = (i) => cs.reduce((a, c) => a + c[i], 0) / cs.length;
+  const r = { hp: m.hp / 280, atk: Math.max(m.atk, m.mag) / 55, def: m.def / 55, spd: m.spd / 50 };
+  const g = (r.hp + r.atk + r.def + r.spd) / 4, rel = (k) => Math.min(1.15, Math.max(0.85, r[k] / g));
+  return { rarity, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power',
+    hp: Math.round(avg(5) * rel('hp')), atk: Math.round(avg(6) * rel('atk')), def: Math.round(avg(7) * rel('def')), spd: Math.round(avg(8) * rel('spd')) };
+}
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
 const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
@@ -621,6 +649,7 @@ function install(app, ctx) {
     db.migrate('2026-11-26-card-high-level', HIGH_LEVEL_MIGRATION);
     db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
     db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
+    db.migrate('2026-11-29-card-monsters', MONCARD_MIGRATION);
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
@@ -632,8 +661,15 @@ function install(app, ctx) {
   // 馬のカードの能力 (文房具の statsOf と同じ形)
   const horseStats = (h) => { const ur = h.rarity === 'UR', lv = Math.min(h.level || 1, MAX_LEVEL), m = (ur ? UR_MULT : RARITY.SSR.mult) * (1 + LEVEL_BONUS * (lv - 1)); return { id: 'h:' + h.id, name: h.name, emoji: '🐴', rarity: ur ? 'UR' : 'SSR', type: h.type, skill: h.skill, level: lv, horse: true, coat: h.coat, origin: h.origin,
     maxHp: Math.round(h.hp * m), atk: Math.round(h.atk * m), def: Math.round(h.def * m), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
+  const qMonCard = db.prepare('SELECT * FROM card_monsters WHERE id = ?');
+  const monCardsOwned = (uid) => db.prepare('SELECT * FROM card_monsters WHERE user_id = ? ORDER BY created_at DESC').all(uid);
+  // モンスターのカードの能力 (文房具の statsOf と同じ形)
+  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = (c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1));
+    return { id: 'm:' + c.id, name: c.name, emoji: '🧬', rarity: c.rarity, type: c.type, skill: c.skill, level: lv, monster: true, monsterId: c.monster_id, monRank: c.mon_rank, monType: c.mon_type, updatedAt: c.updated_at,
+      maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, skillName: SKILLS[c.skill].name, skillDesc: SKILLS[c.skill].desc }; };
   const cardStats = (uid, id, o) => {
     if (id.startsWith('h:')) { const h = qHorse.get(id.slice(2)); return h && h.user_id === uid ? horseStats(h) : null; }
+    if (id.startsWith('m:')) { const c = qMonCard.get(id.slice(2)); return c && c.user_id === uid ? monCardStats(c) : null; }
     return CARDS[id] ? statsOf(id, Math.min(o[id] || 1, MAX_LEVEL), promoOf(uid, id)) : null;
   };
   const dayStart = () => { const d = new Date(Date.now() + 9 * 3600_000); d.setUTCHours(0, 0, 0, 0); return d.getTime() - 9 * 3600_000; };
@@ -671,7 +707,7 @@ function install(app, ctx) {
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
-    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), lr: lrOf(uid), lrCount: lrCountOf(uid), horses: horsesOwned(uid).map(horseStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
+    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), lr: lrOf(uid), lrCount: lrCountOf(uid), horses: horsesOwned(uid).map(horseStats), monsters: monCardsOwned(uid).map(monCardStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
       quests: questsNow().map((q) => ({ id: q.id, name: q.name, emoji: q.emoji, end: q.end, reward: q.reward, hard: !!q.hard, cleared: clearedOf(uid).has(q.id) })),
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
@@ -752,6 +788,38 @@ function install(app, ctx) {
       .map((h) => ({ sid: h.sid, name: h.name, label: h.label, headline: h.headline, breed: h.breed, coat: h.coat, urChance: HORSE_UR_CHANCE[h.label] ?? 0.01 }));
     res.json({ ready: horsesLeft(req.user.id) > 0, left: horsesLeft(req.user.id), perDay: HORSES_PER_DAY, horses: list });
   });
+  // ブリードモンスターズのモンスター (自分のもの・売却していないもの) をカードにする。もう連れてきたものは「最新の強さに写し直す」(レベルはそのまま)
+  app.get('/api/cards/monster-candidates', requireAuth, (req, res) => {
+    const have = new Map(monCardsOwned(req.user.id).map((c) => [c.monster_id, c]));
+    const list = (ctx.monCardSource ? ctx.monCardSource(req.user.id) : []).map((m) => { const b = monCardBase(m), c = have.get(m.id);
+      return { id: m.id, name: m.name, type: m.type, rank: m.rank, rarity: b.rarity, cardType: b.type, skillName: SKILLS[b.skill].name, status: m.status, have: !!c, cardId: c ? 'm:' + c.id : null }; });
+    res.json({ monsters: list });
+  });
+  app.post('/api/cards/monster', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, mid = String(req.body?.monster || '');
+    player(uid);
+    const m = (ctx.monCardSource ? ctx.monCardSource(uid) : []).find((x) => x.id === mid);
+    if (!m) return res.status(404).json({ error: 'そのモンスターは連れてこられません' });
+    const b = monCardBase(m), now = Date.now(), cur = db.prepare('SELECT * FROM card_monsters WHERE user_id = ? AND monster_id = ?').get(uid, mid);
+    let id = cur?.id;
+    if (cur) db.prepare('UPDATE card_monsters SET name = ?, look = ?, mon_type = ?, mon_rank = ?, type = ?, skill = ?, rarity = ?, hp = ?, atk = ?, def = ?, spd = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+      .run(m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, now, cur.id, uid);
+    else {
+      id = crypto.randomBytes(9).toString('base64url');
+      try { db.prepare('INSERT INTO card_monsters (id, user_id, monster_id, name, look, mon_type, mon_rank, type, skill, rarity, hp, atk, def, spd, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, uid, mid, m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, now, now); }
+      catch { return res.status(409).json({ error: 'このモンスターはもう連れてきています' }); }
+    }
+    console.log(`[cards] @${req.user.username} がモンスター「${m.name}」を${cur ? '最新の強さに写し直した' : '連れてきた'} (${b.rarity})`);
+    res.json({ card: monCardStats(qMonCard.get(id)), updated: !!cur, ...me(uid) });
+  });
+  // モンスターのカードの絵 (ブリードモンスターズの絵をそのまま SVG で。文字は入れない)
+  app.get('/api/cards/mon-art/:id', (req, res) => {
+    const c = qMonCard.get(String(req.params.id).replace(/\.svg$/, ''));
+    let svg = null; try { svg = c && ctx.monArtSvg ? ctx.monArtSvg(JSON.parse(c.look), c.mon_type, c.mon_rank) : null; } catch {}
+    if (!svg) return res.status(404).end();
+    res.set({ 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=600', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'X-Content-Type-Options': 'nosniff' }).send(svg);
+  });
   app.post('/api/cards/horse', requireAuth, writeLimit, (req, res) => {
     const sid = String(req.body?.sid || '');
     player(req.user.id);
@@ -781,6 +849,11 @@ function install(app, ctx) {
       if (!h || h.user_id !== uid) return res.status(404).json({ error: 'そのカードは持っていません' });
       level = Math.min(h.level || 1, MAX_LEVEL);
       apply = (from) => db.prepare('UPDATE card_horses SET level = ? WHERE id = ? AND user_id = ?').run(from + 1, h.id, uid);
+    } else if (id.startsWith('m:')) {
+      const c = qMonCard.get(id.slice(2));
+      if (!c || c.user_id !== uid) return res.status(404).json({ error: 'そのカードは持っていません' });
+      level = Math.min(c.level || 1, MAX_LEVEL);
+      apply = (from) => db.prepare('UPDATE card_monsters SET level = ? WHERE id = ? AND user_id = ?').run(from + 1, c.id, uid);
     } else {
       const row = db.prepare('SELECT count, lv_bonus, lv_high FROM card_owned WHERE user_id = ? AND card_id = ?').get(uid, id);
       if (!row || !CARDS[id]) return res.status(404).json({ error: 'そのカードは持っていません' });
@@ -801,14 +874,14 @@ function install(app, ctx) {
       for (let l = level; l < to; l++) apply(l);
       db.exec('COMMIT');
     } catch { db.exec('ROLLBACK'); return res.status(400).json({ error: byCoins ? 'コインが足りません' : 'レベルアップ書が足りません' }); }
-    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : { ...statsOf(id, to, promoOf(uid, id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
+    const card = id.startsWith('h:') ? horseStats(qHorse.get(id.slice(2))) : id.startsWith('m:') ? monCardStats(qMonCard.get(id.slice(2))) : { ...statsOf(id, to, promoOf(uid, id)), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc };
     res.json({ card, from: level, to, used: cost, paid: byCoins ? { coins: coinCost } : { scrolls: cost }, ...me(uid) });
   });
 
   // デッキ (持っているカード 3 枚。同じカードは 1 枚まで)
   app.put('/api/cards/deck', requireAuth, writeLimit, (req, res) => {
     const d = req.body?.deck, o = owned(req.user.id);
-    if (!Array.isArray(d) || d.length !== 3 || new Set(d).size !== 3 || !d.every((id) => typeof id === 'string' && (id.startsWith('h:') ? !!cardStats(req.user.id, id, o) : o[id]))) return res.status(400).json({ error: '持っているカードを、ちがうもの 3 枚えらんでください' });
+    if (!Array.isArray(d) || d.length !== 3 || new Set(d).size !== 3 || !d.every((id) => typeof id === 'string' && (id.startsWith('h:') || id.startsWith('m:') ? !!cardStats(req.user.id, id, o) : o[id]))) return res.status(400).json({ error: '持っているカードを、ちがうもの 3 枚えらんでください' });
     db.prepare('UPDATE card_players SET deck = ? WHERE user_id = ?').run(JSON.stringify(d), req.user.id);
     res.json(me(req.user.id));
   });
@@ -825,19 +898,20 @@ function install(app, ctx) {
     const since = days ? Date.now() - days * 86400_000 : 0;
     const rows = db.prepare(`SELECT d FROM (SELECT d1 AS d, mode, created_at FROM card_battles UNION ALL SELECT d2 AS d, mode, created_at FROM card_battles)
       WHERE d IS NOT NULL AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).all(since);
-    const count = {}; let horse = 0, n = 0;
+    const count = {}; let horse = 0, monster = 0, n = 0;
     for (const { d } of rows) {
       let deck; try { deck = JSON.parse(d); } catch { continue; }
       if (!Array.isArray(deck)) continue;
       n++;
       if (deck.some((id) => String(id).startsWith('h:'))) horse++;
+      if (deck.some((id) => String(id).startsWith('m:'))) monster++;
       for (const id of new Set(deck)) if (CARDS[id]) count[id] = (count[id] || 0) + 1;
     }
     const matches = db.prepare(`SELECT COUNT(*) AS n FROM card_battles WHERE (d1 IS NOT NULL OR d2 IS NOT NULL) AND created_at >= ? ${scope === 'random' ? "AND mode = 'random'" : ''}`).get(since).n;
     const rate = (c) => (n ? (c / n) * 100 : 0);
     const data = { days, scope, decks: n, matches, players: n, updatedAt: Date.now(),
       cards: releasedIds().map((id) => ({ id, count: count[id] || 0, rate: rate(count[id] || 0) })).sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
-      horse: { count: horse, rate: rate(horse) } };
+      horse: { count: horse, rate: rate(horse) }, monster: { count: monster, rate: rate(monster) } };
     usageCache.set(key, { at: Date.now(), data });
     res.json(data);
   });
@@ -894,7 +968,7 @@ function install(app, ctx) {
     return mine.map((c) => { // UR・MR には、SSR を UR の強さにして当てる
       const top = c.rarity === 'UR' || !RARITY[c.rarity];
       const pool = poolOf(c.promoted ? c.baseRarity : top ? 'SSR' : c.rarity).filter((id) => !mine.some((m) => m.id === id));
-      return statsOf(pool[Math.floor(rnd() * pool.length)] || 'gold', c.level, !!c.promoted || (top && !c.horse));
+      return statsOf(pool[Math.floor(rnd() * pool.length)] || 'gold', c.level, !!c.promoted || (top && !c.horse && !c.monster));
     });
   }
   function nextTurn(b) {
@@ -1007,7 +1081,7 @@ function install(app, ctx) {
         if (!r.board) continue;
         if (now - r.at > ROOM_MS || conns.get(r.uid)?.readyState !== 1 || battleOf.get(r.uid)) { if (now - r.at > ROOM_MS) rooms.delete(code); continue; }
         const user = userView(r.uid); if (!user) continue;
-        const deck = deckStats(r.uid).map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, level: c.level, horse: !!c.horse, coat: c.coat || '' }));
+        const deck = deckStats(r.uid).map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, level: c.level, horse: !!c.horse, monster: !!c.monster, coat: c.coat || '' }));
         list.push({ code, user, comment: r.board.comment, tag: r.board.tag, at: r.at, until: r.at + ROOM_MS, deck });
       }
       boardCache = { at: now, list: list.sort((a, b) => b.at - a.at) };
@@ -1097,7 +1171,7 @@ function install(app, ctx) {
   ctx.eraseCards = (uid) => {
     leave(uid);
     const b = battleOf.get(uid); if (b && !b.ended) finish(b, 1 - b.uids.indexOf(uid), 'left');
-    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses', 'card_quests', 'user_titles']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
+    for (const t of ['card_players', 'card_owned', 'card_pulls', 'card_horses', 'card_monsters', 'card_quests', 'user_titles']) db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(uid);
     db.prepare('UPDATE card_battles SET p1 = NULL WHERE p1 = ?').run(uid);
     db.prepare('UPDATE card_battles SET p2 = NULL WHERE p2 = ?').run(uid);
   };

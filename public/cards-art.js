@@ -539,7 +539,10 @@
       return out.join('') + (A[acc] || '');
     }
     for (const k of Object.keys(GEN)) if (!C[k]) C[k] = () => gen(GEN[k]);
-    const body = (String(id).startsWith('h:') ? C.horse : (C[id] || C.pencil))();
+    // ブリードモンスターズのモンスター ('m:'): サーバーが同じ絵 (SVG) を描いて返す。'm:x' は見本のマーク
+    const monId = String(id).startsWith('m:') ? String(id).slice(2) : null;
+    const body = monId ? (monId === 'x' ? '<text x="60" y="84" font-size="68" text-anchor="middle">🧬</text>' : `<image href="/api/cards/mon-art/${encodeURIComponent(monId)}" x="-2" y="-4" width="124" height="128"/>`)
+      : (String(id).startsWith('h:') ? C.horse : (C[id] || C.pencil))();
 
     // ---------- レア度の演出 (キャラの後ろ) ----------
     let back = '';

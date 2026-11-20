@@ -3108,12 +3108,12 @@ const CB_RCOL = { N: '#8a94a6', R: '#2f8fd8', SR: '#a24ee0', SSR: '#e2a400', UR:
 function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs = '' } = {}) {
   const T = cbCatalogCache?.types || {};
   const skillName = c.skillName || cbCatalogCache?.cards.find((x) => x.id === c.id)?.skillName || '';
-  const lvMul = level > 1 && cbCatalogCache && c.skillName && !c.horse ? 1 + cbCatalogCache.levelBonus * (Math.min(level, cbCatalogCache.maxLevel) - 1) : 1; // 図鑑のカードはレベル 1 の能力なので、レベルの分を足す
+  const lvMul = level > 1 && cbCatalogCache && c.skillName && !c.horse && !c.monster ? 1 + cbCatalogCache.levelBonus * (Math.min(level, cbCatalogCache.maxLevel) - 1) : 1; // 図鑑のカードはレベル 1 の能力なので、レベルの分を足す
   const sv = (v) => Math.round(v * lvMul);
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
-    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
+    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
@@ -3193,7 +3193,7 @@ async function viewCards() {
   main.innerHTML = pageHead({ title: 'ぶんぼうぐバトラーズ', sub: 'カードを集めて、3枚のデッキで対戦', back: '#/games' }) + `<div class="content stack" id="cb">${loadingBlock()}</div>`;
   let cat, mine = null;
   try { cat = await cbCatalog(); if (me) mine = await api('/cards/me'); } catch (e) { $('#cb').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
-  const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...(mine?.horses || [])].map((c) => [c.id, c]));
+  const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...(mine?.horses || []), ...(mine?.monsters || [])].map((c) => [c.id, c]));
   const root = $('#cb'); if (!root) return;
   root.innerHTML = `
     ${(mine?.quests || []).map((q) => cbQuestBanner(q, cat)).join('')}${cbRateUpBanner(cat)}${cbNewBanner(cat)}
@@ -3205,7 +3205,7 @@ async function viewCards() {
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><span><a class="btn btn-ghost btn-sm" href="#/games/cards/usage">📊 採用率</a><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></span></div>
-      <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse ? C[id].level : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
+      <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse || C[id].monster ? C[id].level : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
     </section>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
@@ -3224,6 +3224,11 @@ async function viewCards() {
       <span><b>競走馬版から馬を連れてくる</b><span>1日${mine.horsesPerDay || 3}頭まで (今日はあと <b>${mine.horseLeft ?? 0}</b> 頭)。わざ・相性・能力は SSR くらいの強さでランダム。まれに <b class="cb-ur-word">UR</b> に昇格！ (連れてきた馬 ${mine.horses.length}頭)</span></span>
       <button class="btn ${mine.horseReady ? 'btn-primary' : 'btn-ghost'} btn-sm" type="button" id="cb-horse" ${mine.horseReady ? '' : 'disabled'}>${mine.horseReady ? `🐴 連れてくる (あと${mine.horseLeft})` : '今日はもう連れてきた'}</button>
     </section>
+    <section class="card cb-horse-banner cb-mon-banner">
+      <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('m:x', 'SR')}</span>
+      <span><b>ブリードモンスターズからモンスターを連れてくる</b><span>育てたモンスターがカードになります。評価でレア度が決まり (B→R・A→SR・S/SS→SSR・Z→<b class="cb-ur-word">UR</b>)、能力の形はモンスターそのまま。 (連れてきたモンスター ${(mine.monsters || []).length}体)</span></span>
+      <button class="btn btn-primary btn-sm" type="button" id="cb-monster">🧬 連れてくる</button>
+    </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
       <span><b>ガチャを引く</b>${cat.sale ? `<span class="cb-sale-tag">🔥 ${esc(cat.sale.name)}</span>` : ''}<span>1回 ${cat.sale ? `<s>${cat.sale.pull}</s> ` : ''}${cat.pullCost}🪙 · 10回 ${cat.sale ? `<s>${cat.sale.ten}</s> ` : ''}${cat.tenCost}🪙 (SR以上1枚確定) · ${cat.pity}回でSSR確定</span></span>${icon('chevron', 'chev')}</a>`
     : `<section class="card card-pad cb-guest"><p>24種類の文房具のキャラクターを集めて、3枚のデッキで対戦するカードゲームです。<b>ログインすると、すぐにコインとはじめのカードがもらえます。</b></p>
@@ -3241,6 +3246,7 @@ async function viewCards() {
       <li>コインはお金では買えません。毎日のボーナスと対戦でもらえます</li></ul></details></section>`;
   $('#cb-login')?.addEventListener('click', () => openAuth());
   $('#cb-horse')?.addEventListener('click', () => cbBringHorse(() => viewCards()));
+  $('#cb-monster')?.addEventListener('click', () => cbBringMonster(() => viewCards()));
   $('#cb-daily')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     try { const r = await api('/cards/daily', { method: 'POST' }); toast(`🎁 ${r.got} コインを受け取りました`, 'success'); viewCards(); } catch (err) { toast(err.message, 'error'); }
@@ -3255,6 +3261,35 @@ async function viewCards() {
     el.innerHTML = r.top.length ? `<div class="md-list">${r.top.map((x) => row(x, me && x.user.id === me.id)).join('')}</div>${r.me && !meIn ? `<div class="md-list md-mine">${row(r.me, true)}</div>` : ''}`
       : '<p class="muted text-sm md-empty">まだだれもランダム対戦をしていません。</p>';
   } catch { const el = $('#cb-rank'); if (el) el.innerHTML = '<p class="muted text-sm">読み込めませんでした</p>'; }
+}
+
+// ---------- ブリードモンスターズからモンスターを連れてくる (1 体 1 枚。連れてきたあとも「最新の強さにする」で写し直せる) ----------
+async function cbBringMonster(done) {
+  let r;
+  try { r = await api('/cards/monster-candidates'); } catch (e) { return toast(e.message, 'error'); }
+  if (!r.monsters.length) return openPanel('モンスターを連れてくる', `<div class="form-stack"><p>連れてこられるモンスターがいません。「ブリードモンスターズ」で育てたモンスターが、カードになって連れてこられます。</p>
+    <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>閉じる</button><a class="btn btn-primary" href="#/monster">ブリードモンスターズへ</a></div></div>`);
+  const T = cbCatalogCache?.types || {};
+  openPanel('どのモンスターを連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">モンスターの<b>評価でレア度</b>、<b>属性で相性とわざ</b>が決まります (🔥火・✨光 → ✂️きる / 🌿草・🌑闇 → 📄つつむ / 💧水・👑王 → 🪨おもい)。能力は、そのレア度のカードの平均を基準に、モンスターの能力の形 (HP 型・攻撃型など) で ±15%。<br>連れてきたあとにモンスターを育てたら、<b>「最新の強さにする」</b>で写し直せます (カードのレベルはそのまま)。</p>
+      <div class="cb-pick-horse">${r.monsters.map((m) => `<button type="button" class="list-item" data-mid="${esc(m.id)}"><span class="cb-mini-art cb-mon-mini">${m.cardId ? CBArt.svg(m.cardId, 'N') : CBArt.svg('m:x', 'N')}</span>
+        <div class="grow"><div class="title">${esc(m.name)}</div><div class="desc">評価 ${esc(m.rank)} → <b>${esc(m.rarity)}</b> · ${esc(T[m.cardType]?.icon || '')}${esc(T[m.cardType]?.name || '')} · わざ「${esc(m.skillName)}」</div></div>
+        <span class="cb-rbadge" style="--rc:${CB_RCOL[m.rarity] || '#888'}">${m.have ? '最新の強さにする' : esc(m.rarity)}</span></button>`).join('')}</div>
+      <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button></div></div>`, (root, close) => {
+    $$('[data-mid]', root).forEach((b) => b.addEventListener('click', async () => {
+      $$('[data-mid]', root).forEach((x) => { x.disabled = true; });
+      try {
+        const res = await api('/cards/monster', { method: 'POST', body: { monster: b.dataset.mid } });
+        const c = res.card, up = c.rarity === 'UR';
+        root.innerHTML = `<div class="cb-horse-reveal${up ? ' promoted' : ''}">${up ? '<p class="cb-ur-shout">✨ UR のモンスター！！ ✨</p>' : ''}<div class="cb-flip open r-${esc(c.rarity)}">${cbCard(c, { level: c.level, cls: 'tilt' })}</div>
+          <p><b>${esc(c.name)}</b> が${res.updated ? '最新の強さになった！' : 'カードになって仲間になった！'}</p>
+          <p class="text-sm" style="color:var(--text-2)">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · わざ「${esc(c.skillName)}」 (${esc(c.skillDesc)})</p>
+          <div class="modal-actions" style="margin-top:0"><a class="btn btn-outline" href="#/games/cards/collection">デッキに入れる</a><button class="btn btn-primary" type="button" data-close>OK</button></div></div>`;
+        $$('[data-close]', root).forEach((x) => x.addEventListener('click', () => close()));
+        cbConfetti(root, up ? 120 : 50, up ? ['#ffd43b', '#ff6b6b', '#fff3bf', '#fab005', '#e8590c', '#fff'] : undefined);
+        done && setTimeout(done, 50);
+      } catch (e) { toast(e.message, 'error'); close(); }
+    }));
+  });
 }
 
 // ---------- 競走馬版から馬を連れてくる (1 日 3 頭) ----------
@@ -3406,9 +3441,9 @@ async function viewCollection() {
   let cat, mine, mode = 'deck';
   try { cat = await cbCatalog(); mine = await api('/cards/me'); } catch (e) { $('#cbc').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
   let deck = [...mine.deck];
-  const lvOf = (c) => (c.horse ? c.level : Math.min(mine.owned[c.id] || 1, cat.maxLevel));
+  const lvOf = (c) => (c.horse || c.monster ? c.level : Math.min(mine.owned[c.id] || 1, cat.maxLevel));
   const render = () => {
-    const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...mine.horses].map((c) => [c.id, c]));
+    const C = Object.fromEntries([...cat.cards.map((c) => cbMine(c, mine)), ...mine.horses, ...(mine.monsters || [])].map((c) => [c.id, c]));
     const root = $('#cbc'); if (!root) return;
     const have = cat.cards.filter((c) => mine.owned[c.id]).length;
     const pickCls = (c) => 'pick' + (mode === 'deck' && deck.includes(c.id) ? ' chosen' : '') + (mode === 'level' ? (lvOf(c) >= cat.maxLevel ? ' maxed' : costOf(lvOf(c)) <= mine.scrolls ? ' can-lv' : '') : '');
@@ -3422,6 +3457,9 @@ async function viewCollection() {
       </section>`
       : `<section class="card card-pad cb-scrollbox"><div class="cb-scroll-have">📜 レベルアップ書 <b>${mine.scrolls}</b> 枚</div>
         <p class="text-xs muted">レベルを上げたいカードをタップ (何レベルかまとめて上げられます)。Lv1→2 は 1 枚、Lv2→3 は 2 枚… (今のレベルと同じ枚数)。<b>Lv${cat.dupMaxLevel || 15} → ${cat.maxLevel} は 1 つにつき ${cat.highLevelCost || 50} 枚</b> (同じカードを引いても Lv${cat.dupMaxLevel || 15} より上には上がりません)。<br>レベルアップ書は試合をするともらえます (${cat.scrollMinTurns} ターン以上戦った試合で、勝ち ${cat.scrollReward.win} 枚・負け ${cat.scrollReward.lose} 枚)。</p></section>`}
+      <section class="card card-pad"><div class="panel-head"><h3>🧬 連れてきたモンスター</h3><span class="text-xs muted">${(mine.monsters || []).length}体</span></div>
+        ${(mine.monsters || []).length ? `<div class="cb-grid">${mine.monsters.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · 評価 ${esc(c.monRank)}"` })).join('')}</div>`
+          : `<p class="text-sm muted" style="margin:8px 0 0">ブリードモンスターズで育てたモンスターを、カードにして連れてこられます (ホームの「連れてくる」から)。</p>`}</section>
       <section class="card card-pad"><div class="panel-head"><h3>🐴 連れてきた馬</h3><span class="text-xs muted">${mine.horses.length}頭</span></div>
         ${mine.horses.length ? `<div class="cb-grid">${mine.horses.map((c) => cbCard(c, { level: c.level, cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)} · ${esc(c.origin)}"` })).join('')}</div>`
           : `<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>`}</section>
@@ -3453,7 +3491,7 @@ async function viewCollection() {
     let reach = lv; while (reach < cat.maxLevel && costTo(lv, reach + 1) <= mine.scrolls) reach++;   // 今の書で上げられる最高のレベル
     let to = lv + 1;  // はじめは +1 (まとめて上げるときは選ぶ)
     const mul = (l) => 1 + cat.levelBonus * (l - 1);
-    const base = c.horse ? { maxHp: c.maxHp / mul(lv), atk: c.atk / mul(lv), def: c.def / mul(lv) } : c;  // Lv1 の能力
+    const base = c.horse || c.monster ? { maxHp: c.maxHp / mul(lv), atk: c.atk / mul(lv), def: c.def / mul(lv) } : c;  // Lv1 の能力
     const at = (l) => ({ maxHp: Math.round(base.maxHp * mul(l)), atk: Math.round(base.atk * mul(l)), def: Math.round(base.def * mul(l)) });
     openPanel('レベルを上げる', `<div class="cb-lvup">
         <div class="cb-lvup-card">${cbCard(c, { level: lv })}</div>
@@ -3489,7 +3527,7 @@ async function viewCollection() {
         try {
           const res = await api('/cards/levelup', { method: 'POST', body: { id: c.id, to, pay } });
           mine = res;
-          $('.cb-lvup-card', root).innerHTML = cbCard(res.card.horse ? res.card : C2(res.card.id), { level: res.to, cls: 'lv-flash' });
+          $('.cb-lvup-card', root).innerHTML = cbCard(res.card.horse || res.card.monster ? res.card : C2(res.card.id), { level: res.to, cls: 'lv-flash' });
           $('.cb-lvup-pick', root).innerHTML = `<p class="cb-lvup-lv"><span class="cb-lvup-shout">Lv${res.to} にレベルアップ！</span></p>`;
           $$('.cb-lvup-quick, #cb-lvstats, #cb-lvcost, .cb-lvup > p.text-xs', root).forEach((x) => x.remove());
           done = true; $('#cb-lvcoin', root)?.remove(); $('#cb-lvgo', root).textContent = 'OK'; $('#cb-lvgo', root).disabled = false;
@@ -3501,7 +3539,7 @@ async function viewCollection() {
       $('#cb-lvcoin', root).addEventListener('click', (e) => doLevel(e, 'coins'));
     });
   }
-  const C2 = (id) => { const c = cat.cards.find((x) => x.id === id); return c ? cbMine(c, mine) : mine.horses.find((x) => x.id === id); };
+  const C2 = (id) => { const c = cat.cards.find((x) => x.id === id); return c ? cbMine(c, mine) : [...mine.horses, ...(mine.monsters || [])].find((x) => x.id === id); };
   render();
 }
 
@@ -3532,7 +3570,7 @@ async function viewCardUsage() {
     const root = $('#cbu'); if (!root) return;
     let u; try { u = await api(`/cards/usage?days=${days}&scope=${scope}`, { noAuthPrompt: true }); } catch (e) { root.innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
     if (!$('#cbu')) return;
-    const max = Math.max(1, ...u.cards.map((x) => x.rate), u.horse.rate);
+    const max = Math.max(1, ...u.cards.map((x) => x.rate), u.horse.rate, u.monster?.rate || 0);
     const seg = (name, cur, opts) => `<div class="segmented cb-mode" role="tablist">${opts.map(([v, l]) => `<button type="button" class="seg${cur === v ? ' active' : ''}" data-${name}="${v}">${l}</button>`).join('')}</div>`;
     const row = (rank, art, name, rarity, x) => `<li class="cbu-row"><span class="cbu-rank${rank <= 3 && x.count ? ' top' + rank : ''}">${rank}</span>
         <span class="cbu-art" aria-hidden="true">${art}</span>
@@ -3547,6 +3585,7 @@ async function viewCardUsage() {
       ${u.decks ? `<section class="card card-pad"><ol class="cbu-list">
         ${u.cards.map((x, i) => { if (x.count !== last) { rank = i + 1; last = x.count; } const c = C[x.id]; return c ? row(rank, CBArt.svg(c.id, c.rarity), c.name, c.rarity, x) : ''; }).join('')}
         ${u.horse.count ? row('🐴', CBArt.svg('h:x', 'SSR', { coat: '栗毛' }), '連れてきた馬 (どれか 1 頭以上)', '', u.horse) : ''}
+        ${u.monster?.count ? row('🧬', CBArt.svg('m:x', 'SR'), '連れてきたモンスター (どれか 1 体以上)', '', u.monster) : ''}
       </ol></section>` : emptyState({ icon: 'sparkle', title: 'この期間の試合はまだありません', text: '期間を変えてみてください' })}`;
     $$('[data-days]').forEach((b) => b.addEventListener('click', () => { days = Number(b.dataset.days); load(); }));
     $$('[data-scope]').forEach((b) => b.addEventListener('click', () => { scope = b.dataset.scope; load(); }));

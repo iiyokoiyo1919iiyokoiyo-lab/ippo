@@ -286,6 +286,11 @@ module.exports = function install(app, ctx) {
   app.get('/api/mon/access', (req, res) => res.json({ ok: isTester(req.user) }));
   app.use('/api/mon', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'ブリードモンスターズはまだ準備中です' })));
   const coins = ctx.cbCoins;
+  // ぶんぼうぐバトラーズにモンスターを連れていくための元 (自分のもの・売却していないもの)。絵はサーバーでも同じ mon-art.js で描く
+  let MonArtSrv = null;
+  try { const sb = { window: {} }; require('vm').runInNewContext(require('fs').readFileSync(require('path').join(__dirname, 'public/games/monster/mon-art.js'), 'utf8'), sb); MonArtSrv = sb.window.MonArt; }
+  catch (e) { console.error('[mon] 絵の読みこみに失敗', e.message); }
+  ctx.monArtSvg = (look, type, rank) => MonArtSrv ? MonArtSrv.svg(look, type, { rank }).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="264" ') : null;
   const writeLimit = rateLimit({ windowMs: 60_000, max: 90, key: (req) => 'mon' + req.user.id });
   const newId = () => crypto.randomBytes(6).toString('hex');
   const qMon = db.prepare('SELECT * FROM mon_monsters WHERE id = ?');
@@ -333,6 +338,7 @@ module.exports = function install(app, ctx) {
   const isCommon = (id) => COMMON_STUDS.some((s) => s.id === id);
   const studReleased = (m, now = Date.now()) => { const s = OFFICIAL_STUDS.find((x) => x.id === m.id); return !s || now >= Date.parse(s.release); };
   const mine = (uid) => db.prepare("SELECT * FROM mon_monsters WHERE owner_id = ? AND status != 'sold' ORDER BY created_at").all(uid).map(parse);
+  ctx.monCardSource = (uid) => mine(uid).map((m) => { const v = monView(m); return { id: m.id, name: m.name, type: m.type, rank: v.rank, look: v.look, hp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, status: m.status }; });
   const owned = (uid, id) => { const m = getMon(id); return m && m.owner_id === uid && m.status !== 'sold' ? m : null; };
 
   // ---------- 状態 ----------
