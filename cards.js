@@ -508,12 +508,12 @@ CREATE TABLE card_monsters (
 CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
 `;
 // モンスターの評価 → カードのレア度。強さは「そのレア度のカードの平均」を基準に、モンスターの能力の形 (HP 型・攻撃型など) で ±15%
-const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'UR' };
+const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'MR' }; // Z だけ MR (強さは SSR の平均 × MR の倍率 1.2)
 // 属性 → 相性 (火 > 草 > 水 > 火 が、きる > つつむ > おもい > きる と同じ向きになるように)
 const MONCARD_TYPE = { fire: 'cut', grass: 'wrap', water: 'heavy', light: 'cut', dark: 'wrap', king: 'heavy' };
 const MONCARD_SKILL = { fire: 'power', water: 'heal', grass: 'drain', light: 'barrier', dark: 'pierce', king: 'power' };
 function monCardBase(m) {
-  const rarity = MONCARD_RARITY[m.rank] || 'N', baseR = rarity === 'UR' ? 'SSR' : rarity;
+  const rarity = MONCARD_RARITY[m.rank] || 'N', baseR = RARITY[rarity] ? rarity : 'SSR';
   const cs = CARD_LIST.filter((c) => c[3] === baseR), avg = (i) => cs.reduce((a, c) => a + c[i], 0) / cs.length;
   const r = { hp: m.hp / 280, atk: Math.max(m.atk, m.mag) / 55, def: m.def / 55, spd: m.spd / 50 };
   const g = (r.hp + r.atk + r.def + r.spd) / 4, rel = (k) => Math.min(1.15, Math.max(0.85, r[k] / g));
@@ -650,6 +650,7 @@ function install(app, ctx) {
     db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
     db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
     db.migrate('2026-11-29-card-monsters', MONCARD_MIGRATION);
+    db.migrate('2026-11-29-card-monsters-z-mr', "UPDATE card_monsters SET rarity = 'MR' WHERE rarity = 'UR';"); // 評価 Z は UR → MR に (倍率はどちらも 1.2)
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
   const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
@@ -664,7 +665,7 @@ function install(app, ctx) {
   const qMonCard = db.prepare('SELECT * FROM card_monsters WHERE id = ?');
   const monCardsOwned = (uid) => db.prepare('SELECT * FROM card_monsters WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // モンスターのカードの能力 (文房具の statsOf と同じ形)
-  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = (c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1));
+  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = (c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1)); // MR は rarityMult で 1.2
     return { id: 'm:' + c.id, name: c.name, emoji: '🧬', rarity: c.rarity, type: c.type, skill: c.skill, level: lv, monster: true, monsterId: c.monster_id, monRank: c.mon_rank, monType: c.mon_type, updatedAt: c.updated_at,
       maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, skillName: SKILLS[c.skill].name, skillDesc: SKILLS[c.skill].desc }; };
   const cardStats = (uid, id, o) => {

@@ -3226,7 +3226,7 @@ async function viewCards() {
     </section>
     <section class="card cb-horse-banner cb-mon-banner">
       <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('m:x', 'SR')}</span>
-      <span><b>ブリードモンスターズからモンスターを連れてくる</b><span>育てたモンスターがカードになります。評価でレア度が決まり (B→R・A→SR・S/SS→SSR・Z→<b class="cb-ur-word">UR</b>)、能力の形はモンスターそのまま。 (連れてきたモンスター ${(mine.monsters || []).length}体)</span></span>
+      <span><b>ブリードモンスターズからモンスターを連れてくる</b><span>育てたモンスターがカードになります。評価でレア度が決まり (B→R・A→SR・S/SS→SSR・Z→<b>MR</b>)、能力の形はモンスターそのまま。 (連れてきたモンスター ${(mine.monsters || []).length}体)</span></span>
       <button class="btn btn-primary btn-sm" type="button" id="cb-monster">🧬 連れてくる</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
@@ -3279,8 +3279,8 @@ async function cbBringMonster(done) {
       $$('[data-mid]', root).forEach((x) => { x.disabled = true; });
       try {
         const res = await api('/cards/monster', { method: 'POST', body: { monster: b.dataset.mid } });
-        const c = res.card, up = c.rarity === 'UR';
-        root.innerHTML = `<div class="cb-horse-reveal${up ? ' promoted' : ''}">${up ? '<p class="cb-ur-shout">✨ UR のモンスター！！ ✨</p>' : ''}<div class="cb-flip open r-${esc(c.rarity)}">${cbCard(c, { level: c.level, cls: 'tilt' })}</div>
+        const c = res.card, up = c.rarity === 'MR';
+        root.innerHTML = `<div class="cb-horse-reveal${up ? ' promoted' : ''}">${up ? '<p class="cb-ur-shout">🌈 MR のモンスター！！ 🌈</p>' : ''}<div class="cb-flip open r-${esc(c.rarity)}">${cbCard(c, { level: c.level, cls: 'tilt' })}</div>
           <p><b>${esc(c.name)}</b> が${res.updated ? '最新の強さになった！' : 'カードになって仲間になった！'}</p>
           <p class="text-sm" style="color:var(--text-2)">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · わざ「${esc(c.skillName)}」 (${esc(c.skillDesc)})</p>
           <div class="modal-actions" style="margin-top:0"><a class="btn btn-outline" href="#/games/cards/collection">デッキに入れる</a><button class="btn btn-primary" type="button" data-close>OK</button></div></div>`;
