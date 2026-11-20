@@ -21,6 +21,9 @@
   公式アカウントの投稿 (ドパバナーつき) とアプリの告知バナー (until まで) を自動で作る
 - 足したら `node tools/make_banners.js` で `public/banners/gacha-<id>.jpg` を作り、画像を開いて確認してからコミットする
 
+## カードの能力の全体の倍率
+- `cards.js` の `STAT_SCALE` (いま 4): 文房具・馬・クエストや鬼難の敵の HP・攻撃・防御にかける。3 つそろえてかけるので、ダメージの割合と鬼難の boost は変わらない。モンスターのカードはモンスターの能力に比例のまま (限定級の下限だけ STAT_SCALE をかける)
+
 ## CPU 戦「鬼難」の強さ
 - `cards.js` の `ONI_DECKS` の boost は「Lv18 の SSR・MR デッキで勝率 25% (誤差 5% 以内)」になるよう `node tools/tune_oni.js` で決めた
 - カードの能力・わざ・新キャラなど、対戦の強さが変わる変更をしたら、`node tools/tune_oni.js` で測り直して boost を更新する

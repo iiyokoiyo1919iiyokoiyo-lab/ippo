@@ -36,6 +36,9 @@ const CARD_PASSIVE = { tadokoro: 'morale' };
 const RARITY = { N: { rate: 50, mult: 1.0 }, R: { rate: 35, mult: 1.04 }, SR: { rate: 12, mult: 1.08 }, SSR: { rate: 3, mult: 1.12 } };
 const UR_MULT = 1.2; // UR (昇格したカード・馬) の能力の倍率
 const LEVEL_BONUS = 0.02;
+// 能力の全体の倍率 (2026-11-20: 育てたモンスターのカードが強くなったので、文房具・馬・クエストや鬼難の敵の HP・攻撃・防御を 4 倍に)。
+// HP・攻撃・防御をそろえて同じ倍率にするので、ダメージの計算 (攻撃×2 − 防御×0.6) の割合は変わらず、これまでのバランス (鬼難の boost など) はそのまま。素早さは変えない
+const STAT_SCALE = 4;
 // [id, 名前, 絵文字, レア度, 相性, HP, 攻撃, 防御, 素早さ, わざ]
 const CARD_LIST = [
   ['pencil', 'えんぴつ見習い', '✏️', 'N', 'cut', 61, 16, 9, 12, 'power'],
@@ -159,7 +162,7 @@ const isLR = (cardId, copies) => lrEligible(cardId) && copies >= LR_PROMOTE.copi
 function statsOf(cardId, level = 1, ur = false) {
   const c = CARDS[cardId], lr = ur === 'LR', m = (lr ? LR_PROMOTE.mult : ur ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
   return { id: c.id, name: c.name, emoji: c.emoji, rarity: lr ? 'LR' : ur ? 'UR' : c.rarity, ...(ur ? { baseRarity: c.rarity, promoted: true } : {}), type: c.type, skill: c.skill, level,
-    maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, ...(CARD_PASSIVE[c.id] ? { passive: CARD_PASSIVE[c.id] } : {}) };
+    maxHp: Math.round(c.hp * m * STAT_SCALE), atk: Math.round(c.atk * m * STAT_SCALE), def: Math.round(c.def * m * STAT_SCALE), spd: c.spd, ...(CARD_PASSIVE[c.id] ? { passive: CARD_PASSIVE[c.id] } : {}) };
 }
 
 // ---------- ガチャ ----------
@@ -509,7 +512,7 @@ CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
 `;
 // モンスターの評価 → カードのレア度。能力はモンスターの能力に比例 (上限なし。育てるほど強い)。はじめのモンスター (HP280・攻55・防55・速50) が R の平均くらい
 // 突然変異 R 以上のモンスターは「限定級」: 能力は限定キャラ (MONCARD_LIMITED) の平均より下にならず、倍率は限定キャラ (MR・UR) と同じ 1.2
-const MONCARD_FORMULA = 2; // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
+const MONCARD_FORMULA = 3; // 3: 限定級の下限を STAT_SCALE に合わせた // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
 const MONCARD_SCALE = { hp: 66.6 / 280, atk: 16.2 / 55, def: 11.1 / 55, spd: 10.8 / 50 };
 const MONCARD_LIMITED = ['tadokoro', 'scissors', 'star', 'raijin', 'watermid'], MONCARD_LIMITED_MULT = 1.2;
 const MUT_ORDER = ['N', 'R', 'SR', 'SSR', 'UR', 'MR'];
@@ -522,7 +525,7 @@ function monCardBase(m) {
   const limited = MUT_ORDER.indexOf(m.mutant) >= 1; // 突然変異 R 以上
   const own = { hp: m.hp * MONCARD_SCALE.hp, atk: Math.max(m.atk, m.mag) * MONCARD_SCALE.atk, def: m.def * MONCARD_SCALE.def, spd: m.spd * MONCARD_SCALE.spd };
   const lim = MONCARD_LIMITED.map((id) => CARD_LIST.find((c) => c[0] === id)).filter(Boolean), lavg = (i) => lim.reduce((a, c) => a + c[i], 0) / lim.length;
-  const floor = { hp: lavg(5), atk: lavg(6), def: lavg(7), spd: lavg(8) };
+  const floor = { hp: lavg(5) * STAT_SCALE, atk: lavg(6) * STAT_SCALE, def: lavg(7) * STAT_SCALE, spd: lavg(8) };
   const st = (k) => Math.max(1, Math.round(limited ? Math.max(own[k], floor[k]) : own[k]));
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
@@ -668,7 +671,7 @@ function install(app, ctx) {
   const horsesOwned = (uid) => db.prepare('SELECT * FROM card_horses WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // 馬のカードの能力 (文房具の statsOf と同じ形)
   const horseStats = (h) => { const ur = h.rarity === 'UR', lv = Math.min(h.level || 1, MAX_LEVEL), m = (ur ? UR_MULT : RARITY.SSR.mult) * (1 + LEVEL_BONUS * (lv - 1)); return { id: 'h:' + h.id, name: h.name, emoji: '🐴', rarity: ur ? 'UR' : 'SSR', type: h.type, skill: h.skill, level: lv, horse: true, coat: h.coat, origin: h.origin,
-    maxHp: Math.round(h.hp * m), atk: Math.round(h.atk * m), def: Math.round(h.def * m), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
+    maxHp: Math.round(h.hp * m * STAT_SCALE), atk: Math.round(h.atk * m * STAT_SCALE), def: Math.round(h.def * m * STAT_SCALE), spd: h.spd, skillName: SKILLS[h.skill].name, skillDesc: SKILLS[h.skill].desc }; };
   const qMonCard = db.prepare('SELECT * FROM card_monsters WHERE id = ?');
   const monCardsOwned = (uid) => db.prepare('SELECT * FROM card_monsters WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // モンスターのカードの能力 (文房具の statsOf と同じ形)
@@ -1199,4 +1202,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { GACHA_ENDS, inGacha, LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { STAT_SCALE, GACHA_ENDS, inGacha, LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

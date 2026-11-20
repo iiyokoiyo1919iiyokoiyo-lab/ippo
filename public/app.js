@@ -3765,10 +3765,10 @@ async function viewBattle(params) {
         t += 160;
       } else if (e.k === 'hit') {
         setTimeout(() => {
-          replay(el(e.p), 'lunge'); replay(el(1 - e.p), e.dmg >= 25 ? 'hurt big' : 'hurt');
+          replay(el(e.p), 'lunge'); replay(el(1 - e.p), e.dmg >= 100 ? 'hurt big' : 'hurt');
           pop(1 - e.p, `-${e.dmg}`, e.eff === 'good' ? 'dmg crit' : 'dmg');
           if (e.eff === 'good') pop(1 - e.p, 'こうかばつぐん！', 'tag');
-          if (e.dmg >= 25 && box()) replay(box(), 'shake');
+          if (e.dmg >= 100 && box()) replay(box(), 'shake');
         }, t);
         t += 420;
       } else if (e.k === 'heal') { setTimeout(() => pop(e.p, `+${e.amount}`, 'heal'), t); t += 300; }
