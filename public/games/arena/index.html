@@ -44,6 +44,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0b0d1a;color:var(--in
 /* スマホの操作 */
 body:not(.is-touch) .touch{display:none!important}
 #stick{position:fixed;left:18px;bottom:calc(70px + env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);z-index:8;touch-action:none}
+#stick:not(.float){opacity:.55} /* 左半分のどこでも、触ったところにスティックが出る */
 #stick i{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
 #fire,#jump,#reload,#punch,#weapon,#aim{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
 #fire{right:22px;bottom:calc(84px + env(safe-area-inset-bottom));width:86px;height:86px;background:rgba(255,107,107,.55);font-size:15px}
@@ -100,6 +101,6 @@ body.scoped #scopeov{display:block} body.scoped #cross{display:none}
   <button class="btn" id="start" disabled>じゅんび中…</button>
 </div></div>
 <script src="arena-map.js?v=1"></script>
-<script type="module" src="game.js?v=20"></script>
+<script type="module" src="game.js?v=21"></script>
 </body>
 </html>

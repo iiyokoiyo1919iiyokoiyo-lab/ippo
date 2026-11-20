@@ -3,7 +3,7 @@
 //   ・自分の動きはこの端末で計算してサーバーに送る (サーバーが速さをたしかめる)
 //   ・弾は「画面のまん中」をねらう。当たったかどうかはサーバーが決める
 //   ・パソコン: WASD・マウス (クリックで視点を固定)・クリックで撃つ・Space ジャンプ・Shift ダッシュ・R リロード
-//   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
+//   ・スマホ: 画面の左半分を触るとそこにスティックが出て移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
 import { createGraphics } from './world.js?v=13';
@@ -17,7 +17,7 @@ const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '左のスティックで移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
+  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
   : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
@@ -115,13 +115,16 @@ if (isTouch) {
     knob.style.transform = `translate(${dx * k}px,${dy * k}px)`; move.x = (dx * k) / max; move.y = (dy * k) / max; move.run = L > max * 0.92; };
   stick.addEventListener('touchstart', (e) => { e.preventDefault(); const t = e.changedTouches[0]; sid = t.identifier; sm(t); }, { passive: false });
   stick.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) if (t.identifier === sid) sm(t); }, { passive: false });
-  const send0 = (e) => { for (const t of e.changedTouches) if (t.identifier === sid) { sid = null; move.x = move.y = 0; move.run = false; knob.style.transform = ''; } };
+  const send0 = (e) => { for (const t of e.changedTouches) if (t.identifier === sid) { sid = null; move.x = move.y = 0; move.run = false; knob.style.transform = ''; stick.style.left = stick.style.top = stick.style.bottom = ''; stick.classList.remove('float'); } };
+  // 画面の左半分なら、どこを触ってもそこにスティックが出る (はなすと元の場所にもどる)
+  const floatStick = (t) => { const w = stick.offsetWidth, h = w / 2, x = Math.max(h + 4, Math.min(innerWidth - h - 4, t.clientX)), y = Math.max(h + 60, Math.min(innerHeight - h - 4, t.clientY));
+    stick.style.left = (x - h) + 'px'; stick.style.top = (y - h) + 'px'; stick.style.bottom = 'auto'; stick.classList.add('float'); sid = t.identifier; sm(t); };
   stick.addEventListener('touchend', send0); stick.addEventListener('touchcancel', send0);
   // 視点: スティックとボタン以外の場所をなぞる
   const look = new Map();
-  canvas.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) look.set(t.identifier, [t.clientX, t.clientY]); }, { passive: true });
-  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) { const p = look.get(t.identifier); if (!p) continue; const sk = scoped ? 0.3 : aiming ? 0.6 : 1; me.yaw -= (t.clientX - p[0]) * 0.0052 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - p[1]) * 0.0042 * sk)); look.set(t.identifier, [t.clientX, t.clientY]); } }, { passive: false });
-  const lend = (e) => { for (const t of e.changedTouches) look.delete(t.identifier); };
+  canvas.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) { if (sid === null && t.clientX < innerWidth / 2) floatStick(t); else look.set(t.identifier, [t.clientX, t.clientY]); } }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) { if (t.identifier === sid) { sm(t); continue; } const p = look.get(t.identifier); if (!p) continue; const sk = scoped ? 0.3 : aiming ? 0.6 : 1; me.yaw -= (t.clientX - p[0]) * 0.0052 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - p[1]) * 0.0042 * sk)); look.set(t.identifier, [t.clientX, t.clientY]); } }, { passive: false });
+  const lend = (e) => { send0(e); for (const t of e.changedTouches) look.delete(t.identifier); };
   canvas.addEventListener('touchend', lend); canvas.addEventListener('touchcancel', lend);
   // うつ: 押しながらなぞると、視点も動かせる
   const fire = $('#fire'); let fid = null, fp = null;
