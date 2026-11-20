@@ -122,7 +122,7 @@ const CARD_LIST = [
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
   ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:00 から)。体力と防御が高く、攻撃が低い
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
-  ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'], // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-21 8:00 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
+  ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'], // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -131,7 +131,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-21T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -627,7 +627,7 @@ const QUESTS = [
     tip: '敵は 🪨おもい の中大兄皇子・雷鳴ホチキスと、✂️きる の疾風剣士ハサミ丸 (全員 Lv20・能力 1.3 倍)。📄つつむ のカードが有利だが、ハサミ丸には ✂️きる が効くので気をつけて！ 中大兄皇子の「大化の改新」は味方の毒・怯み・眠り・説教の攻撃ダウン・流星をすべて取りのぞく。状態異常にたよらず、わざのあと (2 ターン使えない) に一気に削るのがコツ',
     enemy: [['nakanoooe', 20], ['scissors', 20], ['raimei', 20]],
     titles: { 1: '大化最速クリア👑', 2: '大化準最速クリア👑' },
-    start: Date.parse('2026-11-21T08:00:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') },
+    start: Date.parse('2026-11-20T23:30:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 11/21 8:00 開始 → 11/20 23:30 に前倒し (終わりはそのまま)
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)
