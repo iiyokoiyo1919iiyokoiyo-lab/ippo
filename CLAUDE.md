@@ -53,7 +53,7 @@
 - 街を舞台にした 3D の撃ち合い (デスマッチ)。IppO の中の iframe (`#/arena` → `/games/arena/`)。WebSocket `/ab` (ログインが必要)。1 つの街に 16 人まで
 - 3D は three.js (`public/games/arena/vendor/three.module.min.js`・MIT。CSP が 'self' だけなので、外の CDN は使えない)
 - マップと当たり判定は `public/games/arena/arena-map.js` (サーバーとブラウザで共通。同じ種から同じ街ができる)
-- 見た目は `public/games/arena/world.js`: 画像ファイルなしの手続き的なテクスチャ (外壁 4 種類・アスファルト・歩道・草・木箱)、PBR・空 (Sky)・空の映りこみ (PMREM)・太陽の影 (自分のまわりだけ)・ACES・ブルーム・AO (GTAO)・FXAA。画質は low / medium / high (スマホは medium、パソコンは high から。はじめの画面の ⚙️ で変える・localStorage `arena_quality`)
+- 見た目は `public/games/arena/world.js`: 画像ファイルなしの手続き的なテクスチャ (外壁 4 種類・アスファルト・歩道・草・木箱)、PBR・空 (Sky)・空の映りこみ (PMREM)・太陽の影 (自分のまわりだけ)・ACES・ブルーム・AO (GTAO)・FXAA。画質は low / medium / high / ultra (スマホは high、パソコンは ultra=最高 から。はじめの画面の ⚙️ で変える・localStorage `arena_quality`)。最高は MSAA 4x + SMAA・影 4096・テクスチャ 1024・異方性フィルタ最大・公園の草 (風でゆれる)。高以上は街の映りこみ (CubeCamera を 1 回)・水たまり・色の仕上げ (周辺減光・粒)。重いときは解像度を自動で下げる (動的解像度。`GFX.pixelRatio`)
 - three.js の追加部品は `vendor/jsm/` (import を `../../three.module.min.js` に書きかえてある)。当たり判定 (arena-map.js) は見た目を変えても変えない
 - 動きはブラウザが送り、サーバーが速さ (ワープ) をたしかめる。弾の当たり判定はサーバー (壁・頭 45・体 22)。なぐる (F・右クリック・スマホの「なぐる」) は前 2.4m・左右 55°・35 ダメージ + ふっとばし (`PUNCH`)。HP が 0 で行動不能 → 3 秒で復活・2 秒無敵
 - 人が少ないときはボット (人間 + ボットで 4 人。最大 3 体。テストは `ARENA_BOTS=0` でボットなし)。コインなどの報酬はなし

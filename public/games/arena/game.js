@@ -6,12 +6,12 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=12';
+import { createGraphics } from './world.js?v=13';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
 import { NpcView } from './npcs.js?v=3';
 import { Sound } from './sound.js?v=3';
 import { Gore } from './gore.js?v=2';
-import { Settings } from './settings.js?v=2';
+import { Settings } from './settings.js?v=3';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
@@ -28,7 +28,7 @@ const seedOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0))
 const makeChar = (color, name, isMe) => GFX.makeChar(color, name, isMe, seedOf(name));
 // ---------- 体の物理・通行人・音・血・設定 ----------
 const env = { groundAt: (x, z) => GFX.curbAt(x, z), boxes: map.solid, cam: camera.position };
-const ragdolls = new RagdollManager({ low: 3, medium: 6, high: 10 }[GFX.quality] || 6);
+const ragdolls = new RagdollManager({ low: 3, medium: 6, high: 10, ultra: 14 }[GFX.quality] || 6);
 const sound = new Sound(), gore = new Gore(scene, env);
 const settings = new Settings({
   quality: GFX.quality, qualities: GFX.qualities, onQuality: (q) => { GFX.setQuality(q); location.reload(); },

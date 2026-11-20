@@ -2,7 +2,9 @@
 // シティバトル: 見た目 (リアルな街・キャラクター・光と影・画面の仕上げ)
 //   ・画像ファイルは使わず、壁・アスファルト・歩道・草などの質感はすべてプログラムで描く (手続き的なテクスチャ)
 //   ・PBR (MeshStandardMaterial)・空 (Sky)・空からの映りこみ (PMREM)・太陽の影・ACES の色・ブルーム・AO・FXAA
-//   ・画質は 3 段階 (low / medium / high)。スマホは medium、パソコンは high から始まる (画面の ⚙️ で変えられる)
+//   ・画質は 4 段階 (low / medium / high / ultra)。スマホは high、パソコンは ultra (最高) から始まる (画面の ⚙️ で変えられる)
+//   ・最高: MSAA 4x + SMAA・影 4096・テクスチャ 1024・街の映りこみ・色の仕上げ・公園の草 (風でゆれる)
+//   ・重くなったら解像度を自動で下げ、軽くなったら上げる (動的解像度)
 //   ・当たり判定 (arena-map.js) は変えない。見た目だけ
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
@@ -13,6 +15,7 @@ import { UnrealBloomPass } from './vendor/jsm/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from './vendor/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from './vendor/jsm/postprocessing/GTAOPass.js';
 import { FXAAShader } from './vendor/jsm/shaders/FXAAShader.js';
+import { SMAAPass } from './vendor/jsm/postprocessing/SMAAPass.js';
 import { Sky } from './vendor/jsm/objects/Sky.js';
 import { mergeGeometries } from './vendor/jsm/utils/BufferGeometryUtils.js';
 
@@ -20,8 +23,10 @@ const BLOCK = 18, ROAD = 8, N = 5, CURB = 0.15;
 const QUALITY = {
   low: { pr: 1, shadow: 0, bloom: false, ao: false, texSize: 256, props: 0.5 },
   medium: { pr: 1.5, shadow: 1024, bloom: true, ao: false, texSize: 512, props: 1 },
-  high: { pr: 2, shadow: 2048, bloom: true, ao: true, texSize: 512, props: 1 },
+  high: { pr: 2, shadow: 2048, bloom: true, ao: true, texSize: 512, props: 1, envCity: true, grade: true },
+  ultra: { pr: 3, shadow: 4096, shadowRange: 60, bloom: true, ao: true, texSize: 1024, props: 1, envCity: true, grade: true, msaa: 4, smaa: true, grass: true },
 };
+let ANISO = 8; // テクスチャのななめから見たときのくっきりさ (GPU の最大にする)
 
 // ---------- 乱数・ノイズ ----------
 function rng(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -38,7 +43,7 @@ function normalFrom(heightCanvas, strength = 2) {
   }
   g.putImageData(img, 0, 0); return out;
 }
-function tex(c, { srgb = true, repeat = true, aniso = 8 } = {}) {
+function tex(c, { srgb = true, repeat = true, aniso = ANISO } = {}) {
   const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = aniso; return t;
 }
@@ -52,7 +57,8 @@ function makeMaterials(S, R) {
     for (let k = 0; k < 6; k++) { g.fillStyle = `rgba(${20 + R() * 30},${20 + R() * 30},${25 + R() * 30},.25)`; g.beginPath(); g.ellipse(R() * S, R() * S, S * (0.1 + R() * 0.2), S * (0.05 + R() * 0.15), R() * 3, 0, 7); g.fill(); }
     speckle(g, S, S, S * 40, 1.6, ['#1f2024', '#4a4c52', '#5c5e63', '#2a2b2f'], 0.7, R); speckle(hg, S, S, S * 40, 1.6, ['#606060', '#a0a0a0'], 0.8, R);
     g.strokeStyle = 'rgba(15,15,18,.55)'; hg.strokeStyle = '#303030'; for (let k = 0; k < 5; k++) { let x = R() * S, y = R() * S; g.beginPath(); hg.beginPath(); g.moveTo(x, y); hg.moveTo(x, y); for (let s = 0; s < 14; s++) { x += (R() - 0.5) * 22; y += (R() - 0.5) * 22; g.lineTo(x, y); hg.lineTo(x, y); } g.lineWidth = hg.lineWidth = 1.2; g.stroke(); hg.stroke(); }
-    M.asphalt = new THREE.MeshStandardMaterial({ map: tex(c), normalMap: tex(normalFrom(hc, 3), { srgb: false }), roughness: 0.93, metalness: 0 }); }
+    const rc = canvas(S), rg = rc.getContext('2d'); rg.fillStyle = '#ededed'; rg.fillRect(0, 0, S, S); speckle(rg, S, S, S * 10, 2, ['#d0d0d0', '#ffffff'], 0.6, R);
+    M.asphalt = new THREE.MeshStandardMaterial({ map: tex(c), normalMap: tex(normalFrom(hc, 3), { srgb: false }), roughnessMap: tex(rc, { srgb: false }), roughness: 0.95, metalness: 0, envMapIntensity: 1.2 }); }
   // 歩道: タイル・目地・よごれ
   { const c = canvas(S), g = c.getContext('2d'), hc = canvas(S), hg = hc.getContext('2d'), n = 4, cell = S / n;
     g.fillStyle = '#a9a69e'; g.fillRect(0, 0, S, S); hg.fillStyle = '#c0c0c0'; hg.fillRect(0, 0, S, S);
@@ -138,10 +144,11 @@ function tiledBox(w, h, d, tile = 3) {
 // ---------- 描画のしくみ ----------
 export function createGraphics({ canvasEl, isTouch, map, A }) {
   let qName = (() => { try { return localStorage.getItem('arena_quality'); } catch { return null; } })();
-  if (!QUALITY[qName]) qName = isTouch ? 'medium' : 'high';
+  if (!QUALITY[qName]) qName = isTouch ? 'high' : 'ultra';
   const Q = QUALITY[qName];
   const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: false, powerPreference: 'high-performance' });
-  const PR = Math.min(devicePixelRatio, Q.pr);
+  ANISO = Q.texSize >= 1024 ? renderer.capabilities.getMaxAnisotropy() : Q.texSize >= 512 ? Math.min(8, renderer.capabilities.getMaxAnisotropy()) : 2;
+  const PR_MAX = Math.min(devicePixelRatio, Q.pr); let PR = PR_MAX; // PR: いまの解像度 (重いと下げる)
   renderer.setPixelRatio(PR);
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.62;
   renderer.shadowMap.enabled = !!Q.shadow; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -163,7 +170,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
   const sun = new THREE.DirectionalLight('#ffd6a0', 2.6); sun.position.copy(sunDir).multiplyScalar(90); scene.add(sun, sun.target);
   if (Q.shadow) {
     sun.castShadow = true; sun.shadow.mapSize.set(Q.shadow, Q.shadow);
-    Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 260 }); sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
+    const SR = Q.shadowRange || 40; Object.assign(sun.shadow.camera, { left: -SR, right: SR, top: SR, bottom: -SR, near: 1, far: 260 }); sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
   }
   scene.add(new THREE.HemisphereLight('#bcd3ee', '#4b4036', 0.35));
 
@@ -276,20 +283,94 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, list.length), o = new THREE.Object3D();
     list.forEach(([x, z, w, d, h], k) => { o.position.set(x, h / 2, z); o.scale.set(w, h, d); o.rotation.set(0, R() * 3, 0); o.updateMatrix(); im.setMatrixAt(k, o.matrix); }); scene.add(im); }
 
-  // ---------- 画面の仕上げ: ブルーム (光のにじみ)・AO (すき間の陰)・ACES・FXAA ----------
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+  // 公園の草 (最高画質): 小さな草むらをたくさん。風でゆれる (頂点シェーダー)
+  const wind = { value: 0 };
+  if (Q.grass) {
+    const blades = [], pos = [], col = [];
+    for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI + R() * 0.4, ca = Math.cos(a) * 0.035, sa = Math.sin(a) * 0.035, lx = (R() - 0.5) * 0.12, lz = (R() - 0.5) * 0.12, h = 0.22 + R() * 0.2, bx = (R() - 0.5) * 0.08;
+      pos.push(lx - ca, 0, lz - sa, lx + ca, 0, lz + sa, lx + bx, h, lz); col.push(0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 1, 1, 1); }
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); bg.computeVertexNormals();
+    bg.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3)); // 上向きの法線 (地面と同じ明るさ)
+    const gmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+    gmat.onBeforeCompile = (sh) => { sh.uniforms.uWind = wind;
+      sh.vertexShader = 'uniform float uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0); float sway = sin(uWind * 1.7 + wp.x * 0.35 + wp.z * 0.21) * 0.5 + sin(uWind * 3.1 + wp.x * 0.9) * 0.25;
+        transformed.x += sway * 0.06 * position.y * 3.0; transformed.z += sway * 0.03 * position.y * 3.0;`); };
+    for (const b of map.boxes.filter((x) => x.kind === 'grass')) {
+      const W = b.w - 3.4, D = b.d - 3.4, n = Math.floor(W * D * 9), im = new THREE.InstancedMesh(bg, gmat, n), o = new THREE.Object3D(), c = new THREE.Color(); let k = 0;
+      for (let t = 0; t < n; t++) { const x = b.x + (R() - 0.5) * W, z = b.z + (R() - 0.5) * D;
+        if (map.solid.some((s) => Math.abs(x - s.x) < s.w / 2 + 0.2 && Math.abs(z - s.z) < s.d / 2 + 0.2)) continue;
+        o.position.set(x, CURB + 0.01, z); o.rotation.set(0, R() * 6.28, 0); const s = 0.7 + R() * 0.7; o.scale.set(s, s * (0.8 + R() * 0.5), s); o.updateMatrix(); im.setMatrixAt(k, o.matrix);
+        c.setHSL(0.23 + R() * 0.06, 0.45 + R() * 0.2, 0.2 + R() * 0.1); im.setColorAt(k, c); k++; }
+      im.count = k; im.frustumCulled = false; receive(im); scene.add(im);
+    }
+  }
+  // 水たまり (高画質以上): 道路のところどころ。つるつるで、空やビルが映る
+  if (Q.envCity) {
+    const s2 = 128, pc = canvas(s2), pg = pc.getContext('2d'); pg.fillStyle = '#000'; pg.fillRect(0, 0, s2, s2);
+    for (let k = 0; k < 7; k++) { const x = s2 * (0.3 + R() * 0.4), y = s2 * (0.3 + R() * 0.4), r = s2 * (0.12 + R() * 0.14), gr = pg.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, '#fff'); gr.addColorStop(0.75, '#fff'); gr.addColorStop(1, 'rgba(255,255,255,0)'); pg.fillStyle = gr; pg.beginPath(); pg.arc(x, y, r, 0, 7); pg.fill(); }
+    const pmat = new THREE.MeshStandardMaterial({ color: '#0d0e11', roughness: 0.03, metalness: 0, alphaMap: tex(pc, { srgb: false, repeat: false }), transparent: true, opacity: 0.92, depthWrite: false, envMapIntensity: 1.6, polygonOffset: true, polygonOffsetFactor: -2 });
+    const pgeo = new THREE.PlaneGeometry(1, 1); let made = 0;
+    for (let t = 0; t < 200 && made < 28; t++) { const x = (R() - 0.5) * (A.SIZE - 4), z = (R() - 0.5) * (A.SIZE - 4);
+      if (curbAt(x, z) || map.solid.some((b) => Math.abs(x - b.x) < b.w / 2 + 1.5 && Math.abs(z - b.z) < b.d / 2 + 1.5)) continue;
+      const pm = receive(new THREE.Mesh(pgeo, pmat)); pm.rotation.set(-Math.PI / 2, 0, R() * 6.28); pm.scale.set(1.5 + R() * 2.5, 1.2 + R() * 2, 1); pm.position.set(x, 0.006, z); scene.add(pm); made++; }
+  }
+  // 街の映りこみ: 街のまん中の上から 6 方向を 1 回だけ撮って、ガラス・車・水たまりに映す
+  if (Q.envCity) {
+    const cubeRT = new THREE.WebGLCubeRenderTarget(Q.texSize >= 1024 ? 512 : 256, { type: THREE.HalfFloatType });
+    const cubeCam = new THREE.CubeCamera(0.5, 1500, cubeRT); cubeCam.position.set(0, 9, 0); scene.add(cubeCam);
+    cubeCam.update(renderer, scene); scene.remove(cubeCam);
+    const cityEnv = pmrem.fromCubemap(cubeRT.texture).texture; cubeRT.dispose(); scene.environment = cityEnv;
+  }
+
+  // ---------- 画面の仕上げ: ブルーム (光のにじみ)・AO (すき間の陰)・ACES・SMAA/FXAA・色の仕上げ ----------
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: Q.msaa && renderer.capabilities.isWebGL2 ? Q.msaa : 0 }));
   composer.addPass(new RenderPass(scene, camera));
   let gtao = null, bloom = null;
   if (Q.ao) { gtao = new GTAOPass(scene, camera, 1, 1); gtao.output = GTAOPass.OUTPUT.Default; gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1, thickness: 1, scale: 1 }); composer.addPass(gtao); }
   if (Q.bloom) { bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.45, 1.05); composer.addPass(bloom); }
   composer.addPass(new OutputPass());
-  const fxaa = new ShaderPass(FXAAShader); composer.addPass(fxaa);
+  let fxaa = null; if (Q.smaa) composer.addPass(new SMAAPass(1, 1)); else { fxaa = new ShaderPass(FXAAShader); composer.addPass(fxaa); }
+  // 色の仕上げ: 少しだけコントラスト・彩度・周辺減光・画面のはしの色ずれ・フィルムの粒
+  let grade = null;
+  if (Q.grade) {
+    grade = new ShaderPass({ uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime; uniform vec2 uRes; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        void main(){
+          vec2 d = vUv - 0.5; float r2 = dot(d, d);
+          vec2 ca = d * r2 * 0.012; // 色ずれ (はしだけ)
+          vec3 c = vec3(texture2D(tDiffuse, vUv + ca).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - ca).b);
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          c = mix(vec3(l), c, 1.08);                        // 彩度
+          c = mix(c, c * c * (3.0 - 2.0 * c), 0.18);        // コントラスト (S 字)
+          c *= vec3(1.02, 1.0, 0.97);                       // 少しあたたかく
+          c *= 1.0 - smoothstep(0.18, 0.62, r2) * 0.32;     // 周辺減光
+          c += (h(vUv * uRes + fract(uTime) * 91.7) - 0.5) * 0.022; // フィルムの粒
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }` });
+    composer.addPass(grade);
+  }
 
   function resize() {
     const w = innerWidth, h = innerHeight;
-    renderer.setSize(w, h, false); composer.setPixelRatio(PR); composer.setSize(w, h);
-    camera.aspect = w / h; camera.fov = w < h ? 82 : 70; camera.updateProjectionMatrix();
-    fxaa.material.uniforms.resolution.value.set(1 / (w * PR), 1 / (h * PR));
+    applyPR(); camera.aspect = w / h; camera.fov = w < h ? 82 : 70; camera.updateProjectionMatrix();
+  }
+  function applyPR() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setPixelRatio(PR); renderer.setSize(w, h, false); composer.setPixelRatio(PR); composer.setSize(w, h);
+    fxaa?.material.uniforms.resolution.value.set(1 / (w * PR), 1 / (h * PR)); grade?.material.uniforms.uRes.value.set(w * PR, h * PR);
+  }
+  // 動的解像度: 重い (50fps より下) がつづいたら解像度を下げ、ずっと軽ければ少しずつもどす
+  const dyn = { last: 0, ema: 16.7, t: 0, good: 0 };
+  function adapt(now) {
+    const dt = dyn.last ? now - dyn.last : 16.7; dyn.last = now; if (document.hidden || dt > 600) return; // タブが裏にあった
+    dyn.ema += (dt - dyn.ema) * 0.05; dyn.t += dt; if (dyn.t < 1500) return; dyn.t = 0;
+    const minPR = Math.min(1, PR_MAX);
+    if (dyn.ema > 21 && PR > minPR) { PR = Math.max(minPR, PR - 0.25); dyn.good = 0; applyPR(); }
+    else if (dyn.ema < 17.6 && PR < PR_MAX) { if (++dyn.good >= 3) { PR = Math.min(PR_MAX, PR + 0.125); dyn.good = 0; applyPR(); } }
+    else dyn.good = 0;
   }
   // 影は自分のまわりだけ (太陽の影のカメラを、自分についていかせる)
   function follow(x, z) { if (!Q.shadow) return; const sx = Math.round(x / 4) * 4, sz = Math.round(z / 4) * 4; sun.target.position.set(sx, 0, sz); sun.position.set(sx + sunDir.x * 90, sunDir.y * 90, sz + sunDir.z * 90); }
@@ -570,6 +651,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
 
   scene.add(camera); // 一人称の手と銃をカメラの子にするため
   return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
-    render() { composer.render(); },
+    render() { const now = performance.now(); adapt(now); wind.value = now / 1000; if (grade) grade.material.uniforms.uTime.value = now / 1000; composer.render(); },
+    get pixelRatio() { return PR; },
     setQuality(q) { try { localStorage.setItem('arena_quality', q); } catch {} } };
 }
