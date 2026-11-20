@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>シティバトル</title>
+<style>
+:root{ --ink:#fff; --hud:rgba(10,12,30,.55); --accent:#ffd43b; --danger:#ff6b6b; color-scheme:dark; }
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b0d1a;color:var(--ink);font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud{position:fixed;pointer-events:none;z-index:5}
+#cross{left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px}
+#cross i{position:absolute;background:#fff;box-shadow:0 0 2px #000}
+#cross i:nth-child(1){left:12px;top:0;width:2px;height:8px}#cross i:nth-child(2){left:12px;bottom:0;width:2px;height:8px}
+#cross i:nth-child(3){top:12px;left:0;height:2px;width:8px}#cross i:nth-child(4){top:12px;right:0;height:2px;width:8px}
+#cross.hit i{background:var(--danger)}
+#hitmark{left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;opacity:0;transform:rotate(45deg)}
+#hitmark i{position:absolute;background:#fff}#hitmark i:nth-child(1){left:16px;top:0;width:2px;height:10px}#hitmark i:nth-child(2){left:16px;bottom:0;width:2px;height:10px}#hitmark i:nth-child(3){top:16px;left:0;height:2px;width:10px}#hitmark i:nth-child(4){top:16px;right:0;height:2px;width:10px}
+#hitmark.on{animation:hm .25s ease-out}#hitmark.head i{background:var(--accent)}
+@keyframes hm{0%{opacity:1;transform:rotate(45deg) scale(1.4)}100%{opacity:0;transform:rotate(45deg) scale(1)}}
+#hpbox{left:14px;bottom:calc(14px + env(safe-area-inset-bottom));width:min(240px,44vw);background:var(--hud);border-radius:12px;padding:8px 10px}
+#hpbox b{font-size:13px}#hpbar{height:10px;border-radius:6px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:4px}#hpbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#69db7c,#a9e34b);transition:width .15s}
+#hpbar.low i{background:linear-gradient(90deg,#ff6b6b,#ff922b)}
+#ammo{right:14px;bottom:calc(14px + env(safe-area-inset-bottom));background:var(--hud);border-radius:12px;padding:8px 12px;font-weight:900;font-size:22px;text-align:right}
+#ammo small{display:block;font-size:11px;font-weight:700;opacity:.8}
+#feed{right:10px;top:calc(10px + env(safe-area-inset-top));display:grid;gap:4px;justify-items:end;max-width:62vw}
+#feed div{background:var(--hud);border-radius:8px;padding:3px 8px;font-size:12px;font-weight:700;animation:fin .25s ease-out}
+#feed .me{background:rgba(255,212,59,.35)}
+@keyframes fin{from{transform:translateX(30px);opacity:0}}
+#score{left:10px;top:calc(10px + env(safe-area-inset-top));background:var(--hud);border-radius:10px;padding:6px 10px;font-size:12px;min-width:150px}
+#score b{display:block;font-size:13px;margin-bottom:2px}#score div{display:flex;justify-content:space-between;gap:10px}#score .you{color:var(--accent);font-weight:900}
+#dmg{inset:0;background:radial-gradient(circle,transparent 55%,rgba(255,60,60,.55));opacity:0;transition:opacity .25s}
+#prot{left:50%;top:22%;transform:translateX(-50%);font-weight:900;font-size:13px;background:rgba(116,143,252,.55);border-radius:999px;padding:3px 12px;display:none}
+#center{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(5,6,18,.62);text-align:center;padding:20px}
+#center.hide{display:none}
+#center h1{margin:0 0 6px;font-size:34px;letter-spacing:.04em;background:linear-gradient(180deg,#fff,#ffd43b 60%,#ff922b);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #000)}
+#center p{margin:6px 0;font-size:14px;opacity:.92;line-height:1.6}
+.btn{pointer-events:auto;border:0;border-radius:14px;padding:12px 22px;font:inherit;font-weight:900;font-size:17px;background:linear-gradient(135deg,#ffe066,#fab005);color:#3b1d00;box-shadow:0 4px 0 rgba(140,80,0,.5);cursor:pointer}
+.btn.ghost{background:rgba(255,255,255,.15);color:#fff;box-shadow:none;font-size:14px;padding:8px 14px}
+#dead{position:fixed;inset:0;z-index:15;display:none;place-items:center;text-align:center;background:rgba(40,0,10,.35);pointer-events:none}
+#dead b{display:block;font-size:40px;font-weight:900;color:#fff;-webkit-text-stroke:2px #000;paint-order:stroke fill}
+#dead span{font-size:15px;font-weight:700}
+/* スマホの操作 */
+body:not(.is-touch) .touch{display:none!important}
+#stick{position:fixed;left:18px;bottom:calc(70px + env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);z-index:8;touch-action:none}
+#stick i{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
+#fire,#jump,#reload{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
+#fire{right:22px;bottom:calc(84px + env(safe-area-inset-bottom));width:86px;height:86px;background:rgba(255,107,107,.55);font-size:15px}
+#jump{right:122px;bottom:calc(70px + env(safe-area-inset-bottom));width:60px;height:60px;background:rgba(255,255,255,.18);font-size:12px}
+#reload{right:36px;bottom:calc(186px + env(safe-area-inset-bottom));width:52px;height:52px;background:rgba(255,255,255,.18);font-size:11px}
+@media (prefers-reduced-motion:reduce){#feed div,#hitmark.on{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud" id="cross"><i></i><i></i><i></i><i></i></div>
+<div class="hud" id="hitmark"><i></i><i></i><i></i><i></i></div>
+<div class="hud" id="dmg"></div>
+<div class="hud" id="prot">🛡️ 無敵中</div>
+<div class="hud" id="hpbox"><b id="hptxt">HP 100</b><div id="hpbar"><i></i></div></div>
+<div class="hud" id="ammo"><span id="ammotxt">15</span><small id="ammosub">/ 15</small></div>
+<div class="hud" id="feed"></div>
+<div class="hud" id="score"></div>
+<div id="dead"><div><b>やられた！</b><span id="deadby"></span></div></div>
+<div class="touch" id="stick"><i></i></div>
+<div class="touch" id="fire">うつ</div>
+<div class="touch" id="jump">ジャンプ</div>
+<div class="touch" id="reload">リロード</div>
+<div id="center"><div>
+  <h1>シティバトル</h1>
+  <p>街じゅうのプレイヤーと撃ちあうバトル。<br>たおした数をきそおう！ やられても 3 秒で復活します。</p>
+  <p id="howto"></p>
+  <p id="status" style="color:var(--accent)"></p>
+  <button class="btn" id="start" disabled>じゅんび中…</button>
+</div></div>
+<script src="arena-map.js?v=1"></script>
+<script type="module" src="game.js?v=3"></script>
+</body>
+</html>

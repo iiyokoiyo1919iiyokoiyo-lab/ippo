@@ -2604,6 +2604,7 @@ function route() {
   if (h === '/pixel') { setActiveNav('pixel'); return viewPixel(); }
   if (h === '/horse') { setActiveNav('games'); return viewHorse(); }
   if (h === '/monster') { setActiveNav('games'); return viewMonster(); }
+  if (h === '/arena') { setActiveNav('games'); return viewArena(); }
   if (h === '/horse/race') { setActiveNav('games'); return viewRace(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
@@ -2865,6 +2866,24 @@ function viewHorse() {
   window.addEventListener('resize', fit);
   viewCleanup = () => window.removeEventListener('resize', fit);
 }
+// シティバトル (/games/arena/ を iframe で開く。3D の撃ち合い)
+function viewArena() {
+  main.innerHTML = pageHead({ title: 'シティバトル', sub: 'ミニゲーム · 3D の撃ち合い・オンライン', back: '#/games' }) +
+    `<div class="horse-wrap"><iframe class="horse-frame" id="arena-frame" src="/games/arena/" title="シティバトル" allow="fullscreen"></iframe></div>`;
+  const frame = $('#arena-frame');
+  const fit = () => {
+    const tab = $('.tabbar'), tabH = tab && getComputedStyle(tab).display !== 'none' ? tab.getBoundingClientRect().height : 0;
+    frame.style.height = Math.max(420, window.innerHeight - (frame.getBoundingClientRect().top + window.scrollY) - tabH) + 'px';
+  };
+  fit(); window.scrollTo(0, 0);
+  window.addEventListener('resize', fit);
+  viewCleanup = () => window.removeEventListener('resize', fit);
+}
+window.addEventListener('message', (e) => {
+  const af = $('#arena-frame');
+  if (!af || e.source !== af.contentWindow || e.origin !== location.origin) return;
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'login') openAuth();
+});
 // ブリードモンスターズ (/games/monster/ を iframe で開く。競走馬版と同じ形)
 async function viewMonster() {
   let ok = false; try { ok = (await api('/mon/access', { noAuthPrompt: true })).ok; } catch {}
@@ -2913,6 +2932,10 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card game-card-new" href="#/arena">
+      <span class="game-card-art mb-art" aria-hidden="true">🏙️</span>
+      <span class="game-card-body"><b>シティバトル <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>街を舞台にした 3D の撃ち合い。みんなとオンラインで、たおした数をきそおう (人が少ないときはボットも参加)</span>
+        <span class="chip chip-accent">🎯 3D・オンライン対戦</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/monster" id="mon-game" style="display:none">
       <span class="game-card-art mb-art" aria-hidden="true">🧬</span>
       <span class="game-card-body"><b>ブリードモンスターズ <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>モンスターを配合して強い子を作り、十字キーのコマンドを打ちこんで戦う。15 分ごとにリアルタイムのセリも</span>

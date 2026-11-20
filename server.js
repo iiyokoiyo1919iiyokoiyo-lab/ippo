@@ -354,7 +354,8 @@ require('./games')(app, ctx); // ミニゲーム「暗算ダッシュ」(ラン�
 require('./cards')(app, ctx); // ミニゲーム「ぶんぼうぐバトラーズ」(ガチャ・オンライン対戦)
 require('./official')(app, ctx); // IppO 公式アカウント (アップデート情報の自動投稿) と、イベントの告知バナー
 require('./poker')(app, ctx);
-require('./monster')(app, ctx); // ミニゲーム「ブリードモンスターズ」(配合・育成・コマンドバトル・セリ。コインはぶんぼうぐバトラーズと共用) // ミニゲーム「レート戦ポーカー」(1 対 1 のテキサスホールデム。お金・コインは賭けない)
+require('./monster')(app, ctx);
+require('./arena')(app, ctx); // ミニゲーム「シティバトル」(街を舞台にした 3D の撃ち合い・オンライン) // ミニゲーム「ブリードモンスターズ」(配合・育成・コマンドバトル・セリ。コインはぶんぼうぐバトラーズと共用) // ミニゲーム「レート戦ポーカー」(1 対 1 のテキサスホールデム。お金・コインは賭けない)
 
 // ---------- ダイレクトメッセージ ----------
 // 会話は当事者2人しか読めない (すべてのクエリで自分が送信者か受信者であることを条件にする)
@@ -441,7 +442,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt' && u.pathname !== '/cb' && u.pathname !== '/pk' && u.pathname !== '/rc' && u.pathname !== '/mb') return socket.destroy();
+  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt' && u.pathname !== '/cb' && u.pathname !== '/pk' && u.pathname !== '/rc' && u.pathname !== '/mb' && u.pathname !== '/ab') return socket.destroy();
   // CSRF 的な他サイトからの接続を拒否
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
@@ -470,6 +471,12 @@ server.on('upgrade', (req, socket, head) => {
     const mbUser = userFromReq(req);
     if (!mbUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
     return ctx.monUpgrade(req, socket, head, mbUser);
+  }
+  // シティバトル (3D の撃ち合い)。本人確認が必要
+  if (u.pathname === '/ab') {
+    const abUser = userFromReq(req);
+    if (!abUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
+    return ctx.arenaUpgrade(req, socket, head, abUser);
   }
   // ぶんぼうぐバトラーズの対戦。本人確認が必要
   if (u.pathname === '/cb') {

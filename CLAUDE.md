@@ -49,6 +49,13 @@
 - 血統書シェア: モンスターの詳細 → `#pedigree/<id>` で 3 世代の家系図を画像 (1080×1350) にして保存・タイムラインに投稿 (`GET /api/mon/monster/:id/pedigree`。未発見の変異は出さない)
 - セリは 15 分ごと (毎時 5・20・35・50 分。`monster.js` の `PERIOD`。テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
 
+## シティバトル (arena.js・public/games/arena/)
+- 街を舞台にした 3D の撃ち合い (デスマッチ)。IppO の中の iframe (`#/arena` → `/games/arena/`)。WebSocket `/ab` (ログインが必要)。1 つの街に 16 人まで
+- 3D は three.js (`public/games/arena/vendor/three.module.min.js`・MIT。CSP が 'self' だけなので、外の CDN は使えない)
+- マップと当たり判定は `public/games/arena/arena-map.js` (サーバーとブラウザで共通。同じ種から同じ街ができる)
+- 動きはブラウザが送り、サーバーが速さ (ワープ) をたしかめる。弾の当たり判定はサーバー (壁・頭 45・体 22)。やられたら 3 秒で復活・2 秒無敵。血などの表現は入れない
+- 人が少ないときはボット (人間 + ボットで 4 人。最大 3 体。テストは `ARENA_BOTS=0` でボットなし)。コインなどの報酬はなし
+
 ## そのほか
 - 既存の機能を消さない・データベースの構造を勝手に変えない (表の追加・列の追加は `db.migrate` で)・認証やアクセス制御を弱めない
 - 利用者の書いた文字は必ずエスケープして表示する (innerHTML に生のまま入れない)
