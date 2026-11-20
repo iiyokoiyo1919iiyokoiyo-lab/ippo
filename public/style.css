@@ -2088,6 +2088,15 @@ body.arena-open { overflow: hidden; }
 .cb-newbulk-arts .cb-svg { width: 62px; height: 62px; }
 .cb-newbulk small { color: var(--primary, #4b55f0); font-weight: 800; }
 
+/* 大化の改新 (中大兄皇子): 金の巻物が開く */
+.cb-float.skill.taika { color: #c92a2a; }
+.cb-taika { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; align-content: center; gap: 4px; animation: cb-tk-flash 1.7s ease both; }
+.cb-taika b { padding: 10px 26px; border-radius: 8px; background: linear-gradient(90deg, #f1e3c0, #fff9e6 20%, #fff9e6 80%, #f1e3c0); color: #7a1414; font-size: 32px; font-weight: 900; letter-spacing: .12em; border-left: 10px solid #8d5a2b; border-right: 10px solid #8d5a2b; box-shadow: 0 6px 0 rgba(90, 40, 0, .3), 0 0 30px #ffd43b; animation: cb-tk-open .8s cubic-bezier(.2, 1.4, .4, 1) both; }
+.cb-taika i { font-style: normal; font-weight: 900; color: #fff; -webkit-text-stroke: 5px #a61e1e; paint-order: stroke fill; font-size: 18px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .25s both; }
+.cb-taika em { font-style: normal; font-weight: 900; color: #5c2d00; background: linear-gradient(90deg, #ffe066, #fab005); padding: 2px 14px; border-radius: 999px; font-size: 15px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .45s both; }
+@keyframes cb-tk-open { 0% { transform: scaleX(0); } 70% { transform: scaleX(1.06); } 100% { transform: scaleX(1); } }
+@keyframes cb-tk-flash { 0% { background: rgba(250, 176, 5, 0); } 15% { background: rgba(250, 176, 5, .35); } 100% { background: rgba(250, 176, 5, 0); } }
+@media (prefers-reduced-motion: reduce) { .cb-taika { animation: none; } .cb-taika * { animation: none !important; } }
 /* 説教 (ウォーターミッドナイト) */
 .cb-scolded { color: #1971c2; font-weight: 800; }
 .cb-float.skill.sermon { color: #1971c2; }

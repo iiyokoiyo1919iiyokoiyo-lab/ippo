@@ -3708,6 +3708,7 @@ async function viewBattle(params) {
     : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
+    : e.k === 'taika' ? `📜 大化の改新！ ${e.p === you ? '味方' : '相手'}の${e.fixed.length || e.meteor ? `${e.fixed.map((x) => `${x.card}の${x.what.join('・')}`).join('、')}${e.meteor ? `${e.fixed.length ? '、' : ''}流星` : ''}が取りのぞかれた` : '状態異常はなかった (こうげきだけ)'}`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
     : e.k === 'poisoned' ? `${e.p === you ? 'あなた' : '相手'}の ${e.cards.length} 体が毒になった！ ☠️`
@@ -3816,6 +3817,13 @@ async function viewBattle(params) {
           overlayFx('cb-sermon' + (e.p === you ? ' to-foe' : ' to-me'), `<b>コラーッ！！</b><i>📢 説教タイム</i>${e.to !== null ? `<em>攻撃 ${e.from} → ${e.to}</em>` : ''}`, 1600, e.p === you ? 'top' : 'bottom');
           if (e.to !== null) setTimeout(() => { replay(el(1 - e.p), 'hurt'); pop(1 - e.p, '攻撃ダウン…', 'tag'); }, 500);
           if (e.cured.length) setTimeout(() => pop(e.p, '💧 毒が治った', 'heal'), 800);
+        }, t);
+        t += 900;
+      }
+      else if (e.k === 'taika') { // 大化の改新: 金の巻物が開いて、味方の状態異常が消える
+        setTimeout(() => {
+          overlayFx('cb-taika' + (e.p === you ? ' to-me' : ' to-foe'), `<b>大化の改新</b><i>📜 新しい時代へ！</i>${e.fixed.length || e.meteor ? '<em>✨ 状態異常・デバフ すべて解除</em>' : ''}`, 1700, e.p === you ? 'bottom' : 'top');
+          if (e.fixed.length || e.meteor) setTimeout(() => pop(e.p, '✨ 全部治った', 'heal'), 600);
         }, t);
         t += 900;
       }

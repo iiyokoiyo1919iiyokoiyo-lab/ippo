@@ -364,6 +364,30 @@
         <path d="M74,26 C88,18 98,24 112,16 C104,30 92,28 78,32Z M76,30 C88,36 96,42 110,40 C100,50 90,44 78,36Z" fill="#e03131" stroke="#a61e1e" stroke-width="1.2"/>
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
+      // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
+      nakanoooe: () => {
+        const stone = lg('sz', [[0, '#5c636a'], [0.5, '#343a40'], [1, '#16191c']]), ink = rg('ik', [[0, '#495057'], [0.6, '#0b0c0e'], [1, '#000']], 0.4, 0.35, 0.9);
+        return `
+        ${[0, 30, 60, 90, 120, 150].map((a) => `<path d="M60,62 L${(60 + Math.cos(a * Math.PI / 180) * 70).toFixed(1)},${(62 - Math.sin(a * Math.PI / 180) * 70).toFixed(1)}" stroke="#ffd43b" stroke-width="5" opacity=".18"/>`).join('')}
+        <rect x="18" y="38" width="84" height="76" rx="14" fill="${stone}" stroke="#0b0c0e" stroke-width="2.4"/>
+        <rect x="24" y="44" width="72" height="64" rx="10" fill="none" stroke="#868e96" stroke-width="1.4" opacity=".7"/>
+        <ellipse cx="60" cy="98" rx="26" ry="9" fill="${ink}" stroke="#212529" stroke-width="1.4"/>
+        <path d="M42,97 Q50,93 58,97 M64,99 Q72,95 80,99" stroke="#adb5bd" stroke-width="1.2" fill="none" opacity=".6"/>
+        <ellipse cx="44" cy="52" rx="10" ry="4" fill="#fff" opacity=".18" transform="rotate(-18 44 52)"/>
+        <path d="M44,14 Q60,4 76,14 L78,38 H42Z" fill="${lg('km', [[0, '#3b3b4f'], [1, '#0b0c0e']])}" stroke="#000" stroke-width="1.6"/>
+        <path d="M56,12 C54,-2 66,-4 64,12" fill="#141517" stroke="#000" stroke-width="1.4"/>
+        <path d="M60,14 L62,-6" stroke="#141517" stroke-width="6" stroke-linecap="round"/>
+        <rect x="40" y="34" width="40" height="6" rx="2" fill="#141517"/>
+        <circle cx="60" cy="24" r="3.4" fill="#ffd43b" stroke="#e67700" stroke-width="1"/>
+        ${face(60, 66, { eyes: 'cool', mouth: 'smile', s: 0.95, iris: '#f8f9fa', blush: false, brows: true })}
+        <path d="M44,58 L54,60 M76,58 L66,60" stroke="#f8f9fa" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M100,60 L114,100" stroke="${lg('sk', [[0, '#fff9db'], [1, '#e9c46a']], 1, 0)}" stroke-width="7" stroke-linecap="round"/>
+        <path d="M100,60 L114,100" stroke="#8d5a2b" stroke-width="1.2" stroke-linecap="round" opacity=".6"/>
+        <rect x="4" y="74" width="24" height="34" rx="3" fill="#fff9e6" stroke="#8d5a2b" stroke-width="1.6"/>
+        <rect x="2" y="72" width="28" height="4" rx="2" fill="#8d5a2b"/><rect x="2" y="106" width="28" height="4" rx="2" fill="#8d5a2b"/>
+        <text x="16" y="88" font-size="10" font-weight="900" text-anchor="middle" fill="#a61e1e" font-family="serif">大</text><text x="16" y="100" font-size="10" font-weight="900" text-anchor="middle" fill="#a61e1e" font-family="serif">化</text>
+        ${twinkle(98, 30, 5, '#fff3bf')}${twinkle(22, 26, 4, '#ffd43b')}`;
+      },
       // ウォーターミッドナイト (MR・つつむ・説教): 真夜中色の水筆ペン。しずく形の水タンクの中に夜の海と星、
       // 頭に三日月のキャップ、まるメガネ、指し棒をかまえて説教する
       watermid: () => {

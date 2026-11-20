@@ -23,6 +23,7 @@ const SKILLS = {
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
   venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
+  taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
@@ -121,6 +122,7 @@ const CARD_LIST = [
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
   ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:00 から)。体力と防御が高く、攻撃が低い
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
+  ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'], // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-21 8:00 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -129,7 +131,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-21T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -248,6 +250,7 @@ const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const SERMON_ATK = 0.6;   // 説教: 相手の攻撃力を 0.6 倍
+const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の状態異常・デバフをすべて取りのぞく
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
 const ITEMS = {
   potion: { name: '回復薬', emoji: '🧪', price: 300, desc: '場のカードの HP を最大 HP の 30% 回復' },
@@ -337,6 +340,20 @@ function resolveTurn(state, acts, rnd) {
         if (foe.hp > 0 && !foe.scolded) { from = foe.atk; foe.atk = Math.max(1, Math.round(foe.atk * SERMON_ATK)); foe.scolded = true; }
         const cured = sides[p].cards.filter((c) => c.hp > 0 && c.poison > 0); cured.forEach((c) => { c.poison = 0; });
         ev.push({ k: 'sermon', p, card: me.name, target: foe.name, from, to: from === null ? null : foe.atk, cured: cured.map((c) => c.name) });
+      }
+      else if (me.skill === 'taika') { // 大化の改新: 1.2 倍のこうげき → 味方全員の毒・怯み・眠り・説教の攻撃ダウン・流星を取りのぞく
+        hit(p, TAIKA_POWER);
+        const fixed = [];
+        sides[p].cards.forEach((c) => {
+          if (c.hp <= 0) return;
+          const got = [];
+          if (c.poison > 0) { c.poison = 0; got.push('毒'); }
+          if (c.flinch) { c.flinch = 0; got.push(c.sleep ? '眠り' : '怯み'); } c.sleep = false;
+          if (c.scolded) { c.atk = Math.round(c.atk / SERMON_ATK); c.scolded = false; got.push('攻撃ダウン'); } // 説教の分をもどす (また説教されることはある)
+          if (got.length) fixed.push({ card: c.name, what: got });
+        });
+        const meteor = !!sides[p].meteor; if (meteor) { sides[p].meteor = null; }
+        ev.push({ k: 'taika', p, card: me.name, fixed, meteor });
       }
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -530,7 +547,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -602,6 +619,15 @@ const QUESTS = [
     enemy: [['watermid', 20], ['star', 20], ['case', 20]],
     titles: { 1: '水深夜最速クリア🌊', 2: '水深夜準最速クリア🌊' },
     start: Date.parse('2026-11-20T08:00:00+09:00'), end: Date.parse('2026-11-23T08:30:00+09:00') }, // 8:30 開始 → 8:00 に前倒し (終わりはそのまま)
+  { id: 'taika-2026', name: '大化の改新', boss: '中大兄皇子', emoji: '👑', reward: 'nakanoooe', bg: 'taika', hard: true, boost: 1.3, // 敵の能力 1.3 倍
+    award: '新しい時代の幕開けだ…伝説の始まりだ👑👑👑',
+    hint: '敵は 🪨おもい 2 体 + ✂️きる 1 体 → 📄つつむが有利 (ハサミ丸に注意)',
+    pr: 'わざ「大化の改新」は 1.2 倍のこうげき + 味方の状態異常とデバフを全部取りのぞく！ 毒も怯みも説教も効かない… 敵は先を読む強い CPU。\n敵は おもい 2 体 (中大兄皇子・雷鳴ホチキス) と きる 1 体 (ハサミ丸)。📄つつむ が有利！',
+    text: '飛鳥の都に現れた硯 (すずり) の皇子「中大兄皇子」。わざ「大化の改新」で、かけた毒も怯みも説教もすべて取りのぞいてしまう… 勝てば MR「中大兄皇子」が仲間になる',
+    tip: '敵は 🪨おもい の中大兄皇子・雷鳴ホチキスと、✂️きる の疾風剣士ハサミ丸 (全員 Lv20・能力 1.3 倍)。📄つつむ のカードが有利だが、ハサミ丸には ✂️きる が効くので気をつけて！ 中大兄皇子の「大化の改新」は味方の毒・怯み・眠り・説教の攻撃ダウン・流星をすべて取りのぞく。状態異常にたよらず、わざのあと (2 ターン使えない) に一気に削るのがコツ',
+    enemy: [['nakanoooe', 20], ['scissors', 20], ['raimei', 20]],
+    titles: { 1: '大化最速クリア👑', 2: '大化準最速クリア👑' },
+    start: Date.parse('2026-11-21T08:00:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)
