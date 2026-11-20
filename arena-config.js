@@ -5,7 +5,8 @@
 // =====================================================================
 const DEFAULTS = {
   oneHitDown: false,     // 一撃で倒れる (どんな被弾でも転倒)
-  staggerMs: 450,        // 軽い被弾の硬直
+  staggerMs: 450,        // 軽い被弾の硬直 (通行人)
+  playerStaggerMs: 0,    // プレイヤー・ボットの被弾後の硬直 (0 = なし)
   downedMs: 2800,        // 転倒して地面にいる時間 (そのあと起き上がる)
   downImpact: 30,        // この強さ以上の被弾で転倒 (体 18・頭 40・パンチ 34)
   fatalDamage: 80,       // 1 発でこれ以上のダメージなら、HP が残っていても行動不能
@@ -18,7 +19,7 @@ const DEFAULTS = {
   npcHp: 60,
   corpseMs: 25000,       // 死亡した NPC が消えるまで
 };
-const LIMITS = { npcIncapMs: [500, 60000], npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], downedMs: [500, 10000] };
+const LIMITS = { npcIncapMs: [500, 60000], npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], playerStaggerMs: [0, 3000], downedMs: [500, 10000] };
 function sanitize(patch) {
   const out = {};
   for (const [k, v] of Object.entries(patch || {})) {

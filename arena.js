@@ -87,7 +87,7 @@ module.exports = function install(app, ctx) {
       if (res) all({ t: 'hit', sid: p.sid, to: q.id, npc: 1, dmg, head, melee, kb, res, dir, impact, hp: q.body.hp });
       return;
     }
-    const res = Body.hit(q.body, { dmg, impact, dir }, cfg, now);
+    const res = Body.hit(q.body, { dmg, impact, dir }, { ...cfg, staggerMs: cfg.playerStaggerMs }, now); // プレイヤーは被弾しても硬直しない (playerStaggerMs)
     if (!res) return;
     q.hp = q.body.hp; q.down = Body.isDown(q.body);
     if (res === 'down' && dir) { q.x += dir[0] * 0.6; q.z += dir[2] * 0.6; M.collide(map, q); } // 倒れた方向へ少しずれる

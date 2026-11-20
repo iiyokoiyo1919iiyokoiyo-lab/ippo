@@ -23,7 +23,8 @@ function hit(b, { dmg, impact, dir }, cfg, now = Date.now()) {
   if (dir) b.dir = dir;
   if (b.hp <= 0 || dmg >= cfg.fatalDamage) { set(b, S.INCAP, now, b.incapMs || cfg.incapMs); return 'incap'; } // 通行人は長め (苦しむ時間)
   if (cfg.oneHitDown || impact >= cfg.downImpact || b.state === S.DOWNED) { set(b, S.DOWNED, now, cfg.downedMs); return 'down'; }
-  set(b, S.STAGGERED, now, cfg.staggerMs); return 'stagger';
+  if (cfg.staggerMs > 0) set(b, S.STAGGERED, now, cfg.staggerMs); // 0 なら硬直しない (体はよろけるだけで動ける)
+  return 'stagger';
 }
 // 時間で進む: 硬直・転倒 → 通常、行動不能 → 死亡。変わったら新しい状態を返す
 function update(b, now = Date.now()) {

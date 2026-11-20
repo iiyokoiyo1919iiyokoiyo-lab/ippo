@@ -53,11 +53,11 @@ if (parent !== window) { const b = document.createElement('button'); b.id = 'exi
   b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); exitFS(); parent.postMessage({ source: 'ippo-arena', type: 'exit' }, location.origin); }; document.body.append(b); }
 
 // ---------- 状態 ----------
-const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 15, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 15, sniper: 5 }, held: false };
+const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 30, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 30, sniper: 5 }, held: false };
 const canControl = () => me.alive && me.st === 0; // 硬直・転倒・行動不能のあいだは動けない
-const MAG = 15, RELOAD_MS = 1400;
-// 武器: ライフル (連射・15 発) / スナイパー (1 発ずつ・5 発・スコープ)。間かくとダメージはサーバーが決める
-const WEAPON = { rifle: { name: 'ライフル', mag: 15, reload: 1400, ms: 130, auto: true }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
+const MAG = 30, RELOAD_MS = 1400;
+// 武器: ライフル (連射・30 発) / スナイパー (1 発ずつ・5 発・スコープ)。間かくとダメージはサーバーが決める
+const WEAPON = { rifle: { name: 'ライフル', mag: 30, reload: 1400, ms: 130, auto: true }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
 const W = () => WEAPON[me.w] || WEAPON.rifle;
 let scoped = false, aiming = false, scopeK = 0, aimK = 0; // aiming: サイトをのぞく (両方の武器) / scoped: スナイパーのスコープ (黒いふち)
 let you = null, ws = null, playing = false, lastSend = 0, lastShot = 0, rules = { fireMs: 130 };
@@ -283,7 +283,7 @@ function connect() {
       if (m.npc) { npcView.onHit(m); return; }
       const target = m.to === you ? null : others.get(m.to);
       if (target) reactTo(target.model, m, target.model.g.position);
-      if (m.to === you) { reactTo(myModel, m, { x: me.x, y: me.y, z: me.z }); if (m.res !== 'stagger') { firing = false; me.kx = me.kz = 0; } if (m.res === 'stagger') me.st = 1; else me.st = m.res === 'down' ? 2 : 3; }
+      if (m.to === you) { reactTo(myModel, m, { x: me.x, y: me.y, z: me.z }); if (m.res !== 'stagger') { firing = false; me.kx = me.kz = 0; } if (m.res !== 'stagger') me.st = m.res === 'down' ? 2 : 3; }
       if (m.melee && target && m.kb) { target.model.g.position.x += m.kb[0] * 0.08; target.model.g.position.z += m.kb[1] * 0.08; }
       if (m.melee && m.to === you && m.kb) { me.kx = m.kb[0]; me.kz = m.kb[1]; me.vy = Math.max(me.vy, 3.5); me.onGround = false; }
       if (m.to === you) { me.hp = m.hp; flashDamage(); updHud(); }

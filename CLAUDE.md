@@ -57,7 +57,7 @@
 - three.js の追加部品は `vendor/jsm/` (import を `../../three.module.min.js` に書きかえてある)。当たり判定 (arena-map.js) は見た目を変えても変えない
 - 動きはブラウザが送り、サーバーが速さ (ワープ) をたしかめる。弾の当たり判定はサーバー (壁・頭 45・体 22)。なぐる (F・右クリック・スマホの「なぐる」) は前 2.4m・左右 55°・35 ダメージ + ふっとばし (`PUNCH`)。HP が 0 で行動不能 → 3 秒で復活・2 秒無敵
 - 人が少ないときはボット (人間 + ボットで 4 人。最大 3 体。テストは `ARENA_BOTS=0` でボットなし)。コインなどの報酬はなし
-- 体の状態は `arena-body.js` (プレイヤー・ボット・通行人で共通): Normal / Staggered (硬直) / Downed (転倒) / Incapacitated (行動不能) / Dead。被弾の衝撃 (体 18・頭 40・パンチ 34) が `downImpact` 以上で転倒、HP 0 か `fatalDamage` 以上で行動不能。転倒中は移動・攻撃をサーバーが受けつけない
+- 体の状態は `arena-body.js` (プレイヤー・ボット・通行人で共通): Normal / Staggered (硬直) / Downed (転倒) / Incapacitated (行動不能) / Dead。被弾の衝撃 (体 18・頭 40・パンチ 34) が `downImpact` 以上で転倒、HP 0 か `fatalDamage` 以上で行動不能。転倒中は移動・攻撃をサーバーが受けつけない。プレイヤーとボットは軽い被弾では硬直しない (`arena-config.js` の `playerStaggerMs` = 0。通行人は `staggerMs`)。ライフルは 1 マガジン 30 発
 - 設定は `arena-config.js` (一撃で倒れる `oneHitDown`・NPC の数/反応頻度/逃走頻度/最大同時処理数 など)。環境変数 `ARENA_CONFIG` (JSON) か、管理者がゲーム内の ⚙️ から変える (再起動で元にもどる)
 - 通行人は `arena-npc.js` (サーバー): 歩道の道 (ブロックの角と横断歩道)・Walking/Alert/Fleeing/Hiding・性格 (臆病/冷静/好奇心)・異常 (銃声・被弾・転倒・悲鳴・倒れた人) が近くに伝わる・しばらくで平常にもどる。遠い NPC は 0.5 秒に 1 回だけ動かす
 - ブラウザ: ラグドール `ragdoll.js` (関節 16 点の軽い物理。止まったら計算しない・同時数に上限)、通行人の表示 `npcs.js` (近づいたら作り遠くで捨てる・遠いほど間引く)、合成の環境音 `sound.js`、血と欠損 `gore.js` (利用者は大学生なので可。設定で OFF にできる)、設定画面 `settings.js`
