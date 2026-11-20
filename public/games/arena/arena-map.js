@@ -71,23 +71,23 @@
     return g;
   }
   // 横の当たり判定: 円 (半径 PLAYER_R) を箱の外へ押し出す。足もとより STEP 以上高い箱だけ
-  function collide(map, p) {
+  function collide(map, p, R = PLAYER_R) { // R: 円の半径 (車は 1.05)
     for (let iter = 0; iter < 2; iter++) for (const b of map.solid) {
       if (b.y0 + b.h <= p.y + STEP || b.y0 >= p.y + PLAYER_H) continue;
       const hx = b.w / 2, hz = b.d / 2;
       const cx = Math.max(b.x - hx, Math.min(p.x, b.x + hx)), cz = Math.max(b.z - hz, Math.min(p.z, b.z + hz));
       let dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
-      if (d2 >= PLAYER_R * PLAYER_R) continue;
+      if (d2 >= R * R) continue;
       if (d2 < 1e-8) { // 中にめりこんだ: いちばん近い辺へ
         const ox = hx - Math.abs(p.x - b.x), oz = hz - Math.abs(p.z - b.z);
-        if (ox < oz) p.x = b.x + Math.sign(p.x - b.x || 1) * (hx + PLAYER_R); else p.z = b.z + Math.sign(p.z - b.z || 1) * (hz + PLAYER_R);
+        if (ox < oz) p.x = b.x + Math.sign(p.x - b.x || 1) * (hx + R); else p.z = b.z + Math.sign(p.z - b.z || 1) * (hz + R);
         continue;
       }
-      const d = Math.sqrt(d2), push = PLAYER_R - d;
+      const d = Math.sqrt(d2), push = R - d;
       p.x += (dx / d) * push; p.z += (dz / d) * push;
     }
-    p.x = Math.max(-HALF + PLAYER_R, Math.min(HALF - PLAYER_R, p.x));
-    p.z = Math.max(-HALF + PLAYER_R, Math.min(HALF - PLAYER_R, p.z));
+    p.x = Math.max(-HALF + R, Math.min(HALF - R, p.x));
+    p.z = Math.max(-HALF + R, Math.min(HALF - R, p.z));
     return p;
   }
   // 光線と箱: 当たるまでの距離 (当たらなければ Infinity)

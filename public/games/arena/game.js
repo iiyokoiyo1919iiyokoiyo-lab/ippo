@@ -4,21 +4,26 @@
 //   ・弾は「画面のまん中」をねらう。当たったかどうかはサーバーが決める
 //   ・パソコン: WASD・マウス (クリックで視点を固定)・クリックで撃つ・Space ジャンプ・Shift ダッシュ・R リロード
 //   ・スマホ: 画面の左半分を触るとそこにスティックが出て移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
+//   ・車: 近くで「乗る」(E)・スティック / WASD で運転・「降りる」。速いと人をはねる
+//   ・強盗: 通行人に銃を向けつづけると手を上げてお金を落とす (その場だけのお金。コインではない)
+//   ・エイムアシスト (スマホだけ・軽め): 撃つ / のぞくとき、照準のすぐ近くの相手へ少し寄せる
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=13';
+import { createGraphics } from './world.js?v=14';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
-import { NpcView } from './npcs.js?v=3';
-import { Sound } from './sound.js?v=3';
+import { NpcView } from './npcs.js?v=4';
+import { Sound } from './sound.js?v=4';
 import { Gore } from './gore.js?v=2';
 import { Settings } from './settings.js?v=3';
+import { VehicleView } from './vehicles.js?v=1';
+import { DebugPanel } from './debug.js?v=1';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
-  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止';
+  ? '画面の左側を触るとスティックが出て移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射 (長押しで自動でのぞく)・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ<br>車の近くで「乗る」・通行人に銃を向けつづけると強盗'
+  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止<br>E で車に乗る / 降りる (WASD で運転・Space でブレーキ)・通行人に銃を向けつづけると強盗';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
 const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
@@ -39,6 +44,9 @@ const fps = () => settings.local.view === 'fps';
 let viewModel = null;
 applyLocal(settings.local);
 const npcView = new NpcView({ GFX, ragdolls, env, gore, sound, settings });
+const vehicles = new VehicleView({ GFX, sound });
+const cashView = new Map(); // 落ちているお金 id → 形
+const debug = new DebugPanel({ send: (m) => send(m), getPos: () => ({ x: me.x, z: me.z }) });
 { const b = document.createElement('button'); b.className = 'btn ghost'; b.id = 'gfx'; b.style.marginTop = '10px'; b.textContent = `⚙️ 設定 (画質・ラグドール・血など)`;
   b.onclick = () => settings.open(); $('#center > div').append(document.createElement('br'), b); }
 { const b = document.createElement('button'); b.id = 'gear'; b.className = 'hud-btn'; b.textContent = '⚙️'; b.setAttribute('aria-label', '設定');
@@ -53,8 +61,8 @@ if (parent !== window) { const b = document.createElement('button'); b.id = 'exi
   b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); exitFS(); parent.postMessage({ source: 'ippo-arena', type: 'exit' }, location.origin); }; document.body.append(b); }
 
 // ---------- 状態 ----------
-const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 30, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 30, sniper: 5 }, held: false };
-const canControl = () => me.alive && me.st === 0; // 硬直・転倒・行動不能のあいだは動けない
+const me = { car: null, cash: 0, x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 30, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 30, sniper: 5 }, held: false };
+const canControl = () => me.alive && me.st === 0 && !me.car; // 硬直・転倒・行動不能・運転中は、歩く・撃つができない
 const MAG = 30, RELOAD_MS = 1400;
 // 武器: ライフル (連射・30 発) / スナイパー (1 発ずつ・5 発・スコープ)。間かくとダメージはサーバーが決める
 const WEAPON = { rifle: { name: 'ライフル', mag: 30, reload: 1400, ms: 130, auto: true }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
@@ -100,7 +108,7 @@ function freshModel(o, isMe) {
 // ---------- 入力 ----------
 const keys = new Set(); let firing = false;
 const move = { x: 0, y: 0, run: false };
-addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'Digit1') setWeapon('rifle'); if (e.code === 'Digit2') setWeapon('sniper'); if (e.code === 'KeyQ') setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
+addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'KeyE') toggleCar(); if (e.code === 'Digit1') setWeapon('rifle'); if (e.code === 'Digit2') setWeapon('sniper'); if (e.code === 'KeyQ') setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
 addEventListener('keyup', (e) => keys.delete(e.code));
 const canvas = $('#c');
 canvas.addEventListener('mousedown', (e) => { if (!playing) return; if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; } if (e.button === 0) firing = true; if (e.button === 2) setScope(true); }); // 右クリック: サイトをのぞく (ライフルもスナイパーも)
@@ -139,6 +147,7 @@ if (isTouch) {
   $('#punch').addEventListener('touchstart', (e) => { e.preventDefault(); doPunch(); }, { passive: false });
   $('#weapon').addEventListener('touchstart', (e) => { e.preventDefault(); setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); }, { passive: false });
   $('#aim').addEventListener('touchstart', (e) => { e.preventDefault(); setScope(!aiming); }, { passive: false }); // 左側の「のぞく」
+  $('#act').addEventListener('touchstart', (e) => { e.preventDefault(); toggleCar(); }, { passive: false }); // 乗る / 降りる
 }
 // なぐる: 当たったかどうかはサーバーが決める。ここではうでをふる
 let lastPunch = 0;
@@ -158,6 +167,13 @@ function setScope(on) {
   aiming = !!on && canControl(); scoped = aiming && me.w === 'sniper';
   document.body.classList.toggle('scoped', scoped); document.body.classList.toggle('aiming', aiming); $('#aim')?.classList.toggle('on', aiming);
 }
+// 車: 近くの一般車に乗る / 降りる (サーバーが決める)
+function toggleCar() {
+  if (!playing || !me.alive) return;
+  if (me.car) { send({ t: 'exit' }); return; }
+  if (!canControl()) return;
+  const v = vehicles.enterable(me.x, me.z); if (v) send({ t: 'enter', id: v.id });
+}
 function jump() { if (playing && canControl() && me.onGround) { me.vy = 7; me.onGround = false; } }
 function reload() { if (me.reloading || me.ammo === W().mag || !me.alive) return; me.reloading = performance.now() + W().reload; setScope(false); updHud(); }
 
@@ -172,6 +188,7 @@ function renderScore() {
   const list = [...scores.entries()].sort((a, b) => b[1].kills - a[1].kills || a[1].deaths - b[1].deaths).slice(0, 6);
   const el = $('#score'); el.textContent = '';
   const h = document.createElement('b'); h.textContent = `🏆 キル数 (${scores.size}人)`; el.append(h);
+  if (me.cash) { const c = document.createElement('div'); c.className = 'cash'; c.textContent = `💰 所持金 ¥${me.cash.toLocaleString()}`; el.append(c); }
   for (const [sid, s] of list) { const d = document.createElement('div'); if (sid === you) d.className = 'you'; const n = document.createElement('span'); n.textContent = (s.bot ? '🤖 ' : '') + s.name; const k = document.createElement('span'); k.textContent = `${s.kills} / ${s.deaths}`; d.append(n, k); el.append(d); }
 }
 function feed(text, mine) { const d = document.createElement('div'); d.textContent = text; if (mine) d.className = 'me'; const f = $('#feed'); f.prepend(d); while (f.children.length > 5) f.lastChild.remove(); setTimeout(() => d.remove(), 6000); }
@@ -243,7 +260,10 @@ function connect() {
       you = m.you; rules = m.rules || rules;
       for (const p of m.players) addPlayer(p);
       npcView.clear(); for (const n of m.npcs || []) npcView.add(n);
-      settings.setServer(m.cfg || {}, m.admin);
+      vehicles.init(m.vehicles || []); for (const c of m.cash || []) addCash(c);
+      for (const p of m.players) if (p.car && p.sid !== you) { const o = others.get(p.sid); if (o) o.car = p.car; }
+      me.cash = m.players.find((p) => p.sid === you)?.cash || 0;
+      settings.setServer(m.cfg || {}, m.admin); debug.enable(!!m.admin);
       Object.assign(me, { x: m.me.x, y: m.me.y, z: m.me.z, vy: 0, yaw: m.me.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0 }); updHud();
       renderScore();
       const b = $('#start'); b.disabled = false; b.textContent = 'はじめる！'; $('#status').textContent = `いま ${m.players.filter((p) => !p.bot).length} 人が遊んでいます`;
@@ -252,6 +272,18 @@ function connect() {
     else if (m.t === 'npcgone') npcView.remove(m.id);
     else if (m.t === 'nfx') npcView.fx(m);
     else if (m.t === 'config') settings.setServer(m.cfg);
+    else if (m.t === 'dbg') debug.render(m.d);
+    else if (m.t === 'cash') addCash(m.c);
+    else if (m.t === 'cashgone') { const g = cashView.get(m.id); if (g) { scene.remove(g); cashView.delete(m.id); } if (m.sid === you) { me.cash = m.total; sound.play('cash'); feed(`💰 +¥${m.a}`, true); renderScore(); } }
+    else if (m.t === 'robbed') feed('🙌 手を上げた！ お金を落とすぞ', true);
+    else if (m.t === 'enter') {
+      if (m.sid === you) { const v = vehicles.get(m.id); me.car = m.id; firing = false; setScope(false); if (v) { v.local = true; car.sp = 0; car.x = v.x; car.z = v.z; car.yaw = v.yaw; } document.body.classList.add('driving'); }
+      else { const o = others.get(m.sid); if (o) o.car = m.id; }
+    } else if (m.t === 'exit') {
+      const v = vehicles.get(m.id); if (v) { v.local = false; v.sp = 0; }
+      if (m.sid === you) { me.car = null; Object.assign(me, { x: m.x, z: m.z, y: 0, vy: 0 }); if (v) me.yaw = v.yaw; document.body.classList.remove('driving'); }
+      else { const o = others.get(m.sid); if (o) { o.car = 0; o.model.g.position.set(m.x, 0, m.z); } }
+    } else if (m.t === 'cfix') { Object.assign(car, { x: m.x, z: m.z, yaw: m.yaw, sp: 0 }); }
     else if (m.t === 'weapon') { const o = others.get(m.sid); if (o) { o.w = m.w; o.model.setWeapon(m.w); } }
     else if (m.t === 'join') { addPlayer(m.p); renderScore(); if (m.p.sid !== you) feed(`${m.p.bot ? '🤖 ' : ''}${m.p.name} が来た`); }
     else if (m.t === 'leave') { const s = scores.get(m.sid); if (s) feed(`${s.name} が帰った`); removePlayer(m.sid); }
@@ -271,6 +303,7 @@ function connect() {
         if (!o.seen) { o.model.g.position.set(x, y, z); o.cy = y; o.seen = true; }
       }
       if (m.n) npcView.snapshot(m.n);
+      if (m.v) vehicles.snapshot(m.v);
       updHud();
     } else if (m.t === 'punch') {
       if (m.sid !== you) swing(others.get(m.sid)?.model);
@@ -291,8 +324,8 @@ function connect() {
       for (const s of m.score) { const r = scores.get(s.sid); if (r) Object.assign(r, { kills: s.kills, deaths: s.deaths }); }
       renderScore();
       const k = scores.get(m.killer)?.name || '?', v = scores.get(m.victim)?.name || '?';
-      feed(`${k} ${m.melee ? '👊' : m.w === 'sniper' ? '🔭' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
-      if (m.victim === you) { me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
+      feed(`${k} ${m.melee ? '👊' : m.w === 'car' ? '🚗' : m.w === 'sniper' ? '🔭' : m.head ? '🎯' : '💥'} ${v}`, m.killer === you || m.victim === you);
+      if (m.victim === you) { if (me.car) { const cv = vehicles.get(me.car); if (cv) cv.local = false; me.car = null; document.body.classList.remove('driving'); } me.alive = false; me.hp = 0; updHud(); $('#deadby').textContent = `${k} にやられた… 3 秒で復活`; $('#dead').style.display = 'grid'; firing = false; if (myModel && !myModel.ragdoll) myModel.g.rotation.x = -Math.PI / 2; }
       else { const o = others.get(m.victim); if (o) { o.alive = false; if (!o.model.ragdoll) o.model.g.rotation.x = -Math.PI / 2; } }
     } else if (m.t === 'fix') { Object.assign(me, { x: m.x, y: m.y, z: m.z }); }
   };
@@ -325,14 +358,19 @@ function frame() {
     if (me.kx || me.kz) { me.x += me.kx * dt; me.z += me.kz * dt; const f = Math.exp(-dt * 5); me.kx *= f; me.kz *= f; if (Math.hypot(me.kx, me.kz) < 0.2) me.kx = me.kz = 0; }
     me.vy -= 20 * dt; me.y += me.vy * dt;
     A.collide(map, me);
+    if (me.y < 1.4) for (const c of vehicles.circles()) { const dx = me.x - c.x, dz = me.z - c.z, d = Math.hypot(dx, dz) || 0.01, r = c.r + A.PLAYER_R; if (d < r) { me.x += dx / d * (r - d); me.z += dz / d * (r - d); } } // 車にめりこまない
     const g = A.groundAt(map, me.x, me.z, me.y);
     if (me.y <= g) { me.y = g; me.vy = 0; me.onGround = true; } else me.onGround = false;
+    if (isTouch && (firing || aiming)) aimAssist(dt);
     if (firing) tryShoot(now); else me.held = false;
     if (me.reloading && now >= me.reloading) { me.reloading = 0; me.ammo = W().mag; updHud(); }
     if (now - lastSend > 50) { lastSend = now; send({ t: 'pos', x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(3), pitch: +me.pitch.toFixed(3) }); }
   }
+  if (playing && me.car && me.alive) driveCar(dt, now);
+  updateAct();
   // 自分のモデルとカメラ (肩ごしの三人称。壁があればカメラを近づける)
-  if (myModel) {
+  if (myModel && me.car) { myModel.g.visible = false; if (viewModel) viewModel.g.visible = false; carCamera(dt); }
+  else if (myModel) {
     const curb = GFX.curbAt(me.x, me.z);
     if (!myModel.ragdoll) { myModel.g.position.x = me.x; myModel.g.position.z = me.z; myModel.baseY = me.y; myModel.g.rotation.y = me.yaw; GFX.animateChar(myModel, now, dt, curb); }
     // 倒れているあいだは、カメラは体を追う
@@ -373,6 +411,7 @@ function frame() {
       if ((o.st === 2 || o.st === 3) && (o.groanAt || 0) < now) { o.groanAt = now + 2000 + Math.random() * 2500; const pv = o.model.ragdoll.pelvis(); sound.play('groan', pv.x, pv.z, { id: o.sid, k: 0.8 }); }
       continue;
     }
+    if (o.car) { g.visible = false; continue; } // 車を運転している
     o.model.limp = o.hp != null && o.hp < 35;
     g.position.x += (o.tx - g.position.x) * k; g.position.z += (o.tz - g.position.z) * k; o.cy = (o.cy ?? o.ty) + (o.ty - (o.cy ?? o.ty)) * k;
     o.model.baseY = o.cy; GFX.animateChar(o.model, now, dt, GFX.curbAt(g.position.x, g.position.z));
@@ -386,6 +425,8 @@ function frame() {
   if (myModel) myModel.limp = me.hp < 35 && me.alive;
   ragdolls.step(dt);
   npcView.update(now, dt, camera.position);
+  vehicles.update(dt, now);
+  for (const g of cashView.values()) g.rotation.y += dt * 2;
   gore.update(dt, ragdolls.list);
   sound.setListener(camera.position.x, camera.position.z, me.yaw);
   window.__arenaStats = { npcMs: performance.now() - t1, npcs: npcView.stats, ragdolls: ragdolls.list.length, awake: ragdolls.awake, frameMs: dt * 1000 };
@@ -393,5 +434,73 @@ function frame() {
   GFX.render();
   requestAnimationFrame(frame);
 }
-if (location.hash === '#debug') window.__arenaDebug = { npcView, ragdolls, GFX, me, camera, gore, settings }; // 確認用 (#debug のときだけ)
+// ---------- 車の運転 (この端末で動かして、サーバーに送る) ----------
+const car = { x: 0, z: 0, yaw: 0, sp: 0, steer: 0, lastSend: 0 };
+const CARP = { acc: 9, brake: 20, rev: 7, max: 26, back: -8, turn: 1.9 };
+function driveCar(dt, now) {
+  const v = vehicles.get(me.car); if (!v) return;
+  let thr = 0, steer = 0, hand = false;
+  if (isTouch) { thr = -move.y; steer = move.x; if (Math.abs(thr) < 0.15) thr = 0; }
+  else { if (keys.has('KeyW') || keys.has('ArrowUp')) thr += 1; if (keys.has('KeyS') || keys.has('ArrowDown')) thr -= 1; if (keys.has('KeyA') || keys.has('ArrowLeft')) steer -= 1; if (keys.has('KeyD') || keys.has('ArrowRight')) steer += 1; hand = keys.has('Space'); }
+  if (thr > 0) car.sp += (car.sp < 0 ? CARP.brake : CARP.acc * (1 - Math.max(0, car.sp) / (CARP.max + 4))) * thr * dt;
+  else if (thr < 0) car.sp -= (car.sp > 0 ? CARP.brake : CARP.rev) * -thr * dt;
+  else car.sp -= Math.sign(car.sp) * Math.min(Math.abs(car.sp), (1.2 + Math.abs(car.sp) * 0.08) * dt);
+  if (hand) car.sp *= Math.exp(-dt * 3);
+  car.sp = Math.max(CARP.back, Math.min(CARP.max, car.sp));
+  car.steer += (steer - car.steer) * Math.min(1, dt * 8);
+  car.yaw -= car.steer * CARP.turn * Math.max(-1, Math.min(1, car.sp / 6)) * (1 - Math.min(0.45, Math.abs(car.sp) / 60)) * dt;
+  car.x += -Math.sin(car.yaw) * car.sp * dt; car.z += -Math.cos(car.yaw) * car.sp * dt;
+  // ぶつかる: 車の前・まん中・後ろの円を、建物・止まっている車・ほかの車から押しだす
+  const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw); let px = 0, pz = 0, hit = 0;
+  for (const k of [-1.35, 0, 1.35]) {
+    const c = { x: car.x + fx * k, y: 0, z: car.z + fz * k }, o = { ...c }; A.collide(map, c, 1.05);
+    for (const q of vehicles.circles(me.car)) { const dx = c.x - q.x, dz = c.z - q.z, d = Math.hypot(dx, dz) || 0.01, r = q.r + 1.05; if (d < r) { c.x += dx / d * (r - d); c.z += dz / d * (r - d); } }
+    const ddx = c.x - o.x, ddz = c.z - o.z; if (Math.abs(ddx) + Math.abs(ddz) > 0.001) { hit++; if (Math.abs(ddx) > Math.abs(px)) px = ddx; if (Math.abs(ddz) > Math.abs(pz)) pz = ddz; }
+  }
+  if (hit) { car.x += px; car.z += pz; if (Math.abs(car.sp) > 6) sound.play('crash', car.x, car.z); car.sp *= 0.55; }
+  Object.assign(v, { x: car.x, z: car.z, yaw: car.yaw, sp: car.sp, steer: car.steer * 0.5, tx: car.x, tz: car.z, tyaw: car.yaw });
+  Object.assign(me, { x: car.x, z: car.z, y: 0 });
+  if (now - car.lastSend > 50) { car.lastSend = now; send({ t: 'drive', x: +car.x.toFixed(2), z: +car.z.toFixed(2), yaw: +car.yaw.toFixed(3), sp: +car.sp.toFixed(2) }); }
+}
+// 運転中のカメラ: 車の後ろの上から (壁があれば近づける)
+const camCar = new THREE.Vector3();
+function carCamera(dt) {
+  const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw), want = new THREE.Vector3(car.x - fx * 7.5, 3.4, car.z - fz * 7.5);
+  const pv = [car.x, 1.6, car.z], d = [want.x - pv[0], want.y - pv[1], want.z - pv[2]], L = Math.hypot(...d), hitD = A.rayWorld(map, pv, d.map((v) => v / L), L);
+  if (hitD < L) want.set(pv[0] + d[0] / L * (hitD - 0.3), pv[1] + d[1] / L * (hitD - 0.3), pv[2] + d[2] / L * (hitD - 0.3));
+  camCar.lerp(want, Math.min(1, dt * 6)); if (camCar.lengthSq() === 0) camCar.copy(want);
+  camera.position.copy(camCar); camera.lookAt(car.x + fx * 3, 1.2, car.z + fz * 3);
+  const fov = innerWidth < innerHeight ? 82 : 70; if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  me.yaw = car.yaw; me.pitch = -0.1;
+}
+// 「乗る」「降りる」のボタン (スマホ) と、案内 (パソコン)
+let actState = '';
+function updateAct() {
+  const st = !playing || !me.alive ? '' : me.car ? 'out' : canControl() && vehicles.enterable(me.x, me.z) ? 'in' : '';
+  if (st === actState) return; actState = st;
+  const b = $('#act'); b.textContent = st === 'out' ? '降りる' : '乗る'; b.classList.toggle('show', !!st);
+  $('#hint').textContent = isTouch ? '' : st === 'in' ? 'E で車に乗る' : st === 'out' ? 'E で降りる・WASD で運転・Space ブレーキ' : '';
+}
+// ---------- エイムアシスト (スマホ・軽め) ----------
+const aDir = new THREE.Vector3();
+function aimAssist(dt) {
+  const cpch = Math.cos(me.pitch); aDir.set(-Math.sin(me.yaw) * cpch, Math.sin(me.pitch), -Math.cos(me.yaw) * cpch); // いまの向き (カメラは 1 フレームおくれるので使わない)
+  const cp = camera.position, cone = (aiming ? 0.07 : 0.1) * camera.fov / 70;
+  let best = null, ba = cone;
+  for (const o of others.values()) {
+    if (!o.alive || o.car || (o.st || 0) >= 2) continue;
+    const g = o.model.g.position, v = [g.x - cp.x, g.y + 1.25 - cp.y, g.z - cp.z], L = Math.hypot(...v); if (L > 80 || L < 1) continue;
+    const a = Math.acos(Math.max(-1, Math.min(1, (v[0] * aDir.x + v[1] * aDir.y + v[2] * aDir.z) / L))); if (a > ba) continue;
+    if (A.rayWorld(map, [cp.x, cp.y, cp.z], v.map((x) => x / L), L) < L - 0.6) continue;
+    ba = a; best = { v, L };
+  }
+  if (!best) return;
+  const k = Math.min(1, dt * 5) * 0.4; // 弱め: 1 秒で残りの差の 9 割くらい
+  let dy = Math.atan2(-best.v[0], -best.v[2]) - me.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const dp = Math.asin(best.v[1] / best.L) - me.pitch;
+  me.yaw += dy * k; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch + dp * k));
+}
+// ---------- 落ちているお金 ----------
+function addCash(c) { if (cashView.has(c.id)) return; const g = GFX.makeCash(); g.position.set(c.x, GFX.curbAt(c.x, c.z), c.z); cashView.set(c.id, g); }
+if (location.hash === '#debug') window.__arenaDebug = { npcView, ragdolls, GFX, me, camera, gore, settings, vehicles, car, others }; // 確認用 (#debug のときだけ)
 updHud(); connect(); requestAnimationFrame(frame);

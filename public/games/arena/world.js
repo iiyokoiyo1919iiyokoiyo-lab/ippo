@@ -549,6 +549,11 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     for (let i = -2; i <= 2; i++) H.add(GEO.ballLo, hair, [i * 0.034, 0.085, -0.092], [0.5, 0, i * 0.15], [0.038, 0.026, 0.03]);  // 前髪
     for (const s of [-1, 1]) H.add(GEO.ballLo, hair, [s * 0.105, 0.04, 0.015], [0, 0, 0], [0.025, 0.06, 0.065]);   // 横
     H.build(head);
+    if (opts.cap) { // 警官の帽子 (つば付き)
+      const C = seg(), capMat = new THREE.MeshStandardMaterial({ color: opts.cap, roughness: 0.6 });
+      C.add(GEO.cyl, capMat, [0, 0.105, 0.005], [0.12, 0, 0], [0.128, 0.07, 0.132]); C.add(GEO.box, capMat, [0, 0.075, -0.13], [0.25, 0, 0], [0.2, 0.012, 0.09]);
+      C.add(GEO.box, new THREE.MeshStandardMaterial({ color: '#d4a72c', metalness: 0.8, roughness: 0.3 }), [0, 0.115, -0.13], [0.1, 0, 0], [0.035, 0.035, 0.01]); C.build(head);
+    }
     // ---- うで (肩 → ひじ → 手) ----
     const arm = (s, fist) => {
       const sh = new THREE.Group(); sh.position.set(s * 0.225, 1.42, 0); g.add(sh);
@@ -602,7 +607,11 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     m.legs.forEach((l, i) => { const ph = Math.sin(m.walk + i * Math.PI), lk = m.limp && i === 1 ? 0.35 : 1; l.hip.rotation.x = THREE.MathUtils.lerp(l.hip.rotation.x, ph * amp * lk, 0.3); l.knee.rotation.x = THREE.MathUtils.lerp(l.knee.rotation.x, Math.max(0, -Math.cos(m.walk + i * Math.PI)) * amp * 1.2 * (m.limp && i === 1 ? 0.2 : 1), 0.3); });
     if (m.npc) { // 通行人: うでをふって歩く・パニックのときは頭の上・隠れるときは頭をかかえる
       const sw = Math.sin(m.walk) * amp * 0.9, c = m.crouchK || 0;
-      if (m.panic && moving) { m.R.sh.rotation.set(-2.4 + sw * 0.3, 0, 0.3); m.L.sh.rotation.set(-2.4 - sw * 0.3, 0, -0.3); m.R.el.rotation.x = m.L.el.rotation.x = -1.2; }
+      if (m.handsUp) { m.R.sh.rotation.set(-2.95, 0, 0.25); m.L.sh.rotation.set(-2.95, 0, -0.25); m.R.el.rotation.x = m.L.el.rotation.x = -0.35; } // 強盗に銃を向けられて手を上げる
+      else if (m.treat) { m.R.sh.rotation.set(-1.1 + Math.sin(now / 260) * 0.2, 0, 0.2); m.L.sh.rotation.set(-1.0 - Math.sin(now / 260) * 0.2, 0, -0.2); m.R.el.rotation.x = m.L.el.rotation.x = -0.6; } // 処置 (胸を押す)
+      else if (m.carry) { m.R.sh.rotation.set(-0.35, 0, 0.12); m.L.sh.rotation.set(-0.35, 0, -0.12); m.R.el.rotation.x = m.L.el.rotation.x = -0.9; } // 担架を持つ
+      else if (m.warn) { m.R.sh.rotation.set(-1.75, 0, -0.1); m.R.el.rotation.x = -0.1; m.L.sh.rotation.set(0.1, 0, -0.08); m.L.el.rotation.x = 0.2; } // 手で合図 (はなれて)
+      else if (m.panic && moving) { m.R.sh.rotation.set(-2.4 + sw * 0.3, 0, 0.3); m.L.sh.rotation.set(-2.4 - sw * 0.3, 0, -0.3); m.R.el.rotation.x = m.L.el.rotation.x = -1.2; }
       else if (c > 0.05) { m.R.sh.rotation.set(-2.2 * c, 0, 0.5 * c); m.L.sh.rotation.set(-2.2 * c, 0, -0.5 * c); m.R.el.rotation.x = m.L.el.rotation.x = -1.9 * c; }
       else if (m.limp) { m.R.sh.rotation.set(-sw * 0.5, 0, 0.1); m.L.sh.rotation.set(0.35, 0, 0.35); m.L.el.rotation.x = 1.9; m.R.el.rotation.x = 0.3; } // 左手でわき腹を押さえる
       else { m.R.sh.rotation.set(-sw, 0, 0.08); m.L.sh.rotation.set(sw, 0, -0.08); m.R.el.rotation.x = m.L.el.rotation.x = 0.15 + Math.abs(sw) * 0.4; }
@@ -649,8 +658,43 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     for (const c of m.cut || []) { scene.remove(c); c.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); } // はなれた破片
   }
 
+  // ---------- 走る車 (一般車・パトカー・救急車)。前は -z。ホイールは回す・赤色灯は点めつ ----------
+  function makeVehicle(kind, color = '#c92a2a') {
+    const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+    const add = (geo, mat, x, y, z, rx = 0) => { const m = shadowy(new THREE.Mesh(geo, mat)); m.position.set(x, y, z); m.rotation.x = rx; body.add(m); return m; };
+    const van = kind === 'ambulance', W = van ? 2.1 : 1.9, L = van ? 5.4 : 4.4;
+    const paint = carPaint(kind === 'civ' ? color : '#f4f4f2'), black = carPaint('#15171a'), red = carPaint('#c92a2a');
+    if (!van) {
+      add(new THREE.BoxGeometry(W, 0.55, L), paint, 0, 0.6, 0); add(new THREE.BoxGeometry(W * 0.96, 0.12, L * 0.96), paint, 0, 0.92, 0);
+      add(new THREE.BoxGeometry(W * 0.86, 0.5, L * 0.48), glassDark, 0, 1.22, 0.2); add(new THREE.BoxGeometry(W * 0.84, 0.06, L * 0.42), paint, 0, 1.48, 0.2);
+      if (kind === 'police') { add(new THREE.BoxGeometry(W * 1.005, 0.32, L * 0.5), black, 0, 0.55, 0.15); add(new THREE.BoxGeometry(W * 0.9, 0.06, L * 0.3), black, 0, 0.99, -1.2); } // 白黒のパトカー
+    } else { // 救急車: 箱型・赤い帯
+      add(new THREE.BoxGeometry(W, 2.0, L * 0.68), paint, 0, 1.35, 0.85); add(new THREE.BoxGeometry(W, 1.15, L * 0.32), paint, 0, 0.92, -1.8);
+      add(new THREE.BoxGeometry(W * 0.94, 0.55, 0.06), glassDark, 0, 1.45, -1.33, 0.35); add(new THREE.BoxGeometry(W * 1.01, 0.22, L * 0.99), red, 0, 1.0, 0);
+      for (const sx of [-1, 1]) { add(new THREE.BoxGeometry(0.02, 0.5, 0.14), red, sx * (W / 2 + 0.01), 1.75, 1.0); add(new THREE.BoxGeometry(0.02, 0.14, 0.5), red, sx * (W / 2 + 0.01), 1.75, 1.0); } // 赤十字
+    }
+    const top = van ? 2.38 : 1.53, bar = [];
+    if (kind !== 'civ') { // 赤色灯 (点めつ)
+      for (const [x, c] of [[-0.35, '#ff2222'], [0.35, kind === 'police' ? '#2255ff' : '#ff2222']]) { const mt = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.2 }); bar.push(mt); add(new THREE.BoxGeometry(0.6, 0.14, 0.26), mt, x, top + 0.07, van ? -1.2 : 0.2); }
+    }
+    for (const sx of [-1, 1]) { const hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.06), lightMat); hl.position.set(sx * W * 0.32, van ? 0.9 : 0.72, -L / 2); body.add(hl); const tl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.06), tailMat); tl.position.set(sx * W * 0.34, van ? 1.0 : 0.75, L / 2); body.add(tl); }
+    const wheels = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const pv = new THREE.Group(); pv.position.set(sx * (W / 2 - 0.08), 0.36, sz * L * 0.32); body.add(pv);
+      const wh = shadowy(new THREE.Mesh(wheelGeo, rubber)); wh.rotation.z = Math.PI / 2; pv.add(wh);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.28, 12), chrome); cap.rotation.z = Math.PI / 2; pv.add(cap); wheels.push(pv);
+    }
+    scene.add(g);
+    return { g, wheels, bar, kind, front: wheels.filter((_, i) => i % 2 === 0) };
+  }
+  // 担架 (運ばれる人の下)
+  function makeStretcher() { const s = new THREE.Group(); const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.06, 2.0), new THREE.MeshStandardMaterial({ color: '#e8590c', roughness: 0.6 })); s.add(m1); const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, 1.9), new THREE.MeshStandardMaterial({ color: '#f1f3f5', roughness: 0.8 })); m2.position.y = 0.05; s.add(m2); scene.add(s); return s; }
+  // 落ちているお金
+  const cashMat = new THREE.MeshStandardMaterial({ color: '#2f9e44', emissive: '#2b8a3e', emissiveIntensity: 0.35, roughness: 0.6 });
+  function makeCash() { const g = new THREE.Group(); for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.03, 0.16), cashMat); m.position.y = 0.05 + i * 0.035; m.rotation.y = i * 0.3; g.add(m); } scene.add(g); return g; }
+
   scene.add(camera); // 一人称の手と銃をカメラの子にするため
-  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
+  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, makeVehicle, makeStretcher, makeCash, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
     render() { const now = performance.now(); adapt(now); wind.value = now / 1000; if (grade) grade.material.uniforms.uTime.value = now / 1000; composer.render(); },
     get pixelRatio() { return PR; },
     setQuality(q) { try { localStorage.setItem('arena_quality', q); } catch {} } };

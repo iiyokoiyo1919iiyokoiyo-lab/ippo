@@ -43,22 +43,42 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0b0d1a;color:var(--in
 #dead span{font-size:15px;font-weight:700}
 /* スマホの操作 */
 body:not(.is-touch) .touch{display:none!important}
-#stick{position:fixed;left:18px;bottom:calc(70px + env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);z-index:8;touch-action:none}
+#stick{position:fixed;left:18px;bottom:calc(70px + env(safe-area-inset-bottom));width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);z-index:8;touch-action:none}
 #stick:not(.float){opacity:.55} /* 左半分のどこでも、触ったところにスティックが出る */
-#stick i{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.45)}
-#fire,#jump,#reload,#punch,#weapon,#aim{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
-#fire{right:22px;bottom:calc(84px + env(safe-area-inset-bottom));width:86px;height:86px;background:rgba(255,107,107,.55);font-size:15px}
-#jump{right:122px;bottom:calc(70px + env(safe-area-inset-bottom));width:60px;height:60px;background:rgba(255,255,255,.18);font-size:12px}
-#punch{right:126px;bottom:calc(150px + env(safe-area-inset-bottom));width:66px;height:66px;background:rgba(255,146,43,.55);font-size:13px}
-#weapon{right:126px;bottom:calc(228px + env(safe-area-inset-bottom));width:56px;height:56px;background:rgba(255,255,255,.18);font-size:12px}
-#aim{left:52px;bottom:calc(214px + env(safe-area-inset-bottom));width:66px;height:66px;background:rgba(116,192,252,.35);font-size:12px} /* 左側: サイトをのぞく */
+#stick i{position:absolute;left:46px;top:46px;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.45)}
+#fire,#jump,#reload,#punch,#weapon,#aim,#act{position:fixed;z-index:8;border-radius:50%;border:2px solid rgba(255,255,255,.35);color:#fff;font-weight:900;display:grid;place-items:center;touch-action:none}
+/* ボタンは大きめ (指で押しやすく) */
+#fire{right:16px;bottom:calc(78px + env(safe-area-inset-bottom));width:112px;height:112px;background:rgba(255,107,107,.55);font-size:19px}
+#jump{right:140px;bottom:calc(62px + env(safe-area-inset-bottom));width:74px;height:74px;background:rgba(255,255,255,.18);font-size:13px}
+#punch{right:142px;bottom:calc(148px + env(safe-area-inset-bottom));width:82px;height:82px;background:rgba(255,146,43,.55);font-size:15px}
+#weapon{right:150px;bottom:calc(244px + env(safe-area-inset-bottom));width:68px;height:68px;background:rgba(255,255,255,.18);font-size:13px}
+#aim{left:36px;bottom:calc(236px + env(safe-area-inset-bottom));width:86px;height:86px;background:rgba(116,192,252,.35);font-size:14px} /* 左側: サイトをのぞく */
+#act{right:22px;bottom:calc(290px + env(safe-area-inset-bottom));width:80px;height:80px;background:rgba(105,219,124,.55);font-size:15px;display:none} /* 乗る / 降りる */
+body.is-touch #act.show{display:grid}
+body.driving #fire,body.driving #jump,body.driving #punch,body.driving #weapon,body.driving #aim,body.driving #reload,body.driving #cross,body.driving #ammo{display:none!important} /* 運転中は撃たない */
+body.driving #act{right:22px;bottom:calc(90px + env(safe-area-inset-bottom))}
+#hint{left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--hud);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800}
+#hint:empty{display:none}
+#score .cash{color:#8ce99a;font-weight:900;margin-top:2px}
+/* デバッグ (管理者) */
+#dbgbtn{left:calc(50% + 144px)}
+#dbg{position:fixed;z-index:30;right:8px;top:calc(56px + env(safe-area-inset-top));bottom:8px;width:min(440px,calc(100vw - 16px));overflow:auto;background:rgba(14,17,34,.94);border-radius:12px;padding:10px 12px;font-size:12px;pointer-events:auto;user-select:text;-webkit-user-select:text}
+#dbg[hidden]{display:none}
+#dbg h4{margin:10px 0 4px;font-size:13px}
+.dbg-head{display:flex;align-items:center;gap:8px}.dbg-head span{opacity:.7;flex:1}.dbg-x{border:0;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;padding:2px 8px;font-size:14px}
+.dbg-bar{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.dbg-bar button{border:0;border-radius:8px;padding:6px 8px;background:#364fc7;color:#fff;font:inherit;font-weight:800}
+.dbg-sum div{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.08);padding:2px 0}
+.dbg-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;max-width:240px}.dbg-grid div{aspect-ratio:1;display:grid;place-items:center;border-radius:4px;font-weight:900;color:#fff;text-shadow:0 1px 2px #000}.dbg-grid div.me{outline:2px solid #fff}
+.dbg-legend,.dbg-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.dbg-legend span{border-left:8px solid;padding:0 4px;font-size:11px}.dbg-tags span{background:rgba(255,255,255,.1);border-radius:6px;padding:1px 6px}
+#dbg table{width:100%;border-collapse:collapse;font-size:11px}#dbg th,#dbg td{text-align:left;padding:2px 3px;border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap}
+#dbg pre{white-space:pre-wrap;font-size:11px;opacity:.8;margin:0}
 #aim.on{background:rgba(116,192,252,.75);border-color:#fff}
 body.aiming:not(.scoped) #cross{opacity:.35;transform:scale(.6)} /* ライフルでのぞくと、照準はサイトにまかせて小さく */
 /* スコープ: まわりは黒・まん中に十字 */
 #scopeov{position:fixed;inset:0;z-index:4;pointer-events:none;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent min(34vw,34vh),rgba(0,0,0,.92) calc(min(34vw,34vh) + 2px))}
 #scopeov i{position:absolute;left:50%;top:50%;width:min(68vw,68vh);height:min(68vw,68vh);transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 40px rgba(0,0,0,.8);background:linear-gradient(#000,#000) center/1px 100% no-repeat,linear-gradient(#000,#000) center/100% 1px no-repeat}
 body.scoped #scopeov{display:block} body.scoped #cross{display:none}
-#reload{right:36px;bottom:calc(186px + env(safe-area-inset-bottom));width:52px;height:52px;background:rgba(255,255,255,.18);font-size:11px}
+#reload{right:28px;bottom:calc(204px + env(safe-area-inset-bottom));width:66px;height:66px;background:rgba(255,255,255,.18);font-size:13px}
 @media (prefers-reduced-motion:reduce){#feed div,#hitmark.on{animation:none}}
 /* 設定 */
 .hud-btn{position:fixed;z-index:25;left:50%;top:calc(8px + env(safe-area-inset-top));transform:translateX(-50%);border:0;border-radius:999px;background:var(--hud);color:#fff;font-size:18px;width:40px;height:40px;cursor:pointer}
@@ -92,6 +112,8 @@ body.scoped #scopeov{display:block} body.scoped #cross{display:none}
 <div class="touch" id="punch">なぐる</div>
 <div class="touch" id="weapon">武器</div>
 <div class="touch" id="aim">のぞく</div>
+<div class="touch" id="act">乗る</div>
+<div class="hud" id="hint"></div>
 <div id="scopeov" aria-hidden="true"><i></i></div>
 <div id="center"><div>
   <h1>シティバトル</h1>
@@ -100,7 +122,7 @@ body.scoped #scopeov{display:block} body.scoped #cross{display:none}
   <p id="status" style="color:var(--accent)"></p>
   <button class="btn" id="start" disabled>じゅんび中…</button>
 </div></div>
-<script src="arena-map.js?v=1"></script>
-<script type="module" src="game.js?v=23"></script>
+<script src="arena-map.js?v=2"></script>
+<script type="module" src="game.js?v=24"></script>
 </body>
 </html>

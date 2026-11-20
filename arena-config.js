@@ -18,8 +18,10 @@ const DEFAULTS = {
   npcFlee: 0.6,          // NPC の逃走頻度 (0〜1)
   npcHp: 60,
   corpseMs: 25000,       // 死亡した NPC が消えるまで
+  panicDecay: 25,        // パニックが冷める速さ (秒。小さいほど早く落ち着く)
+  calmMs: 15000,         // 銃声などがこの時間なければ「事件は落ち着いた」(警察が引き上げる)
 };
-const LIMITS = { npcIncapMs: [500, 60000], npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], playerStaggerMs: [0, 3000], downedMs: [500, 10000] };
+const LIMITS = { npcIncapMs: [500, 60000], npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], playerStaggerMs: [0, 3000], downedMs: [500, 10000], panicDecay: [2, 300], calmMs: [2000, 120000] };
 function sanitize(patch) {
   const out = {};
   for (const [k, v] of Object.entries(patch || {})) {

@@ -67,6 +67,20 @@ export class Sound {
       for (const [f, q, gg] of [[480, 5, 1], [820, 6, 0.6], [2400, 4, 0.12]]) { const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q; const gn = c.createGain(); gn.gain.value = gg; os.connect(bp).connect(gn).connect(e); }
       e.connect(o); os.start(t); vib.start(t); os.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
       this.noiseBurst(o, dur * 0.8, 1500, 600, 'bandpass', 1.2); // 息
+    } else if (kind === 'siren') { // サイレン: パトカーは「ウー」と上下・救急車は「ピーポー」(1 回ぶんずつ鳴らす)
+      if (!this.throttle('siren' + (opt.id || ''), 1000)) return;
+      const pos = this.place(x, z, 140); if (!pos) return; const o = this.out(pos, 0.16);
+      const os = c.createOscillator(); os.type = 'square'; const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200;
+      if (opt.kind === 'ambulance') { os.frequency.setValueAtTime(960, t); os.frequency.setValueAtTime(770, t + 0.5); }
+      else { os.frequency.setValueAtTime(620, t); os.frequency.linearRampToValueAtTime(1150, t + 0.45); os.frequency.linearRampToValueAtTime(620, t + 0.98); }
+      const e = c.createGain(); e.gain.setValueAtTime(0.001, t); e.gain.exponentialRampToValueAtTime(1, t + 0.03); e.gain.setValueAtTime(1, t + 0.95); e.gain.exponentialRampToValueAtTime(0.001, t + 1.0);
+      os.connect(lp).connect(e).connect(o); os.start(t); os.stop(t + 1.02);
+    } else if (kind === 'cash') { // お金を拾う: チャリン
+      const o = this.out({ g: 1, pan: 0 }, 0.25);
+      for (const [f, d] of [[1320, 0], [1760, 0.07]]) { const os = c.createOscillator(), e = c.createGain(); os.type = 'triangle'; os.frequency.value = f; e.gain.setValueAtTime(0.001, t + d); e.gain.exponentialRampToValueAtTime(1, t + d + 0.01); e.gain.exponentialRampToValueAtTime(0.001, t + d + 0.35); os.connect(e).connect(o); os.start(t + d); os.stop(t + d + 0.4); }
+    } else if (kind === 'crash') { // 車がぶつかる: どんっ
+      const pos = this.place(x, z, 60); if (!pos) return; const o = this.out(pos, 0.9);
+      this.noiseBurst(o, 0.35, 1800, 90, 'lowpass', 0.6); this.noiseBurst(o, 0.12, 5000, 2000, 'bandpass', 1.5);
     } else if (kind === 'scream' || kind === 'gasp') { // 声: のこぎり波を口の形 (フォルマント) でしぼる。人ごとに高さを変える
       if (!this.throttle(kind + (opt.id || ''), kind === 'scream' ? 2500 : 1500)) return;
       const pos = this.place(x, z, kind === 'scream' ? 70 : 30); if (!pos) return; const o = this.out(pos, kind === 'scream' ? 0.35 : 0.22);

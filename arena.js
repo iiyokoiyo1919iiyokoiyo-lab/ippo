@@ -12,6 +12,9 @@ const M = require('./public/games/arena/arena-map.js');
 const Body = require('./arena-body');
 const Config = require('./arena-config');
 const { NpcSystem } = require('./arena-npc');
+const { Traffic } = require('./arena-traffic');
+const { Incidents } = require('./arena-incidents');
+const { Services } = require('./arena-services');
 
 const MAX_HUMANS = 16, TICK_MS = 50, RESPAWN_MS = 3000, PROTECT_MS = 2000, HP = 100;
 const FIRE_MS = 130, RANGE = 90, DMG = { body: 22, head: 45 }, BOT_DMG = { body: 12, head: 24 };
@@ -26,6 +29,8 @@ const SWITCH_MS = 450; // 持ちかえてから撃てるまで
 const BOTS_MAX = process.env.ARENA_BOTS != null ? Math.max(0, Number(process.env.ARENA_BOTS) || 0) : 3; // テスト用: ARENA_BOTS=0 でボットなし
 const PUNCH = { range: 2.4, cos: Math.cos((55 * Math.PI) / 180), dmg: 35, ms: 600, kb: 7 }; // なぐる: 前 2.4m・左右 55° いないの相手に 35 ダメージ + ふっとばし
 const MAX_SPEED = 9.5; // 走る速さ (8) + ゆとり
+const CAR = { max: 34, enter: 4.4, run: 3, civ: 6 }; // 車: 速さの上限 (m/s)・乗れる距離・はねる速さ・乗れる車の数
+const ROB = { range: 10, cos: Math.cos((10 * Math.PI) / 180), need: 0.9, cash: [20, 200], keepMs: 90000 }; // 強盗: 10m いない・照準から 10° いないで 0.9 秒向けつづける
 const BOT_NAMES = ['ボット・ミケ', 'ボット・ポチ', 'ボット・タマ', 'ボット・ハチ', 'ボット・コロ'];
 const COLORS = ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#da77f2', '#ff922b', '#3bc9db', '#f783ac', '#a9e34b', '#748ffc'];
 
@@ -41,10 +46,30 @@ module.exports = function install(app, ctx) {
   const pubCfg = () => ({ ...cfg });
   const nameOf = (uid) => { const u = db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(uid); return u ? String(u.display_name || u.username).slice(0, 20) : '???'; };
   const humans = () => [...players.values()].filter((p) => !p.bot);
-  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths, w: p.w || 'rifle' });
+  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths, w: p.w || 'rifle', car: p.car || 0, cash: p.cash || 0 });
   const send = (p, m) => { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(m)); };
   const all = (m) => { const s = JSON.stringify(m); for (const p of players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(s); };
   const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+  // 車・事件・警察と救急 (共通の事件管理 incidents を使う)
+  const traffic = new Traffic(map), incidents = new Incidents(cfg);
+  const services = new Services({ npcs, traffic, incidents, cfg, send: (m) => all(m) });
+  npcs.panicAt = (x, z) => incidents.levelAt(x, z);
+  npcs.threatNear = (x, z, r) => incidents.nearest(x, z, r);
+  npcs.vehicleNear = (x, z, r) => traffic.near(x, z, r);
+  // 乗れる一般車: 道路のまん中あたり (止まっている車から離して)
+  { const used = [...traffic.parked]; let k = 0;
+    for (let t = 0; t < 200 && k < CAR.civ; t++) {
+      const n = traffic.nodes[crypto.randomInt(0, traffic.nodes.length)], dir = crypto.randomInt(0, 4), dx = [1, -1, 0, 0][dir], dz = [0, 0, 1, -1][dir], L = 9 + Math.random() * 8;
+      const x = n.x + dx * L + dz * 1.9, z = n.z + dz * L - dx * 1.9;
+      if (Math.abs(x) > M.HALF - 3 || Math.abs(z) > M.HALF - 3 || used.some((b) => Math.hypot(b.x - x, b.z - z) < 7)) continue;
+      used.push({ x, z }); traffic.add('civ', x, z, Math.atan2(-dx, -dz), { color: ['#c92a2a', '#1864ab', '#2b8a3e', '#e67700', '#212529', '#862e9c'][k] }); k++;
+    } }
+  const cash = new Map(); let cashSeq = 0;
+  npcs.onDrop = (n) => { // 強盗: お金を落とす
+    const c = { id: 'c' + (++cashSeq), x: +n.x.toFixed(2), z: +n.z.toFixed(2), a: crypto.randomInt(ROB.cash[0], ROB.cash[1] + 1), at: Date.now() };
+    cash.set(c.id, c); all({ t: 'cash', c });
+  };
+  let tickMs = 0;
 
   // 出てくる場所: 交差点のうち、ほかのプレイヤーからいちばん遠いところ (候補 8 つから)
   function spawn(p) {
@@ -75,6 +100,7 @@ module.exports = function install(app, ctx) {
     const t = hit ? hit.t : wallT, e = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
     all({ t: 'shot', sid: p.sid, w: weapon, o: o.map((v) => +v.toFixed(2)), e: e.map((v) => +v.toFixed(2)), hit: !!hit });
     npcs.emit('shot', p.x, p.z); npcs.emit('impact', e[0], e[2]); // 銃声と着弾は、まわりの通行人に伝わる
+    incidents.report('shots', p.x, p.z); // 事件として登録 (警察が来る・エリアのパニックが上がる)
     if (!hit) return;
     const imp = dmgTable === BOT_DMG ? BOT_IMPACT : W.imp;
     damage(p, hit.q, hit.head ? dmgTable.head : dmgTable.body, { head: hit.head, impact: hit.head ? imp.head : imp.body, dir: d.map((v) => +v.toFixed(3)), npc: hit.npc, weapon });
@@ -84,7 +110,9 @@ module.exports = function install(app, ctx) {
     const now = Date.now();
     if (npc) {
       const res = npcs.hit(q, { dmg, impact, dir, from: { x: p.x, z: p.z } });
-      if (res) all({ t: 'hit', sid: p.sid, to: q.id, npc: 1, dmg, head, melee, kb, res, dir, impact, hp: q.body.hp });
+      if (res) all({ t: 'hit', sid: p.sid, to: q.id, npc: 1, dmg, head, melee, kb, res, dir, impact, hp: q.body.hp, w: weapon });
+      if (res === 'incap') { q.awaitEMS = true; incidents.report(q.role === 'police' ? 'officer' : 'injury', q.x, q.z, { victim: q.id }); } // 救急が必要
+      else if (res) incidents.report(res === 'down' ? 'down' : 'assault', q.x, q.z);
       return;
     }
     const res = Body.hit(q.body, { dmg, impact, dir }, { ...cfg, staggerMs: cfg.playerStaggerMs }, now); // プレイヤーは被弾しても硬直しない (playerStaggerMs)
@@ -92,9 +120,9 @@ module.exports = function install(app, ctx) {
     q.hp = q.body.hp; q.down = Body.isDown(q.body);
     if (res === 'down' && dir) { q.x += dir[0] * 0.6; q.z += dir[2] * 0.6; M.collide(map, q); } // 倒れた方向へ少しずれる
     all({ t: 'hit', sid: p.sid, to: q.sid, dmg, head, melee, kb, res, dir, impact, hp: q.hp });
-    npcs.emit(res === 'stagger' ? 'hit' : 'down', q.x, q.z);
+    npcs.emit(res === 'stagger' ? 'hit' : 'down', q.x, q.z); incidents.report(res === 'stagger' ? 'assault' : 'down', q.x, q.z);
     if (res === 'incap') {
-      q.alive = false; q.deaths++; p.kills++; q.respawnAt = now + RESPAWN_MS;
+      q.alive = false; q.deaths++; if (p.kills != null) p.kills++; q.respawnAt = now + RESPAWN_MS; if (q.car) exitCar(q);
       all({ t: 'kill', killer: p.sid, victim: q.sid, head, melee, w: melee ? 'punch' : weapon, score: [pub(p), pub(q)] });
     }
   }
@@ -165,8 +193,82 @@ module.exports = function install(app, ctx) {
     }
     while (bots.length > want) { const b = bots.pop(); players.delete(b.sid); all({ t: 'leave', sid: b.sid }); }
   }
+  // ---------- 車に乗る・降りる・はねる ----------
+  function enterCar(p, id) {
+    const v = traffic.vehicles.get(id);
+    if (!v || v.kind !== 'civ' || v.driver || v.hidden || !p.alive || !Body.canAct(p.body) || p.car) return;
+    if (Math.hypot(v.x - p.x, v.z - p.z) > CAR.enter) return;
+    v.driver = p.sid; p.car = v.id; p.carAt = Date.now(); p.lastPosAt = Date.now(); all({ t: 'enter', sid: p.sid, id: v.id });
+  }
+  function exitCar(p) {
+    const v = traffic.vehicles.get(p.car); p.car = 0; if (!v) return;
+    v.driver = null; traffic.park(v);
+    const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw), np = { x: v.x + fz * 1.9, y: 0, z: v.z - fx * 1.9 }; // 左のドアから
+    M.collide(map, np); Object.assign(p, { x: np.x, z: np.z, y: 0, lastPosAt: Date.now() });
+    all({ t: 'exit', sid: p.sid, id: v.id, x: p.x, z: p.z });
+  }
+  // 運転している車が人にぶつかった (速いときだけ)
+  function runOver(now) {
+    for (const v of traffic.vehicles.values()) {
+      if (!v.driver || Math.abs(v.speed) < CAR.run) continue;
+      const drv = players.get(v.driver); if (!drv) continue;
+      const cs = traffic.circles(v), sp = Math.abs(v.speed), fx = -Math.sin(v.yaw) * Math.sign(v.speed), fz = -Math.cos(v.yaw) * Math.sign(v.speed);
+      for (const q of [...players.values(), ...npcs.targets()]) {
+        if (q === drv || (q.sid && (!q.alive || q.car || q.protectUntil > now)) || (!q.sid && Body.isOut(q.body))) continue;
+        if (!cs.some((c) => Math.hypot(c.x - q.x, c.z - q.z) < c.r + 0.45) || now - (q.runAt || 0) < 1000) continue;
+        q.runAt = now;
+        damage(drv, q, Math.round(sp * 4.5), { impact: sp * 6, dir: [+fx.toFixed(3), 0, +fz.toFixed(3)], npc: !q.sid, weapon: 'car' });
+        incidents.report('crash', q.x, q.z); npcs.emit('crash', q.x, q.z);
+        if (!q.sid) { q.x += fx * 1.5; q.z += fz * 1.5; M.collide(map, q); }
+      }
+    }
+  }
+  // 強盗: 通行人に銃を向けつづける → 手を上げる → お金を落とす。お金は歩いて拾う
+  function robbery(now) {
+    const aimed = new Set();
+    for (const p of players.values()) {
+      if (p.bot || !p.alive || p.car || !Body.canAct(p.body) || !npcs.near) continue;
+      const cp = Math.cos(p.pitch || 0), f = [-Math.sin(p.yaw) * cp, Math.sin(p.pitch || 0), -Math.cos(p.yaw) * cp], eye = [p.x, p.y + 1.6, p.z];
+      let best = null, bc = ROB.cos;
+      for (const n of npcs.near(p.x, p.z, ROB.range)) {
+        if (n.role || n.robbed || n.hidden || !Body.canMove(n.body)) continue;
+        const d = [n.x - eye[0], 1.2 - eye[1], n.z - eye[2]], L = Math.hypot(...d); if (L > ROB.range || L < 0.5) continue;
+        const c = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / L; if (c < bc) continue;
+        if (M.rayWorld(map, eye, d.map((v) => v / L), L) < L - 0.4) continue;
+        bc = c; best = n;
+      }
+      if (!best) continue;
+      aimed.add(best.id);
+      best.hu = best.hu && best.hu.sid === p.sid ? { sid: p.sid, t: best.hu.t + 0.1 } : { sid: p.sid, t: 0.1 };
+      if (best.hu.t >= ROB.need && npcs.holdup(best, p, now)) { incidents.report('robbery', best.x, best.z); send(p, { t: 'robbed', id: best.id }); }
+    }
+    for (const n of npcs.npcs.values()) if (n.hu && !aimed.has(n.id)) n.hu = null;
+    for (const c of [...cash.values()]) {
+      if (now - c.at > ROB.keepMs) { cash.delete(c.id); all({ t: 'cashgone', id: c.id }); continue; }
+      for (const p of players.values()) {
+        if (p.bot || !p.alive || p.car || Math.hypot(p.x - c.x, p.z - c.z) > 1.4) continue;
+        p.cash = (p.cash || 0) + c.a; cash.delete(c.id); all({ t: 'cashgone', id: c.id, sid: p.sid, a: c.a, total: p.cash }); break;
+      }
+    }
+  }
+  // ---------- デバッグ (管理者) ----------
+  function debugState() {
+    return { npc: npcs.debug(), panic: incidents.levels(), heat: [...incidents.heat].map((h) => +h.toFixed(1)), incidents: incidents.debug(), services: services.debug(),
+      vehicles: [...traffic.vehicles.values()].map((v) => ({ id: v.id, kind: v.kind, x: Math.round(v.x), z: Math.round(v.z), sp: +v.speed.toFixed(1), hidden: v.hidden, driver: v.driver ? players.get(v.driver)?.name || v.driver : '' })), tickMs: +tickMs.toFixed(2), humans: humans().length };
+  }
+  function debugCmd(p, m) {
+    const at = (x, z) => ({ x: Number.isFinite(Number(x)) ? Number(x) : p.x, z: Number.isFinite(Number(z)) ? Number(z) : p.z });
+    if (m.k === 'panic' || m.k === 'random') {
+      const pts = m.k === 'panic' ? [at(m.x, m.z)] : Array.from({ length: 3 }, () => { const n = traffic.nodes[crypto.randomInt(0, traffic.nodes.length)]; return { x: n.x + (Math.random() - 0.5) * 10, z: n.z + (Math.random() - 0.5) * 10 }; });
+      for (const q of pts) { incidents.report('test', q.x, q.z); for (let i = 0; i < 3; i++) npcs.emit('shot', q.x, q.z); npcs.emit('scream', q.x, q.z); all({ t: 'shot', sid: 'sys', w: 'rifle', o: [q.x, 2, q.z], e: [q.x, 6, q.z], hit: false }); }
+    } else if (m.k === 'injure') { // テスト: 近くの通行人を行動不能にする (救急が来る)
+      const q = at(m.x, m.z); let best = null, bd = 40 * 40;
+      for (const n of npcs.civilians()) { if (!Body.canMove(n.body)) continue; const d = (n.x - q.x) ** 2 + (n.z - q.z) ** 2; if (d < bd) { bd = d; best = n; } }
+      if (best) damage({ sid: 'sys', x: best.x - 3, z: best.z }, best, 999, { npc: true, impact: 80, dir: [1, 0, 0] });
+    } else if (m.k === 'clear') incidents.clear();
+  }
   function tick() {
-    const now = Date.now(), dt = TICK_MS / 1000;
+    const now = Date.now(), dt = TICK_MS / 1000, t0 = process.hrtime.bigint();
     tickN++;
     for (const p of players.values()) {
       Body.update(p.body, now); p.down = Body.isDown(p.body);
@@ -174,15 +276,19 @@ module.exports = function install(app, ctx) {
       if (p.bot) botThink(p, now, dt);
     }
     // 通行人: 1 秒に 10 回 (人数は 1 秒に 1 回あわせる)
-    const pl = [...players.values()].map((p) => ({ x: p.x, z: p.z, down: p.down }));
+    const pl = [...players.values()].map((p) => ({ x: p.x, z: p.z, down: p.down, car: p.car, sid: p.sid }));
     if (tickN % 20 === 1) npcs.sync(pl);
     const withNpc = tickN % 2 === 0;
-    if (withNpc) npcs.update(now, 0.1, pl);
+    runOver(now);
+    if (withNpc) { npcs.update(now, 0.1, pl); incidents.update(now, 0.1); services.update(now, 0.1, pl); robbery(now); }
+    if (tickN % 10 === 0) { const d = [...players.values()].filter((p) => p.dbg && p.admin); if (d.length) { const m = { t: 'dbg', d: debugState() }; for (const p of d) send(p, m); } }
+    tickMs = tickMs * 0.95 + Number(process.hrtime.bigint() - t0) / 1e6 * 0.05;
     const prow = [...players.values()].map((p) => [p.sid, +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +p.yaw.toFixed(3), +(p.pitch || 0).toFixed(3), p.hp, p.alive ? 1 : 0, p.protectUntil > now ? 1 : 0, Body.CODE[p.body.state]]);
     if (!withNpc) return all({ t: 's', p: prow });
+    const v = traffic.snapshot();
     // 通行人が多いときは、その人から 110m いないの通行人だけ送る
-    if (npcs.npcs.size <= 60) return all({ t: 's', p: prow, n: npcs.snapshot() });
-    for (const p of players.values()) if (p.ws) send(p, { t: 's', p: prow, n: npcs.snapshot(p, 110 * 110) });
+    if (npcs.npcs.size <= 60) return all({ t: 's', p: prow, n: npcs.snapshot(), v });
+    for (const p of players.values()) if (p.ws) send(p, { t: 's', p: prow, n: npcs.snapshot(p, 110 * 110), v });
   }
   const startLoop = () => { if (!loop) loop = setInterval(tick, TICK_MS); };
   const stopLoop = () => { if (loop && !humans().length) { clearInterval(loop); loop = null; } };
@@ -197,7 +303,7 @@ module.exports = function install(app, ctx) {
     spawn(p);
     npcs.sync([...players.values()].map((q) => ({ x: q.x, z: q.z })));
     p.admin = isAdmin(user);
-    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, weapons: Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, { ms: w.ms, dmg: w.dmg, range: w.range }])), switchMs: SWITCH_MS, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
+    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), vehicles: traffic.list(), cash: [...cash.values()], cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, weapons: Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, { ms: w.ms, dmg: w.dmg, range: w.range }])), switchMs: SWITCH_MS, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
     all({ t: 'join', p: pub(p) });
     console.log(`[arena] @${user.username} が入った (人間 ${humans().length} 人)`);
     ws.on('message', (raw) => {
@@ -205,7 +311,7 @@ module.exports = function install(app, ctx) {
       const now = Date.now(); if (now - p.msgWin > 1000) { p.msgWin = now; p.msgs = 0; } if (++p.msgs > 60) return;
       let m; try { m = JSON.parse(raw); } catch { return; }
       if (!m || typeof m !== 'object') return;
-      if (m.t === 'pos' && p.alive && Body.canMove(p.body)) { // 硬直・転倒・行動不能のあいだは動けない
+      if (m.t === 'pos' && p.alive && !p.car && Body.canMove(p.body)) { // 硬直・転倒・行動不能のあいだは動けない
         const x = Number(m.x), y = Number(m.y), z = Number(m.z), yaw = Number(m.yaw), pitch = Number(m.pitch);
         if (![x, y, z, yaw, pitch].every(Number.isFinite)) return;
         // 速すぎる動き (ワープ) は受けつけず、サーバーの位置にもどす
@@ -218,11 +324,22 @@ module.exports = function install(app, ctx) {
       } else if (m.t === 'config' && p.admin) { // 管理者だけ: ゲームバランス・通行人の設定を変える (全員に知らせる)
         Object.assign(cfg, Config.sanitize(m.patch)); all({ t: 'config', cfg: pubCfg() });
         console.log(`[arena] 設定を変更: ${JSON.stringify(Config.sanitize(m.patch))}`);
-      } else if (m.t === 'punch' && p.alive && Body.canAct(p.body)) {
+      } else if (m.t === 'drive' && p.car && p.alive) { // 運転: 位置はブラウザが送る。速すぎる動きはもどす
+        const v = traffic.vehicles.get(p.car), x = Number(m.x), z = Number(m.z), yaw = Number(m.yaw), sp = Number(m.sp);
+        if (!v || ![x, z, yaw, sp].every(Number.isFinite)) return;
+        const dts = Math.min(0.5, Math.max(0.03, (now - p.lastPosAt) / 1000)); p.lastPosAt = now;
+        const np = { x, y: 0, z }; M.collide(map, np);
+        if (Math.hypot(np.x - v.x, np.z - v.z) > CAR.max * dts + 1.2) { send(p, { t: 'cfix', x: v.x, z: v.z, yaw: v.yaw }); return; }
+        Object.assign(v, { x: np.x, z: np.z, yaw, speed: Math.max(-12, Math.min(CAR.max, sp)) }); Object.assign(p, { x: v.x, z: v.z, y: 0, yaw });
+      } else if (m.t === 'enter' && typeof m.id === 'string') { enterCar(p, m.id);
+      } else if (m.t === 'exit' && p.car) { exitCar(p);
+      } else if (m.t === 'dbg' && p.admin) { p.dbg = !!m.on; if (p.dbg) send(p, { t: 'dbg', d: debugState() });
+      } else if (m.t === 'dbgcmd' && p.admin && typeof m.k === 'string') { debugCmd(p, m); send(p, { t: 'dbg', d: debugState() });
+      } else if (m.t === 'punch' && p.alive && !p.car && Body.canAct(p.body)) {
         punch(p);
       } else if (m.t === 'weapon' && WEAPONS[m.w] && m.w !== p.w) { // 武器の持ちかえ (みんなに知らせる)
         p.w = m.w; p.switchAt = now; all({ t: 'weapon', sid: p.sid, w: p.w });
-      } else if (m.t === 'shoot' && p.alive && Body.canAct(p.body)) {
+      } else if (m.t === 'shoot' && p.alive && !p.car && Body.canAct(p.body)) {
         const W = WEAPONS[p.w || 'rifle'];
         if (now - (p.lastShot || 0) < W.ms - 20 || now - (p.switchAt || 0) < SWITCH_MS - 20) return; p.lastShot = now;
         const o = Array.isArray(m.o) ? m.o.map(Number) : [], d = Array.isArray(m.d) ? m.d.map(Number) : [];
@@ -235,10 +352,11 @@ module.exports = function install(app, ctx) {
     });
     ws.on('close', () => {
       if (players.get(p.sid) !== p) return;
+      if (p.car) exitCar(p);
       players.delete(p.sid); all({ t: 'leave', sid: p.sid }); syncBots(); stopLoop();
     });
   });
   ctx.arenaUpgrade = (req, socket, head, user) => wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
   app.get('/api/arena/status', (req, res) => res.json({ humans: humans().length, max: MAX_HUMANS, npcs: npcs.npcs.size }));
-  ctx.arenaDebug = { cfg, npcs, players }; // テスト用
+  ctx.arenaDebug = { cfg, npcs, players, traffic, incidents, services, debugState, get tickMs() { return tickMs; } }; // テスト用
 };
