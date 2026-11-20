@@ -19,7 +19,7 @@ export class Gore {
     const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
     for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, r = Math.random() * 40; g.fillStyle = `rgba(${90 + Math.random() * 40},0,0,${0.5 + Math.random() * 0.4})`; g.beginPath(); g.arc(64 + Math.cos(a) * r, 64 + Math.sin(a) * r, 8 + Math.random() * 18, 0, 7); g.fill(); }
     const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-    this.decalMat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 0.25, polygonOffset: true, polygonOffsetFactor: -2 });
+    this.decalMat = new THREE.MeshStandardMaterial({ map: tex, color: '#8a1010', transparent: true, depthWrite: false, roughness: 0.55, envMapIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -2 }); // 空の映りこみで明るくなりすぎないよう、くすんだ赤
     this.decalGeo = new THREE.PlaneGeometry(1, 1); this.decals = [];
     this.stumpMat = new THREE.MeshStandardMaterial({ color: '#6b0d0d', roughness: 0.5 }); this.stumpGeo = new THREE.SphereGeometry(0.05, 10, 8);
   }

@@ -10,7 +10,7 @@ import { createGraphics } from './world.js?v=8';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=1';
 import { NpcView } from './npcs.js?v=2';
 import { Sound } from './sound.js?v=1';
-import { Gore } from './gore.js?v=1';
+import { Gore } from './gore.js?v=2';
 import { Settings } from './settings.js?v=1';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
