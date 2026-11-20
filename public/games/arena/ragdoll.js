@@ -40,6 +40,23 @@ export class Ragdoll {
     model.gun.visible = false; // 銃は手から離れる
     model.ragdoll = this;
   }
+  // 苦しむ: level 0 (なし)〜1 (強い)。体を丸める・傷口を押さえる・寝返り・手をのばす・足をばたつかせる
+  setWrithe(level, woundY = 1.15) { this.writhe = level; this.woundY = woundY; if (level) { this.sleeping = false; this.still = 0; } }
+  muscle() {
+    const p = this.p, w = this.writhe, c = p[J.chest], pel = p[J.pelvis];
+    this.wt = (this.wt || 0) - STEP;
+    if (this.wt <= 0) { this.wt = 0.3 + Math.random() * 0.7; this.pose = ['curl', 'clutch', 'clutch', 'roll', 'reach', 'kick', 'lift'][Math.floor(Math.random() * 7)]; this.side = Math.random() < 0.5 ? -1 : 1; }
+    const pull = (i, t, k) => { p[i].x += (t.x - p[i].x) * k * w; p[i].y += (t.y - p[i].y) * k * w; p[i].z += (t.z - p[i].z) * k * w; };
+    const wound = new THREE.Vector3().lerpVectors(pel, c, 0.55);
+    // 手はいつも傷口のほうへ (押さえる)
+    pull(J.handL, wound, 0.012); pull(J.handR, wound, this.pose === 'reach' ? 0 : 0.012);
+    if (this.pose === 'curl') { pull(J.kneeL, c, 0.03); pull(J.kneeR, c, 0.03); pull(J.footL, pel, 0.02); pull(J.footR, pel, 0.02); pull(J.head, wound, 0.01); }
+    if (this.pose === 'clutch') { pull(J.handL, wound, 0.05); pull(J.handR, wound, 0.05); pull(J.kneeL, c, 0.012); }
+    if (this.pose === 'roll') { const r = new THREE.Vector3().subVectors(p[J.shR], p[J.shL]).normalize().multiplyScalar(0.004 * this.side * w); for (const i of [J.shL, J.shR, J.chest, J.neck, J.head]) { p[i].add(r); p[i].y += 0.002 * w; } }
+    if (this.pose === 'reach') { p[J.handR].y += 0.012 * w; p[J.elR].y += 0.006 * w; }
+    if (this.pose === 'kick') { const f = this.side > 0 ? J.footL : J.footR; p[f].y += 0.01 * w; pull(f, c, 0.015); }
+    if (this.pose === 'lift') { p[J.head].y += 0.008 * w; p[J.neck].y += 0.004 * w; }
+  }
   step(dt) {
     if (this.sleeping) return;
     this.acc += Math.min(dt, 0.05);
@@ -51,6 +68,7 @@ export class Ragdoll {
         const a = p[i], b = q[i], vx = (a.x - b.x) * 0.985, vy = (a.y - b.y) * 0.985, vz = (a.z - b.z) * 0.985;
         b.copy(a); a.x += vx; a.y += vy + G * STEP * STEP; a.z += vz;
       }
+      if (this.writhe) this.muscle();
       for (let it = 0; it < ITER; it++) {
         for (const [i, j, L] of this.bones) this.solve(i, j, L, 1);
         for (const [i, j, L] of this.soft) { const d = p[i].distanceTo(p[j]); if (d < L) this.solve(i, j, L, 0.5); }
@@ -59,7 +77,7 @@ export class Ragdoll {
       for (let i = 0; i < 16; i++) moved = Math.max(moved, p[i].distanceToSquared(q[i]));
     }
     // 止まったら計算をやめる
-    if (moved < 4e-6) { if (++this.still > 30) this.sleeping = true; } else this.still = 0;
+    if (!this.writhe && moved < 4e-6) { if (++this.still > 30) this.sleeping = true; } else this.still = 0; // 苦しんでいるあいだは止めない
     this.apply();
   }
   solve(i, j, L, k) {

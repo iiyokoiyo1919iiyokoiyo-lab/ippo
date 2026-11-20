@@ -6,12 +6,12 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=8';
-import { Ragdoll, RagdollManager } from './ragdoll.js?v=1';
-import { NpcView } from './npcs.js?v=2';
-import { Sound } from './sound.js?v=1';
+import { createGraphics } from './world.js?v=9';
+import { Ragdoll, RagdollManager } from './ragdoll.js?v=2';
+import { NpcView } from './npcs.js?v=3';
+import { Sound } from './sound.js?v=2';
 import { Gore } from './gore.js?v=2';
-import { Settings } from './settings.js?v=1';
+import { Settings } from './settings.js?v=2';
 const A = window.ArenaMap, map = A.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
@@ -34,7 +34,9 @@ const settings = new Settings({
   quality: GFX.quality, qualities: GFX.qualities, onQuality: (q) => { GFX.setQuality(q); location.reload(); },
   onLocal: (L) => applyLocal(L), onServer: (patch) => send({ t: 'config', patch }),
 });
-function applyLocal(L) { gore.blood = L.blood; gore.dismember = L.dismember; sound.setOn(L.sound); }
+function applyLocal(L) { gore.blood = L.blood; gore.dismember = L.dismember; sound.setOn(L.sound); camera.near = L.view === 'fps' ? 0.02 : 0.1; camera.updateProjectionMatrix(); }
+const fps = () => settings.local.view === 'fps';
+let viewModel = null;
 applyLocal(settings.local);
 const npcView = new NpcView({ GFX, ragdolls, env, gore, sound, settings });
 { const b = document.createElement('button'); b.className = 'btn ghost'; b.id = 'gfx'; b.style.marginTop = '10px'; b.textContent = `⚙️ 設定 (画質・ラグドール・血など)`;
@@ -52,7 +54,7 @@ const scores = new Map();
 let myModel = null, myColor = '#4dabf7';
 function addPlayer(p) {
   scores.set(p.sid, { name: p.name, kills: p.kills || 0, deaths: p.deaths || 0, bot: p.bot });
-  if (p.sid === you) { myColor = p.color; if (!myModel) myModel = makeChar(p.color, p.name, true); return; }
+  if (p.sid === you) { myColor = p.color; if (!myModel) myModel = makeChar(p.color, p.name, true); if (!viewModel) { viewModel = GFX.makeViewModel(p.color, seedOf(p.name)); camera.add(viewModel.g); } return; }
   if (others.has(p.sid)) return;
   others.set(p.sid, { ...p, model: makeChar(p.color, p.name, false), tx: 0, ty: 0, tz: 0, yaw: 0, alive: true, seen: false });
 }
@@ -85,7 +87,7 @@ function freshModel(o, isMe) {
 // ---------- 入力 ----------
 const keys = new Set(); let firing = false;
 const move = { x: 0, y: 0, run: false };
-addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
+addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
 addEventListener('keyup', (e) => keys.delete(e.code));
 const canvas = $('#c');
 canvas.addEventListener('mousedown', (e) => { if (!playing) return; if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; } if (e.button === 0) firing = true; if (e.button === 2) doPunch(); });
@@ -123,7 +125,7 @@ let lastPunch = 0;
 function doPunch() {
   const now = performance.now();
   if (!playing || !canControl() || now - lastPunch < (rules.punch?.ms || 600)) return;
-  lastPunch = now; me.protect = false; swing(myModel); send({ t: 'punch' });
+  lastPunch = now; me.protect = false; swing(myModel); viewModel?.punch(); send({ t: 'punch' });
 }
 function swing(model) { if (model) model.swing = performance.now(); }
 function jump() { if (playing && canControl() && me.onGround) { me.vy = 7; me.onGround = false; } }
@@ -185,12 +187,12 @@ function tryShoot(now) {
   for (const o of others.values()) { if (!o.alive) continue; const r = A.rayPlayer(co, cd, { x: o.model.g.position.x, y: o.model.g.position.y, z: o.model.g.position.z }); if (r && r.t < t) t = r.t; }
   const aim = [co[0] + cd[0] * t, co[1] + cd[1] * t, co[2] + cd[2] * t];
   // 撃つのは自分のブラスターの先から
-  const tip = new THREE.Vector3(); myModel.tip.getWorldPosition(tip);
+  const tip = new THREE.Vector3(); (fps() && viewModel ? viewModel.tip : myModel.tip).getWorldPosition(tip);
   const o = [tip.x, tip.y, tip.z], d = [aim[0] - o[0], aim[1] - o[1], aim[2] - o[2]], L = Math.hypot(...d) || 1;
   const dn = d.map((v) => v / L);
   const wall = A.rayWorld(map, o, dn, 120);
   tracer(o, [o[0] + dn[0] * Math.min(wall, L + 40), o[1] + dn[1] * Math.min(wall, L + 40), o[2] + dn[2] * Math.min(wall, L + 40)]);
-  muzzle(myModel);
+  muzzle(fps() && viewModel ? viewModel : myModel); viewModel?.kick();
   me.protect = false;
   send({ t: 'shoot', o, d: dn });
   updHud();
@@ -231,7 +233,7 @@ function connect() {
         }
         const o = others.get(sid); if (!o) continue;
         if ((o.st || 0) >= 2 && st === 0 && alive) { endRagdoll(o.model); o.model.g.position.set(x, y, z); o.model.rise = performance.now(); }
-        Object.assign(o, { tx: x, ty: y, tz: z, yaw, alive: !!alive, prot: !!prot, st });
+        Object.assign(o, { tx: x, ty: y, tz: z, yaw, alive: !!alive, prot: !!prot, st, hp });
         if (!o.seen) { o.model.g.position.set(x, y, z); o.cy = y; o.seen = true; }
       }
       if (m.n) npcView.snapshot(m.n);
@@ -308,6 +310,15 @@ function frame() {
     camera.position.copy(pivot).addScaledVector(dir, Math.max(0.4, Math.min(dist, hit - 0.25)));
     if (camera.position.y < 0.45) camera.position.y = 0.45; // 地面の下には行かない
     camera.rotation.set(me.pitch, me.yaw, 0, 'YXZ');
+    // 一人称: 目の高さ (倒れているあいだは三人称で自分の体を映す)
+    const firstP = fps() && !myModel.ragdoll && location.hash !== '#inspect';
+    myModel.g.visible = !firstP;
+    if (viewModel) viewModel.g.visible = firstP && me.alive;
+    if (firstP) {
+      const walking = canControl() && (keys.size || Math.hypot(move.x, move.y) > 0.1), bob = walking ? Math.sin(now / 105) * 0.035 : 0;
+      camera.position.set(me.x, me.y + curb + 1.62 + bob, me.z);
+      viewModel.update(dt, { speed: myModel.speed || 0, run: keys.has('ShiftLeft') || move.run, reloading: !!me.reloading });
+    }
     if (location.hash === '#inspect') { // 確認用: 自分のキャラを前から近くで見る
       camera.position.set(me.x - Math.sin(me.yaw) * 1.25 + Math.cos(me.yaw) * 0.35, me.y + curb + 1.55, me.z - Math.cos(me.yaw) * 1.25 - Math.sin(me.yaw) * 0.35);
       camera.lookAt(me.x, me.y + curb + 1.35, me.z);
@@ -318,7 +329,12 @@ function frame() {
   const k = 1 - Math.exp(-dt * 14);
   for (const o of others.values()) {
     const g = o.model.g;
-    if (o.model.ragdoll) { g.visible = true; continue; } // 倒れているあいだはラグドールが動かす
+    if (o.model.ragdoll) { // 倒れているあいだはラグドールが動かす。転倒・行動不能は苦しむ
+      g.visible = true; o.model.ragdoll.setWrithe(o.st === 3 ? 1 : o.st === 2 ? 0.45 : 0);
+      if ((o.st === 2 || o.st === 3) && (o.groanAt || 0) < now) { o.groanAt = now + 2000 + Math.random() * 2500; const pv = o.model.ragdoll.pelvis(); sound.play('groan', pv.x, pv.z, { id: o.sid, k: 0.8 }); }
+      continue;
+    }
+    o.model.limp = o.hp != null && o.hp < 35;
     g.position.x += (o.tx - g.position.x) * k; g.position.z += (o.tz - g.position.z) * k; o.cy = (o.cy ?? o.ty) + (o.ty - (o.cy ?? o.ty)) * k;
     o.model.baseY = o.cy; GFX.animateChar(o.model, now, dt, GFX.curbAt(g.position.x, g.position.z));
     let dy = o.yaw - g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.rotation.y += dy * k;
@@ -327,6 +343,8 @@ function frame() {
   }
   stepFx(dt);
   const t1 = performance.now();
+  if (myModel?.ragdoll) myModel.ragdoll.setWrithe(me.st === 2 ? 0.45 : me.st === 3 ? 1 : 0); // 自分が倒れたときも苦しむ
+  if (myModel) myModel.limp = me.hp < 35 && me.alive;
   ragdolls.step(dt);
   npcView.update(now, dt, camera.position);
   gore.update(dt, ragdolls.list);

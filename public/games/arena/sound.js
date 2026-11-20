@@ -56,6 +56,17 @@ export class Sound {
       const pos = this.place(x, z, 40); if (!pos) return; const o = this.out(pos, 0.7);
       this.noiseBurst(o, 0.25, 500, 60, 'lowpass', 0.8);
       const os = c.createOscillator(), e = c.createGain(); os.frequency.value = 60; e.gain.setValueAtTime(0.7, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.25); os.connect(e).connect(o); os.start(t); os.stop(t + 0.3);
+    } else if (kind === 'groan') { // うめき声: 低い声を「う・お」の口の形でしぼる。息がもれる音もまぜる
+      if (!this.throttle('groan' + (opt.id || ''), 1800)) return;
+      const pos = this.place(x, z, 30); if (!pos) return; const o = this.out(pos, 0.3 * (opt.k || 1));
+      const base = (opt.pitch || 1) * (130 + Math.random() * 60), dur = 0.8 + Math.random() * 0.9;
+      const os = c.createOscillator(); os.type = 'sawtooth';
+      os.frequency.setValueAtTime(base * 1.15, t); os.frequency.linearRampToValueAtTime(base * 1.3, t + dur * 0.3); os.frequency.exponentialRampToValueAtTime(base * 0.75, t + dur);
+      const vib = c.createOscillator(), vg = c.createGain(); vib.frequency.value = 5 + Math.random() * 3; vg.gain.value = base * 0.06; vib.connect(vg).connect(os.frequency);
+      const e = c.createGain(); e.gain.setValueAtTime(0.001, t); e.gain.exponentialRampToValueAtTime(1, t + 0.12); e.gain.setValueAtTime(0.9, t + dur * 0.6); e.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      for (const [f, q, gg] of [[480, 5, 1], [820, 6, 0.6], [2400, 4, 0.12]]) { const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q; const gn = c.createGain(); gn.gain.value = gg; os.connect(bp).connect(gn).connect(e); }
+      e.connect(o); os.start(t); vib.start(t); os.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
+      this.noiseBurst(o, dur * 0.8, 1500, 600, 'bandpass', 1.2); // 息
     } else if (kind === 'scream' || kind === 'gasp') { // 声: のこぎり波を口の形 (フォルマント) でしぼる。人ごとに高さを変える
       if (!this.throttle(kind + (opt.id || ''), kind === 'scream' ? 2500 : 1500)) return;
       const pos = this.place(x, z, kind === 'scream' ? 70 : 30); if (!pos) return; const o = this.out(pos, kind === 'scream' ? 0.35 : 0.22);

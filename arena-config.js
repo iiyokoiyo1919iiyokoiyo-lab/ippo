@@ -10,6 +10,7 @@ const DEFAULTS = {
   downImpact: 30,        // この強さ以上の被弾で転倒 (体 18・頭 40・パンチ 34)
   fatalDamage: 80,       // 1 発でこれ以上のダメージなら、HP が残っていても行動不能
   incapMs: 1500,         // 行動不能 → 死亡 になるまで (プレイヤーはそのあと復活)
+  npcIncapMs: 12000,     // 通行人が行動不能のまま苦しむ時間 (そのあと死亡)
   npcCount: 20,          // 通行人の数
   npcMaxActive: 40,      // 1 回の更新で動かす NPC の最大数 (多すぎるときは順番に)
   npcReact: 1,           // NPC の反応頻度 (0〜2。0 だと反応しない)
@@ -17,7 +18,7 @@ const DEFAULTS = {
   npcHp: 60,
   corpseMs: 25000,       // 死亡した NPC が消えるまで
 };
-const LIMITS = { npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], downedMs: [500, 10000] };
+const LIMITS = { npcIncapMs: [500, 60000], npcCount: [0, 200], npcMaxActive: [5, 400], npcReact: [0, 2], npcFlee: [0, 1], downImpact: [1, 200], fatalDamage: [1, 500], staggerMs: [0, 3000], downedMs: [500, 10000] };
 function sanitize(patch) {
   const out = {};
   for (const [k, v] of Object.entries(patch || {})) {

@@ -21,7 +21,7 @@ function hit(b, { dmg, impact, dir }, cfg, now = Date.now()) {
   if (isOut(b)) return null;
   b.hp = Math.max(0, b.hp - dmg);
   if (dir) b.dir = dir;
-  if (b.hp <= 0 || dmg >= cfg.fatalDamage) { set(b, S.INCAP, now, cfg.incapMs); return 'incap'; }
+  if (b.hp <= 0 || dmg >= cfg.fatalDamage) { set(b, S.INCAP, now, b.incapMs || cfg.incapMs); return 'incap'; } // 通行人は長め (苦しむ時間)
   if (cfg.oneHitDown || impact >= cfg.downImpact || b.state === S.DOWNED) { set(b, S.DOWNED, now, cfg.downedMs); return 'down'; }
   set(b, S.STAGGERED, now, cfg.staggerMs); return 'stagger';
 }

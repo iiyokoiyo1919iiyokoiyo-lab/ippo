@@ -347,6 +347,51 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
       build(parent) { for (const [mat, list] of parts) { const mesh = shadowy(new THREE.Mesh(mergeGeometries(list, false), mat)); parent.add(mesh); } return parent; },
     };
   }
+  // 銃の部品 (本体・レール・銃身・マズル・ハンドガード・照準・弾倉・グリップ・用心金・ストック)。銃口は (0, 0.01, -0.58)
+  function gunParts(G, GEO) {
+    G.add(GEO.box, gunMetal, [0, 0, 0], [0, 0, 0], [0.065, 0.1, 0.42]);
+    G.add(GEO.box, gunMetal, [0, 0.062, -0.02], [0, 0, 0], [0.04, 0.022, 0.36]);
+    for (let i = 0; i < 8; i++) G.add(GEO.box, gunGrip, [0, 0.075, -0.17 + i * 0.045], [0, 0, 0], [0.042, 0.008, 0.02]);
+    G.add(GEO.cyl, gunMetal, [0, 0.01, -0.36], [Math.PI / 2, 0, 0], [0.016, 0.3, 0.016]);
+    G.add(GEO.cyl, gunGrip, [0, 0.01, -0.53], [Math.PI / 2, 0, 0], [0.026, 0.07, 0.026]);
+    G.add(GEO.box, gunAccent, [0, -0.005, -0.27], [0, 0, 0], [0.07, 0.07, 0.16]);
+    G.add(GEO.box, gunGrip, [0, 0.095, 0.05], [0, 0, 0], [0.03, 0.04, 0.09]);
+    G.add(GEO.box, gunGrip, [0, -0.12, -0.03], [0.18, 0, 0], [0.045, 0.15, 0.065]);
+    G.add(GEO.box, gunGrip, [0, -0.1, 0.12], [-0.3, 0, 0], [0.042, 0.13, 0.055]);
+    G.add(GEO.torus, gunMetal, [0, -0.07, 0.06], [0, Math.PI / 2, 0], [0.035, 0.03, 0.03]);
+    G.add(GEO.box, gunAccent, [0, -0.01, 0.3], [0.05, 0, 0], [0.05, 0.09, 0.2]);
+  }
+  // 一人称の手と銃 (カメラの子にする)。小さくしてカメラのすぐ前に置く (壁にめりこまない)
+  function makeViewModel(color, seed = 1) {
+    const GEO = GEO_HI, vm = new THREE.Group(); vm.scale.setScalar(0.35);
+    const jacket = new THREE.MeshStandardMaterial({ color, map: fabricTex.map, normalMap: fabricTex.normal, roughness: 0.82 });
+    const cuff = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.55), roughness: 0.85 }), skin = skinOf(SKIN[seed % SKIN.length]);
+    const limb = (S_, a, b, r, mat) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = new THREE.Vector3().subVectors(B, A), L = d.length();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()), e = new THREE.Euler().setFromQuaternion(q);
+      S_.add(GEO.cap(r, Math.max(0.01, L - 2 * r)), mat, [(A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2], [e.x, e.y, e.z]); };
+    const hand = (S_, at, s) => { S_.add(GEO.box, skin, at, [0.3, 0, 0], [0.07, 0.085, 0.04]); for (let i = 0; i < 4; i++) S_.add(GEO.cap(0.009, 0.03), skin, [at[0] + (i - 1.5) * 0.017, at[1] - 0.03, at[2] - 0.03], [1.2, 0, 0]); S_.add(GEO.cap(0.01, 0.03), skin, [at[0] - s * 0.035, at[1] + 0.01, at[2] - 0.02], [0.9, 0, -s * 0.6]); };
+    // 銃 + 右手 (グリップ)
+    const gun = new THREE.Group(); gun.position.set(0.13, -0.17, -0.42); vm.add(gun);
+    const G = seg(); gunParts(G, GEO); hand(G, [0, -0.12, 0.12], 1); G.build(gun);
+    const tip = new THREE.Object3D(); tip.position.set(0, 0.01, -0.58); gun.add(tip);
+    const RA = seg(); limb(RA, [0.27, -0.5, 0.05], [0.14, -0.3, -0.29], 0.05, jacket); RA.add(GEO.cyl, cuff, [0.15, -0.31, -0.27], [1.0, 0, 0.5], [0.052, 0.04, 0.052]); RA.build(vm);
+    // 左手 (ハンドガード) — なぐるときは前へ
+    const left = new THREE.Group(); vm.add(left);
+    const LA = seg(); limb(LA, [-0.08, -0.52, -0.25], [0.11, -0.24, -0.68], 0.05, jacket); hand(LA, [0.12, -0.22, -0.7], -1); LA.add(GEO.cyl, cuff, [0.1, -0.27, -0.64], [1.1, 0, -0.6], [0.052, 0.04, 0.052]); LA.build(left);
+    vm.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    const st = { recoil: 0, walk: 0, punch: 0, reload: 0 };
+    return { g: vm, gun, tip, left, own: [jacket, cuff],
+      kick() { st.recoil = 1; }, punch() { st.punch = performance.now(); },
+      update(dt, { speed = 0, run = false, reloading = false } = {}) {
+        st.walk += dt * (speed > 0.3 ? 6 + speed : 0); st.recoil = Math.max(0, st.recoil - dt * 9);
+        st.reload += ((reloading ? 1 : 0) - st.reload) * Math.min(1, dt * 8);
+        const sway = Math.min(1, speed / 5), bx = Math.sin(st.walk) * 0.012 * sway, by = Math.abs(Math.cos(st.walk)) * 0.012 * sway;
+        const pt = st.punch ? (performance.now() - st.punch) / 300 : 1, pk = pt < 1 ? Math.sin(Math.PI * pt) : 0; if (pt >= 1) st.punch = 0;
+        gun.position.set(0.13 + bx + pk * 0.08, -0.17 - by - (run ? 0.05 : 0) - st.reload * 0.06 - pk * 0.05, -0.42 + st.recoil * 0.05);
+        gun.rotation.set(st.recoil * 0.08 + st.reload * 0.7 - (run ? 0.25 : 0), (run ? 0.5 : 0) + pk * 0.3, st.reload * 0.3);
+        left.position.set(pk * -0.05, -st.reload * 0.12 + pk * 0.08, -pk * 0.35 + st.reload * 0.15);
+      } };
+  }
   function nameSprite(name) {
     const c = canvas(256, 64), g = c.getContext('2d'); g.font = '800 28px system-ui,sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(name, 128, 32); g.fillStyle = '#fff'; g.fillText(name, 128, 32);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex(c, { repeat: false }), depthTest: false, transparent: true, toneMapped: false, fog: false })); s.scale.set(2, 0.5, 1); s.position.y = 2.25; s.renderOrder = 10; return s;
@@ -424,19 +469,7 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     });
     // ---- 銃 (本体・銃身・マズル・レール・照準・弾倉・グリップ・用心金・ストック) ----
     const gun = new THREE.Group(); gun.position.set(0.17, 1.3, -0.42); g.add(gun);
-    const G = seg();
-    G.add(GEO.box, gunMetal, [0, 0, 0], [0, 0, 0], [0.065, 0.1, 0.42]);
-    G.add(GEO.box, gunMetal, [0, 0.062, -0.02], [0, 0, 0], [0.04, 0.022, 0.36]);                             // レール
-    for (let i = 0; i < 8; i++) G.add(GEO.box, gunGrip, [0, 0.075, -0.17 + i * 0.045], [0, 0, 0], [0.042, 0.008, 0.02]);
-    G.add(GEO.cyl, gunMetal, [0, 0.01, -0.36], [Math.PI / 2, 0, 0], [0.016, 0.3, 0.016]);                    // 銃身
-    G.add(GEO.cyl, gunGrip, [0, 0.01, -0.53], [Math.PI / 2, 0, 0], [0.026, 0.07, 0.026]);                    // マズル
-    G.add(GEO.box, gunAccent, [0, -0.005, -0.27], [0, 0, 0], [0.07, 0.07, 0.16]);                            // ハンドガード
-    G.add(GEO.box, gunGrip, [0, 0.095, 0.05], [0, 0, 0], [0.03, 0.04, 0.09]);                                // 照準
-    G.add(GEO.box, gunGrip, [0, -0.12, -0.03], [0.18, 0, 0], [0.045, 0.15, 0.065]);                          // 弾倉
-    G.add(GEO.box, gunGrip, [0, -0.1, 0.12], [-0.3, 0, 0], [0.042, 0.13, 0.055]);                            // グリップ
-    G.add(GEO.torus, gunMetal, [0, -0.07, 0.06], [0, Math.PI / 2, 0], [0.035, 0.03, 0.03]);                  // 用心金
-    G.add(GEO.box, gunAccent, [0, -0.01, 0.3], [0.05, 0, 0], [0.05, 0.09, 0.2]);                             // ストック
-    G.build(gun);
+    const G = seg(); gunParts(G, GEO); G.build(gun);
     const tip = new THREE.Object3D(); tip.position.set(0, 0.01, -0.58); gun.add(tip);
     if (npc) gun.visible = false; else if (!isMe) g.add(nameSprite(name));
     scene.add(g);
@@ -454,11 +487,13 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const sp = m.speed || 0, moving = sp > 0.4;
     m.walk += dt * (moving ? 4 + sp * 1.1 : 0);
     const amp = moving ? Math.min(0.7, 0.25 + sp * 0.07) : 0;
-    m.legs.forEach((l, i) => { const ph = Math.sin(m.walk + i * Math.PI); l.hip.rotation.x = THREE.MathUtils.lerp(l.hip.rotation.x, ph * amp, 0.3); l.knee.rotation.x = THREE.MathUtils.lerp(l.knee.rotation.x, Math.max(0, -Math.cos(m.walk + i * Math.PI)) * amp * 1.2, 0.3); });
+    // 深手 (limp): 右足をかばって引きずる (振りが小さく、ひざが伸びたまま)
+    m.legs.forEach((l, i) => { const ph = Math.sin(m.walk + i * Math.PI), lk = m.limp && i === 1 ? 0.35 : 1; l.hip.rotation.x = THREE.MathUtils.lerp(l.hip.rotation.x, ph * amp * lk, 0.3); l.knee.rotation.x = THREE.MathUtils.lerp(l.knee.rotation.x, Math.max(0, -Math.cos(m.walk + i * Math.PI)) * amp * 1.2 * (m.limp && i === 1 ? 0.2 : 1), 0.3); });
     if (m.npc) { // 通行人: うでをふって歩く・パニックのときは頭の上・隠れるときは頭をかかえる
       const sw = Math.sin(m.walk) * amp * 0.9, c = m.crouchK || 0;
       if (m.panic && moving) { m.R.sh.rotation.set(-2.4 + sw * 0.3, 0, 0.3); m.L.sh.rotation.set(-2.4 - sw * 0.3, 0, -0.3); m.R.el.rotation.x = m.L.el.rotation.x = -1.2; }
       else if (c > 0.05) { m.R.sh.rotation.set(-2.2 * c, 0, 0.5 * c); m.L.sh.rotation.set(-2.2 * c, 0, -0.5 * c); m.R.el.rotation.x = m.L.el.rotation.x = -1.9 * c; }
+      else if (m.limp) { m.R.sh.rotation.set(-sw * 0.5, 0, 0.1); m.L.sh.rotation.set(0.35, 0, 0.35); m.L.el.rotation.x = 1.9; m.R.el.rotation.x = 0.3; } // 左手でわき腹を押さえる
       else { m.R.sh.rotation.set(-sw, 0, 0.08); m.L.sh.rotation.set(sw, 0, -0.08); m.R.el.rotation.x = m.L.el.rotation.x = 0.15 + Math.abs(sw) * 0.4; }
     } else {
       // なぐる (左うでを前に突き出す)
@@ -478,7 +513,9 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     let rise = 0; if (m.rise) { const t3 = (now - m.rise) / 700; if (t3 >= 1) m.rise = 0; else rise = (1 - t3) * (1 - t3); }
     m.g.rotation.x += rise * 0.9;
     m.bob = moving ? Math.abs(Math.sin(m.walk)) * 0.03 : 0;
-    m.g.position.y = (m.baseY ?? p.y) + curbY + (m.bob || 0) - ck * 0.42 - rise * 0.5;
+    const limpDip = m.limp && moving ? Math.max(0, Math.sin(m.walk + Math.PI)) * 0.07 : 0; // 悪い足に乗るとき沈む
+    if (m.limp) m.g.rotation.z += moving ? Math.sin(m.walk) * 0.06 : 0.04;
+    m.g.position.y = (m.baseY ?? p.y) + curbY + (m.bob || 0) - ck * 0.42 - rise * 0.5 - limpDip;
     void push;
   }
   // よろける (dir: 弾の向き。世界の向き → キャラの向きに直して使う)
@@ -501,7 +538,8 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     for (const c of m.cut || []) { scene.remove(c); c.traverse((o) => { if (o.isMesh) o.geometry.dispose(); }); } // はなれた破片
   }
 
-  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
+  scene.add(camera); // 一人称の手と銃をカメラの子にするため
+  return { renderer, scene, camera, composer, resize, follow, curbAt, makeChar, makeViewModel, animateChar, react, restPose, disposeChar, quality: qName, qualities: Object.keys(QUALITY), sunDir, Q,
     render() { composer.render(); },
     setQuality(q) { try { localStorage.setItem('arena_quality', q); } catch {} } };
 }

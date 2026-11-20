@@ -69,16 +69,17 @@ class NpcSystem {
     for (let k = 0; k < 10 && !node; k++) { const c = this.nodes[crypto.randomInt(0, this.nodes.length)]; if (players.every((p) => Math.hypot(p.x - c.x, p.z - c.z) > 25) || k === 9) node = c; }
     const persona = PERSONAS[crypto.randomInt(0, PERSONAS.length)];
     const npc = { id: 'n' + (++this.seq), seed: crypto.randomInt(1, 2 ** 31), persona, P: PERSONA[persona], x: node.x, y: 0, z: node.z, yaw: Math.random() * 6.28,
-      mode: 'walking', node, from: null, goal: null, speed: rand(1.1, 1.6), body: Body.create(this.cfg.npcHp), lastThreat: null, lastThreatAt: 0, acc: 0, bodyEmitAt: 0 };
+      mode: 'walking', node, from: null, goal: null, speed: rand(1.1, 1.6), body: Object.assign(Body.create(this.cfg.npcHp), { incapMs: this.cfg.npcIncapMs }), lastThreat: null, lastThreatAt: 0, acc: 0, bodyEmitAt: 0 };
     this.npcs.set(npc.id, npc);
     this.send({ t: 'npcnew', n: this.pub(npc) });
     return npc;
   }
   remove(npc) { this.npcs.delete(npc.id); npc.gone = true; this.send({ t: 'npcgone', id: npc.id }); }
-  pub(n) { return { id: n.id, seed: n.seed, x: +n.x.toFixed(2), z: +n.z.toFixed(2), yaw: +n.yaw.toFixed(2), m: MODE[n.mode] ?? 0, s: Body.CODE[n.body.state] }; }
+  injured(n) { return n.body.hp < n.body.maxHp * 0.5 ? 1 : 0; } // 深手: 足を引きずる
+  pub(n) { return { id: n.id, seed: n.seed, x: +n.x.toFixed(2), z: +n.z.toFixed(2), yaw: +n.yaw.toFixed(2), m: MODE[n.mode] ?? 0, s: Body.CODE[n.body.state], inj: this.injured(n) }; }
   list() { return [...this.npcs.values()].map((n) => this.pub(n)); }
   // スナップショット (近いものだけ。[id, x, z, yaw, 行動, 体の状態])
-  snapshot(near, R2) { const out = []; for (const n of this.npcs.values()) { if (near && (n.x - near.x) ** 2 + (n.z - near.z) ** 2 > R2) continue; out.push([n.id, +n.x.toFixed(2), +n.z.toFixed(2), +n.yaw.toFixed(2), MODE[n.mode] ?? 0, Body.CODE[n.body.state]]); } return out; }
+  snapshot(near, R2) { const out = []; for (const n of this.npcs.values()) { if (near && (n.x - near.x) ** 2 + (n.z - near.z) ** 2 > R2) continue; out.push([n.id, +n.x.toFixed(2), +n.z.toFixed(2), +n.yaw.toFixed(2), MODE[n.mode] ?? 0, Body.CODE[n.body.state], this.injured(n)]); } return out; }
   targets() { return [...this.npcs.values()].filter((n) => n.body.state !== Body.S.DEAD); }
 
   // ---------- 異常 ----------
@@ -203,6 +204,7 @@ class NpcSystem {
       }
       for (const p of players) { const dx = n.x - p.x, dz = n.z - p.z, d = Math.hypot(dx, dz) || 0.01, r = p.down ? 2.2 : 1.0; if (d < r) { const k = (r - d) / r; vx += (dx / d) * k * 1.5; vz += (dz / d) * k * 1.5; } }
     }
+    if (this.injured(n)) sp *= 0.5; // 深手は遅い
     const L = Math.hypot(vx, vz);
     if (L > 0.01) {
       const s = Math.min(sp * dt, 2) / Math.max(1, L);

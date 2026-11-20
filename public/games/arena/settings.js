@@ -5,7 +5,7 @@
 //   ・文字はすべて textContent で入れる
 // =====================================================================
 const KEY = 'arena_settings';
-export const LOCAL_DEFAULTS = { ragdoll: true, reaction: 1, blood: true, dismember: true, sound: true };
+export const LOCAL_DEFAULTS = { view: 'fps', ragdoll: true, reaction: 1, blood: true, dismember: true, sound: true };
 export function loadLocal() { try { return { ...LOCAL_DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { ...LOCAL_DEFAULTS }; } }
 function saveLocal(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} }
 
@@ -15,6 +15,7 @@ export class Settings {
     Object.assign(this, { onLocal, onServer, quality, qualities, onQuality });
     const el = document.createElement('div'); el.id = 'settings'; el.hidden = true; document.body.append(el); this.el = el;
   }
+  set(k, v) { this.local[k] = v; saveLocal(this.local); this.onLocal?.(this.local); }
   setServer(cfg, admin) { this.server = { ...cfg }; if (admin != null) this.admin = !!admin; if (!this.el.hidden) this.render(); }
   open() { this.el.hidden = false; this.render(); }
   close() { this.el.hidden = true; }
@@ -25,9 +26,10 @@ export class Settings {
     const row = (label, ctrl, note) => { const r = document.createElement('label'); r.className = 'set-row'; const s = document.createElement('span'); s.textContent = label; r.append(s, ctrl); if (note) { const n = document.createElement('small'); n.textContent = note; r.append(n); } box.append(r); };
     const toggle = (val, fn, disabled) => { const b = document.createElement('input'); b.type = 'checkbox'; b.checked = !!val; b.disabled = !!disabled; b.onchange = () => fn(b.checked); return b; };
     const range = (val, min, max, step, fn, disabled, fmt = (v) => v) => { const w = document.createElement('span'); w.className = 'set-range'; const b = document.createElement('input'); b.type = 'range'; Object.assign(b, { min, max, step, value: val, disabled: !!disabled }); const o = document.createElement('output'); o.textContent = fmt(val); b.oninput = () => { o.textContent = fmt(b.value); }; b.onchange = () => fn(Number(b.value)); w.append(b, o); return w; };
-    const L = this.local, setL = (k) => (v) => { L[k] = v; saveLocal(L); this.onLocal?.(L); };
+    const L = this.local, setL = (k) => (v) => this.set(k, v);
     h('⚙️ この端末の設定');
     { const sel = document.createElement('select'); const QN = { low: '低', medium: '中', high: '高' }; for (const q of this.qualities) { const o = document.createElement('option'); o.value = q; o.textContent = QN[q] || q; if (q === this.quality) o.selected = true; sel.append(o); } sel.onchange = () => this.onQuality?.(sel.value); row('画質', sel, '変えると読みなおします'); }
+    { const sel = document.createElement('select'); for (const [v, t] of [['fps', '一人称'], ['tps', '三人称']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; if (L.view === v) o.selected = true; sel.append(o); } sel.onchange = () => setL('view')(sel.value); row('視点', sel, 'V キーでも切りかえ'); }
     row('ラグドール (倒れるときの物理)', toggle(L.ragdoll, setL('ragdoll')));
     row('被弾リアクションの強さ', range(L.reaction, 0.3, 2, 0.1, setL('reaction'), false, (v) => `${Number(v).toFixed(1)}×`));
     row('血の表現', toggle(L.blood, setL('blood')));
