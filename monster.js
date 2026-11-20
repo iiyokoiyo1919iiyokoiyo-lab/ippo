@@ -274,10 +274,30 @@ CREATE TABLE mon_shop (
 );
 `;
 
+// フォルダ (自分のモンスターを分けて整理する。モンスターの表は変えない)
+const FOLDER_MIGRATION = `
+CREATE TABLE IF NOT EXISTS mon_folders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mon_folders_user ON mon_folders(user_id, sort);
+CREATE TABLE IF NOT EXISTS mon_folder_items (
+  monster_id TEXT PRIMARY KEY,                 -- 1 体は 1 つのフォルダだけ (入っていなければ「未分類」)
+  folder_id INTEGER NOT NULL REFERENCES mon_folders(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS mon_folder_items_folder ON mon_folder_items(folder_id);
+`;
+const FOLDER_MAX = 20, FOLDER_NAME_MAX = 12;
+
 module.exports = function install(app, ctx) {
   const { db, requireAuth, rateLimit, publicUser } = ctx;
   db.migrate('2026-11-20-monster-breeders', MIGRATION);
   db.migrate('2026-11-20-monster-mutations', MUTATION_MIGRATION);
+  db.migrate('2026-11-21-monster-folders', FOLDER_MIGRATION);
   // テスト中: 遊べるのはテスターだけ (環境変数 MON_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413)。ほかの人には API もバトルも開かない
   const TESTERS = new Set(String(process.env.MON_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
   // 一般解放: 2026-11-20 8:25 (日本時間) からはログインしている全員が遊べる (環境変数 MON_OPEN_AT = ミリ秒の時刻で上書き)
@@ -349,7 +369,49 @@ module.exports = function install(app, ctx) {
   }));
   app.get('/api/mon/me', requireAuth, (req, res) => {
     const uid = req.user.id, started = !!db.prepare('SELECT 1 FROM mon_players WHERE user_id = ?').get(uid);
-    res.json({ started, coins: coins.get(uid), monsters: mine(uid).map((m) => monView(m)), next: nextSlot() });
+    const where = folderMap(uid);
+    res.json({ started, coins: coins.get(uid), monsters: mine(uid).map((m) => ({ ...monView(m), folderId: where.get(m.id) || 0 })), folders: foldersOf(uid), next: nextSlot() });
+  });
+  // ---------- フォルダ (自分だけが見る整理用。ほかの人には見えない) ----------
+  const foldersOf = (uid) => db.prepare('SELECT id, name FROM mon_folders WHERE user_id = ? ORDER BY sort, id').all(uid);
+  const folderMap = (uid) => new Map(db.prepare('SELECT monster_id, folder_id FROM mon_folder_items WHERE user_id = ?').all(uid).map((r) => [r.monster_id, r.folder_id]));
+  const myFolder = (uid, id) => db.prepare('SELECT * FROM mon_folders WHERE id = ? AND user_id = ?').get(Number(id) || 0, uid);
+  const folderName = (v) => String(v || '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, FOLDER_NAME_MAX);
+  const folderReply = (uid) => ({ folders: foldersOf(uid), where: Object.fromEntries(folderMap(uid)) });
+  app.post('/api/mon/folders', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, name = folderName(req.body?.name);
+    if (!name) return res.status(400).json({ error: 'フォルダの名前を入れてください' });
+    const n = db.prepare('SELECT COUNT(*) AS n, COALESCE(MAX(sort), 0) AS s FROM mon_folders WHERE user_id = ?').get(uid);
+    if (n.n >= FOLDER_MAX) return res.status(400).json({ error: `フォルダは ${FOLDER_MAX} 個までです` });
+    const r = db.prepare('INSERT INTO mon_folders (user_id, name, sort, created_at) VALUES (?, ?, ?, ?)').run(uid, name, n.s + 1, Date.now());
+    res.json({ id: Number(r.lastInsertRowid), ...folderReply(uid) });
+  });
+  app.post('/api/mon/folders/:id/rename', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, f = myFolder(uid, req.params.id), name = folderName(req.body?.name);
+    if (!f) return res.status(404).json({ error: 'そのフォルダはありません' });
+    if (!name) return res.status(400).json({ error: 'フォルダの名前を入れてください' });
+    db.prepare('UPDATE mon_folders SET name = ? WHERE id = ?').run(name, f.id);
+    res.json(folderReply(uid));
+  });
+  app.post('/api/mon/folders/:id/delete', requireAuth, writeLimit, (req, res) => { // 中のモンスターは「未分類」にもどる (モンスターは消えない)
+    const uid = req.user.id, f = myFolder(uid, req.params.id);
+    if (!f) return res.status(404).json({ error: 'そのフォルダはありません' });
+    db.prepare('DELETE FROM mon_folder_items WHERE folder_id = ?').run(f.id); db.prepare('DELETE FROM mon_folders WHERE id = ?').run(f.id);
+    res.json(folderReply(uid));
+  });
+  // まとめて移す: { ids: [モンスター], folder: フォルダ (0 = 未分類) }
+  app.post('/api/mon/folders/move', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(String))].slice(0, 200) : [], fid = Number(req.body?.folder) || 0;
+    if (!ids.length) return res.status(400).json({ error: 'モンスターをえらんでください' });
+    if (fid && !myFolder(uid, fid)) return res.status(404).json({ error: 'そのフォルダはありません' });
+    const okIds = ids.filter((id) => owned(uid, id));
+    if (!okIds.length) return res.status(404).json({ error: 'そのモンスターは持っていません' });
+    db.exec('BEGIN');
+    try {
+      for (const id of okIds) { db.prepare('DELETE FROM mon_folder_items WHERE monster_id = ?').run(id); if (fid) db.prepare('INSERT INTO mon_folder_items (monster_id, folder_id, user_id) VALUES (?, ?, ?)').run(id, fid, uid); }
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    res.json({ moved: okIds.length, ...folderReply(uid) });
   });
   app.get('/api/mon/monster/:id', (req, res) => {
     const m = getMon(req.params.id); if (!m) return res.status(404).json({ error: 'そのモンスターは見つかりません' });

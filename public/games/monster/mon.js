@@ -116,9 +116,54 @@
         <a class="btn" href="#dex">📕 変異図鑑<small>発見されたものだけ</small></a>
         <a class="btn" href="#help">📖 あそびかた<small>ルールと相性</small></a>
       </div>
-      <div class="card"><h2>🐾 わたしのモンスター <span class="small muted">${ms.length} 体</span></h2>
-        ${ms.length ? `<div class="grid">${ms.map((m) => mcard(m)).join('')}</div>` : '<p class="empty">モンスターがいません。セリで手に入れよう</p>'}</div>`;
+      <div class="card" id="mybox"></div>`;
+    renderMine();
   }
+  // ---------- わたしのモンスター: フォルダで分ける (すべて・未分類・自分のフォルダ)。「整理する」でえらんでまとめて移す ----------
+  const FKEY = 'mon_folder';
+  let selMode = false; const picked = new Set();
+  const curF = () => { let v = 'all'; try { v = localStorage.getItem(FKEY) || 'all'; } catch {} return v === 'all' || v === '0' || (me.folders || []).some((f) => String(f.id) === v) ? v : 'all'; };
+  const setF = (v) => { try { localStorage.setItem(FKEY, String(v)); } catch {} };
+  const folderOpts = (sel) => `<option value="0" ${String(sel) === '0' ? 'selected' : ''}>📂 未分類</option>${(me.folders || []).map((f) => `<option value="${f.id}" ${String(sel) === String(f.id) ? 'selected' : ''}>📁 ${esc(f.name)}</option>`).join('')}`;
+  function renderMine() {
+    const box = $('#mybox'); if (!box) return;
+    const ms = me.monsters, fs = me.folders || [], cur = curF();
+    const count = (fid) => ms.filter((m) => String(m.folderId || 0) === String(fid)).length;
+    const list = cur === 'all' ? ms : ms.filter((m) => String(m.folderId || 0) === cur);
+    const chip = (v, label, n) => `<button class="fchip ${cur === String(v) ? 'on' : ''}" data-f="${v}">${label} <span>${n}</span></button>`;
+    const curFolder = fs.find((f) => String(f.id) === cur);
+    box.innerHTML = `<h2>🐾 わたしのモンスター <span class="small muted">${ms.length} 体</span></h2>
+      <div class="fbar">${chip('all', 'すべて', ms.length)}${chip(0, '📂 未分類', count(0))}${fs.map((f) => chip(f.id, '📁 ' + esc(f.name), count(f.id))).join('')}<button class="fchip add" id="fadd">＋ フォルダ</button></div>
+      <div class="ftools">${curFolder ? `<button class="btn sm" id="fren">✏️ フォルダ名</button><button class="btn sm" id="fdel">🗑 フォルダを消す</button>` : ''}<span style="flex:1"></span>${ms.length ? `<button class="btn sm ${selMode ? 'primary' : ''}" id="fsel">${selMode ? '✓ えらぶのをやめる' : '📁 整理する'}</button>` : ''}</div>
+      ${selMode ? `<div class="fmove"><span class="small"><b id="pkn">${picked.size}</b> 体をえらび中</span><select class="in" id="fto" aria-label="移す先">${folderOpts(curFolder ? 0 : (fs[0]?.id ?? 0))}</select><button class="btn primary sm" id="fgo">移す</button><button class="btn sm" id="fallp">全部えらぶ</button></div>` : ''}
+      ${list.length ? `<div class="grid ${selMode ? 'picking' : ''}">${list.map((m) => mcard(m, { href: selMode ? '' : `#mon/${m.id}`, cls: picked.has(m.id) ? 'picked' : '', extra: selMode ? `<span class="pk">${picked.has(m.id) ? '✓' : ''}</span>` : '' })).join('')}</div>`
+        : `<p class="empty">${ms.length ? 'このフォルダにはモンスターがいません。「📁 整理する」でえらんで移せます' : 'モンスターがいません。セリで手に入れよう'}</p>`}`;
+    $$('.fchip[data-f]', box).forEach((b) => b.onclick = () => { setF(b.dataset.f); renderMine(); });
+    $('#fadd', box).onclick = async () => {
+      const name = prompt('新しいフォルダの名前 (12 文字まで)', ''); if (name === null) return;
+      try { const r = await api('/mon/folders', { method: 'POST', body: { name } }); applyFolders(r); setF(r.id); toast(`フォルダ「${name.trim().slice(0, 12)}」を作りました`); renderMine(); } catch (e) { toast(e.message, true); }
+    };
+    $('#fren', box)?.addEventListener('click', async () => {
+      const name = prompt('フォルダの新しい名前', curFolder.name); if (name === null) return;
+      try { applyFolders(await api(`/mon/folders/${curFolder.id}/rename`, { method: 'POST', body: { name } })); renderMine(); } catch (e) { toast(e.message, true); }
+    });
+    $('#fdel', box)?.addEventListener('click', async () => {
+      if (!confirm(`フォルダ「${curFolder.name}」を消しますか？\n中のモンスターは「未分類」にもどります (モンスターは消えません)。`)) return;
+      try { applyFolders(await api(`/mon/folders/${curFolder.id}/delete`, { method: 'POST' })); setF('all'); toast('フォルダを消しました'); renderMine(); } catch (e) { toast(e.message, true); }
+    });
+    $('#fsel', box)?.addEventListener('click', () => { selMode = !selMode; picked.clear(); renderMine(); });
+    if (selMode) {
+      $$('.grid .mcard', box).forEach((c) => c.onclick = (e) => { e.preventDefault(); const id = c.dataset.id; if (picked.has(id)) picked.delete(id); else picked.add(id); c.classList.toggle('picked', picked.has(id)); c.querySelector('.pk').textContent = picked.has(id) ? '✓' : ''; $('#pkn').textContent = picked.size; });
+      $('#fallp', box).onclick = () => { const all = list.every((m) => picked.has(m.id)); list.forEach((m) => (all ? picked.delete(m.id) : picked.add(m.id))); renderMine(); };
+      $('#fgo', box).onclick = async () => {
+        if (!picked.size) return toast('モンスターをえらんでください', true);
+        const to = $('#fto').value, toName = to === '0' ? '未分類' : fs.find((f) => String(f.id) === to)?.name;
+        try { const r = await api('/mon/folders/move', { method: 'POST', body: { ids: [...picked], folder: Number(to) } }); applyFolders(r); toast(`${r.moved} 体を「${toName}」に移しました`); picked.clear(); selMode = false; renderMine(); } catch (e) { toast(e.message, true); }
+      };
+    }
+  }
+  // サーバーからのフォルダの状態を、手もとの me に反映
+  function applyFolders(r) { if (r.folders) me.folders = r.folders; if (r.where) for (const m of me.monsters) m.folderId = r.where[m.id] || 0; }
 
   // ---------- 命名 (生まれたとき・買ったとき・詳細画面から。12 文字まで) ----------
   let nameNext = null; // ショップで買った直後は詳細画面で名前の入力を開く
@@ -173,6 +218,7 @@
     if (m.status === 'listed') b.push(`<button class="btn block" id="unlist">セリの出品をやめる (出品価格 ${m.listPrice} コイン)</button>`);
     b.push(`<a class="btn block" href="#pedigree/${m.id}">📜 血統書を作ってシェア</a>`);
     if (!['listed', 'auction'].includes(m.status)) b.push(`<button class="btn block" id="sell" ${me.monsters.length <= 1 ? 'disabled' : ''}>💰 売却する (🪙 ${Number(m.sellPrice || 0).toLocaleString()})${me.monsters.length <= 1 ? ' — 最後の 1 体は売れません' : ''}</button>`);
+    b.push(`<label class="small" style="display:flex;gap:6px;align-items:center">📁 フォルダ <select class="in" id="mfold" style="flex:1">${folderOpts(me.monsters.find((x) => x.id === m.id)?.folderId || 0)}</select></label>`);
     b.push(`<button class="btn sm" id="rename">✏️ 名前を変える</button>`);
     acts.innerHTML = `<div style="display:grid;gap:8px">${b.join('')}</div>`;
     const act = async (path, body, msg) => { try { await api(`/mon/monster/${m.id}/${path}`, { method: 'POST', body }); toast(msg); route(); } catch (e) { toast(e.message, true); } };
@@ -185,6 +231,10 @@
       e.target.disabled = true;
       try { const r = await api(`/mon/monster/${encodeURIComponent(m.id)}/sell`, { method: 'POST' }); await refresh(); toast(`${m.name} を売却しました (🪙 +${r.price})`); location.hash = '#'; }
       catch (err) { toast(err.message, true); e.target.disabled = false; }
+    });
+    $('#mfold', acts)?.addEventListener('change', async (e) => {
+      const label = e.target.selectedOptions[0].textContent.slice(2).trim();
+      try { const r = await api('/mon/folders/move', { method: 'POST', body: { ids: [m.id], folder: Number(e.target.value) } }); applyFolders(r); toast(`「${label}」に移しました`); } catch (err) { toast(err.message, true); }
     });
     $('#rename', acts)?.addEventListener('click', () => { openName(); $('#nmwrap').scrollIntoView({ block: 'center', behavior: 'smooth' }); });
   }

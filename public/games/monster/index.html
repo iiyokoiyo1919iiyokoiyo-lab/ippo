@@ -32,6 +32,14 @@ button{font:inherit;cursor:pointer}
 .card h2{margin:0 0 8px;font-size:16px;display:flex;align-items:center;gap:6px}
 .muted{color:var(--muted)} .small{font-size:12px} .center{text-align:center}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+/* フォルダ */
+.fbar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}.fbar::-webkit-scrollbar{display:none}
+.fchip{flex:0 0 auto;border:2px solid var(--line);background:var(--surface);color:inherit;border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap}
+.fchip span{opacity:.6;font-weight:700;margin-left:2px}.fchip.on{background:#4b55f0;border-color:#4b55f0;color:#fff}.fchip.add{border-style:dashed;opacity:.85}
+.ftools{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.fmove{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--surface);border:2px dashed var(--line);border-radius:12px;padding:8px;margin-bottom:8px}.fmove select{flex:1;min-width:120px}
+.grid.picking .mcard{cursor:pointer}.mcard.picked{border-color:#4b55f0;box-shadow:0 0 0 3px rgba(75,85,240,.25)}
+.mcard .pk{position:absolute;right:6px;bottom:6px;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--surface);display:grid;place-items:center;font-weight:900;color:#fff}.mcard.picked .pk{background:#4b55f0;border-color:#4b55f0}
 .menu{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .menu .btn{flex-direction:column;padding:12px 8px;font-size:15px;min-height:72px}
 .menu .btn small{font-size:11px;font-weight:600;opacity:.85}
@@ -356,6 +364,6 @@ input.in{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:i
 <body>
 <div id="app"><p class="empty">よみこみ中…</p></div>
 <script src="/games/monster/mon-art.js?v=3"></script>
-<script src="/games/monster/mon.js?v=19"></script>
+<script src="/games/monster/mon.js?v=20"></script>
 </body>
 </html>
