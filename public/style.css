@@ -1127,6 +1127,9 @@ a.quote-embed:hover { background: var(--surface-2); border-color: var(--border-s
 /* ミニゲーム */
 .horse-wrap { padding: 0; }
 .horse-frame { display: block; width: 100%; border: 0; background: var(--bg); }
+/* シティバトル: 画面いっぱい (ヘッダー・タブバーの上にかぶせる) */
+.horse-frame.arena-full { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 100; /* ヘッダー・タブバー (40) より上・ダイアログ (300) より下 */ background: #0b0d1a; }
+body.arena-open { overflow: hidden; }
 .horse-banner-art { display: grid; place-items: center; width: 54px; height: 54px; flex: none; border-radius: 12px; background: linear-gradient(135deg, #1B2468, #6A1B9A 60%, #C0287F); font-size: 30px; }
 .horse-note { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--s3); padding: 4px 12px 4px 8px; border-radius: var(--r-full); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sm); text-decoration: none !important; }
 .horse-note b { color: var(--text); }

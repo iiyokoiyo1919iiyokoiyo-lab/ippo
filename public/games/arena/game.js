@@ -43,6 +43,14 @@ const npcView = new NpcView({ GFX, ragdolls, env, gore, sound, settings });
   b.onclick = () => settings.open(); $('#center > div').append(document.createElement('br'), b); }
 { const b = document.createElement('button'); b.id = 'gear'; b.className = 'hud-btn'; b.textContent = '⚙️'; b.setAttribute('aria-label', '設定');
   b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); settings.open(); }; document.body.append(b); }
+// 全画面: はじめるときに自動で全画面に (対応しているブラウザ)。⛶ で切りかえ・✕ で IppO にもどる
+const canFS = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+function enterFS() { if (!canFS || document.fullscreenElement || document.webkitFullscreenElement) return; const el = document.documentElement; try { const r = (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el, { navigationUI: 'hide' }); r?.catch?.(() => {}); } catch {} }
+function exitFS() { try { const r = (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); r?.catch?.(() => {}); } catch {} }
+if (canFS) { const b = document.createElement('button'); b.id = 'fsbtn'; b.className = 'hud-btn'; b.textContent = '⛶'; b.setAttribute('aria-label', '全画面');
+  b.onclick = () => { if (document.fullscreenElement || document.webkitFullscreenElement) exitFS(); else enterFS(); }; document.body.append(b); }
+if (parent !== window) { const b = document.createElement('button'); b.id = 'exitbtn'; b.className = 'hud-btn'; b.textContent = '✕'; b.setAttribute('aria-label', 'IppO にもどる');
+  b.onclick = () => { if (document.pointerLockElement) document.exitPointerLock(); exitFS(); parent.postMessage({ source: 'ippo-arena', type: 'exit' }, location.origin); }; document.body.append(b); }
 
 // ---------- 状態 ----------
 const me = { x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.1, hp: 100, alive: false, protect: false, ammo: 15, reloading: 0, onGround: true, st: 0, srv: null, w: 'rifle', mags: { rifle: 15, sniper: 5 }, held: false };
@@ -293,7 +301,7 @@ function connect() {
 }
 $('#start').onclick = () => {
   playing = true; $('#center').classList.add('hide'); sound.start(); applyLocal(settings.local);
-  if (!isTouch) canvas.requestPointerLock?.();
+  enterFS(); if (!isTouch) canvas.requestPointerLock?.();
 };
 
 // ---------- 毎フレーム ----------

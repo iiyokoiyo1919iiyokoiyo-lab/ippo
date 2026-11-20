@@ -2869,20 +2869,18 @@ function viewHorse() {
 // シティバトル (/games/arena/ を iframe で開く。3D の撃ち合い)
 function viewArena() {
   main.innerHTML = pageHead({ title: 'シティバトル', sub: 'ミニゲーム · 3D の撃ち合い・オンライン', back: '#/games' }) +
-    `<div class="horse-wrap"><iframe class="horse-frame" id="arena-frame" src="/games/arena/" title="シティバトル" allow="fullscreen"></iframe></div>`;
-  const frame = $('#arena-frame');
-  const fit = () => {
-    const tab = $('.tabbar'), tabH = tab && getComputedStyle(tab).display !== 'none' ? tab.getBoundingClientRect().height : 0;
-    frame.style.height = Math.max(420, window.innerHeight - (frame.getBoundingClientRect().top + window.scrollY) - tabH) + 'px';
-  };
-  fit(); window.scrollTo(0, 0);
-  window.addEventListener('resize', fit);
-  viewCleanup = () => window.removeEventListener('resize', fit);
+    `<div class="horse-wrap"></div>`;
+  // 全画面: body の直下に置いて画面いっぱいにかぶせる (ヘッダー・タブバーの上。iPhone でも効く)。もどるはゲームの中の ✕
+  $('#arena-frame')?.remove();
+  const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'arena-frame'; frame.src = '/games/arena/'; frame.title = 'シティバトル'; frame.allow = 'fullscreen';
+  document.body.append(frame); document.body.classList.add('arena-open'); window.scrollTo(0, 0);
+  viewCleanup = () => { frame.remove(); document.body.classList.remove('arena-open'); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
 }
 window.addEventListener('message', (e) => {
   const af = $('#arena-frame');
   if (!af || e.source !== af.contentWindow || e.origin !== location.origin) return;
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'login') openAuth();
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'exit') location.hash = '#/games';
 });
 // ブリードモンスターズ (/games/monster/ を iframe で開く。競走馬版と同じ形)
 async function viewMonster() {

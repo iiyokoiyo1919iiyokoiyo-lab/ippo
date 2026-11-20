@@ -50,7 +50,7 @@
 - セリは 15 分ごと (毎時 5・20・35・50 分。`monster.js` の `PERIOD`。テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)
 
 ## シティバトル (arena.js・public/games/arena/)
-- 街を舞台にした 3D の撃ち合い (デスマッチ)。IppO の中の iframe (`#/arena` → `/games/arena/`)。WebSocket `/ab` (ログインが必要)。1 つの街に 16 人まで
+- 街を舞台にした 3D の撃ち合い (デスマッチ)。IppO の中の iframe (`#/arena` → `/games/arena/`。iframe は body の直下に置いて画面いっぱいにかぶせる・はじめると全画面 API でも全画面・✕ で `#/games` にもどる)。WebSocket `/ab` (ログインが必要)。1 つの街に 16 人まで
 - 3D は three.js (`public/games/arena/vendor/three.module.min.js`・MIT。CSP が 'self' だけなので、外の CDN は使えない)
 - マップと当たり判定は `public/games/arena/arena-map.js` (サーバーとブラウザで共通。同じ種から同じ街ができる)
 - 見た目は `public/games/arena/world.js`: 画像ファイルなしの手続き的なテクスチャ (外壁 4 種類・アスファルト・歩道・草・木箱)、PBR・空 (Sky)・空の映りこみ (PMREM)・太陽の影 (自分のまわりだけ)・ACES・ブルーム・AO (GTAO)・FXAA。画質は low / medium / high / ultra (スマホは high、パソコンは ultra=最高 から。はじめの画面の ⚙️ で変える・localStorage `arena_quality`)。最高は MSAA 4x + SMAA・影 4096・テクスチャ 1024・異方性フィルタ最大・公園の草 (風でゆれる)。高以上は街の映りこみ (CubeCamera を 1 回)・水たまり・色の仕上げ (周辺減光・粒)。重いときは解像度を自動で下げる (動的解像度。`GFX.pixelRatio`)
