@@ -3113,7 +3113,7 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
-    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
+    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}${c.limitedLevel ? '<span class="cb-lim" title="突然変異 R 以上: 限定キャラ級の強さ">限定級</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
@@ -3226,7 +3226,7 @@ async function viewCards() {
     </section>
     <section class="card cb-horse-banner cb-mon-banner">
       <span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('m:x', 'SR')}</span>
-      <span><b>ブリードモンスターズからモンスターを連れてくる</b><span>育てたモンスターがカードになります。評価でレア度が決まり (B→R・A→SR・S/SS→SSR・Z→<b>MR</b>)、能力の形はモンスターそのまま。 (連れてきたモンスター ${(mine.monsters || []).length}体)</span></span>
+      <span><b>ブリードモンスターズからモンスターを連れてくる</b><span>育てたモンスターがカードになります。評価でレア度が決まり (B→R・A→SR・S/SS→SSR・Z→<b>MR</b>)、<b>能力は育てたぶんだけ強く (上限なし)</b>。突然変異 R 以上は<b>限定級</b>の強さ！ (連れてきたモンスター ${(mine.monsters || []).length}体)</span></span>
       <button class="btn btn-primary btn-sm" type="button" id="cb-monster">🧬 連れてくる</button>
     </section>
     <a class="card cb-gacha-banner" href="#/games/cards/gacha"><span class="cb-gacha-art" aria-hidden="true">${CBArt.svg('case', 'SSR')}</span>
@@ -3270,9 +3270,9 @@ async function cbBringMonster(done) {
   if (!r.monsters.length) return openPanel('モンスターを連れてくる', `<div class="form-stack"><p>連れてこられるモンスターがいません。「ブリードモンスターズ」で育てたモンスターが、カードになって連れてこられます。</p>
     <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>閉じる</button><a class="btn btn-primary" href="#/monster">ブリードモンスターズへ</a></div></div>`);
   const T = cbCatalogCache?.types || {};
-  openPanel('どのモンスターを連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">モンスターの<b>評価でレア度</b>、<b>属性で相性とわざ</b>が決まります (🔥火・✨光 → ✂️きる / 🌿草・🌑闇 → 📄つつむ / 💧水・👑王 → 🪨おもい)。能力は、そのレア度のカードの平均を基準に、モンスターの能力の形 (HP 型・攻撃型など) で ±15%。<br>連れてきたあとにモンスターを育てたら、<b>「最新の強さにする」</b>で写し直せます (カードのレベルはそのまま)。</p>
+  openPanel('どのモンスターを連れてくる？', `<div class="form-stack"><p class="text-sm" style="color:var(--text-2)">モンスターの<b>評価でレア度</b>、<b>属性で相性とわざ</b>が決まります (🔥火・✨光 → ✂️きる / 🌿草・🌑闇 → 📄つつむ / 💧水・👑王 → 🪨おもい)。<b>能力はモンスターの能力に比例 (上限なし)</b>: はじめのモンスターで R くらい、育てるほど強くなります。<b>突然変異 R 以上</b>のモンスターは<b>限定級</b> (限定キャラの平均より弱くならず、倍率も限定キャラと同じ ×1.2)。<br>連れてきたあとにモンスターを育てたら、<b>「最新の強さにする」</b>で写し直せます (カードのレベルはそのまま)。</p>
       <div class="cb-pick-horse">${r.monsters.map((m) => `<button type="button" class="list-item" data-mid="${esc(m.id)}"><span class="cb-mini-art cb-mon-mini">${m.cardId ? CBArt.svg(m.cardId, 'N') : CBArt.svg('m:x', 'N')}</span>
-        <div class="grow"><div class="title">${esc(m.name)}</div><div class="desc">評価 ${esc(m.rank)} → <b>${esc(m.rarity)}</b> · ${esc(T[m.cardType]?.icon || '')}${esc(T[m.cardType]?.name || '')} · わざ「${esc(m.skillName)}」</div></div>
+        <div class="grow"><div class="title">${esc(m.name)}</div><div class="desc">評価 ${esc(m.rank)} → <b>${esc(m.rarity)}</b>${m.limited ? ` · <b class="cb-lim-word">🧬変異${esc(m.mutant)} → 限定級</b>` : ''} · ${esc(T[m.cardType]?.icon || '')}${esc(T[m.cardType]?.name || '')} · わざ「${esc(m.skillName)}」</div></div>
         <span class="cb-rbadge" style="--rc:${CB_RCOL[m.rarity] || '#888'}">${m.have ? '最新の強さにする' : esc(m.rarity)}</span></button>`).join('')}</div>
       <div class="modal-actions" style="margin-top:0"><button class="btn btn-ghost" type="button" data-close>やめる</button></div></div>`, (root, close) => {
     $$('[data-mid]', root).forEach((b) => b.addEventListener('click', async () => {

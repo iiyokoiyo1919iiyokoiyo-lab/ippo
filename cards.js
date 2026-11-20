@@ -507,18 +507,24 @@ CREATE TABLE card_monsters (
 );
 CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
 `;
-// モンスターの評価 → カードのレア度。強さは「そのレア度のカードの平均」を基準に、モンスターの能力の形 (HP 型・攻撃型など) で ±15%
+// モンスターの評価 → カードのレア度。能力はモンスターの能力に比例 (上限なし。育てるほど強い)。はじめのモンスター (HP280・攻55・防55・速50) が R の平均くらい
+// 突然変異 R 以上のモンスターは「限定級」: 能力は限定キャラ (MONCARD_LIMITED) の平均より下にならず、倍率は限定キャラ (MR・UR) と同じ 1.2
+const MONCARD_FORMULA = 2; // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
+const MONCARD_SCALE = { hp: 66.6 / 280, atk: 16.2 / 55, def: 11.1 / 55, spd: 10.8 / 50 };
+const MONCARD_LIMITED = ['tadokoro', 'scissors', 'star', 'raijin', 'watermid'], MONCARD_LIMITED_MULT = 1.2;
+const MUT_ORDER = ['N', 'R', 'SR', 'SSR', 'UR', 'MR'];
 const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'MR' }; // Z だけ MR (強さは SSR の平均 × MR の倍率 1.2)
 // 属性 → 相性 (火 > 草 > 水 > 火 が、きる > つつむ > おもい > きる と同じ向きになるように)
 const MONCARD_TYPE = { fire: 'cut', grass: 'wrap', water: 'heavy', light: 'cut', dark: 'wrap', king: 'heavy' };
 const MONCARD_SKILL = { fire: 'power', water: 'heal', grass: 'drain', light: 'barrier', dark: 'pierce', king: 'power' };
 function monCardBase(m) {
-  const rarity = MONCARD_RARITY[m.rank] || 'N', baseR = RARITY[rarity] ? rarity : 'SSR';
-  const cs = CARD_LIST.filter((c) => c[3] === baseR), avg = (i) => cs.reduce((a, c) => a + c[i], 0) / cs.length;
-  const r = { hp: m.hp / 280, atk: Math.max(m.atk, m.mag) / 55, def: m.def / 55, spd: m.spd / 50 };
-  const g = (r.hp + r.atk + r.def + r.spd) / 4, rel = (k) => Math.min(1.15, Math.max(0.85, r[k] / g));
-  return { rarity, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power',
-    hp: Math.round(avg(5) * rel('hp')), atk: Math.round(avg(6) * rel('atk')), def: Math.round(avg(7) * rel('def')), spd: Math.round(avg(8) * rel('spd')) };
+  const rarity = MONCARD_RARITY[m.rank] || 'N';
+  const limited = MUT_ORDER.indexOf(m.mutant) >= 1; // 突然変異 R 以上
+  const own = { hp: m.hp * MONCARD_SCALE.hp, atk: Math.max(m.atk, m.mag) * MONCARD_SCALE.atk, def: m.def * MONCARD_SCALE.def, spd: m.spd * MONCARD_SCALE.spd };
+  const lim = MONCARD_LIMITED.map((id) => CARD_LIST.find((c) => c[0] === id)).filter(Boolean), lavg = (i) => lim.reduce((a, c) => a + c[i], 0) / lim.length;
+  const floor = { hp: lavg(5), atk: lavg(6), def: lavg(7), spd: lavg(8) };
+  const st = (k) => Math.max(1, Math.round(limited ? Math.max(own[k], floor[k]) : own[k]));
+  return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
 const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon'];
@@ -650,6 +656,7 @@ function install(app, ctx) {
     db.migrate('2026-11-27-card-battle-decks', BATTLE_DECK_MIGRATION);
     db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
     db.migrate('2026-11-29-card-monsters', MONCARD_MIGRATION);
+    db.migrate('2026-11-30-card-monsters-limited', 'ALTER TABLE card_monsters ADD COLUMN limited INTEGER NOT NULL DEFAULT 0; ALTER TABLE card_monsters ADD COLUMN formula INTEGER NOT NULL DEFAULT 1;');
     db.migrate('2026-11-29-card-monsters-z-mr', "UPDATE card_monsters SET rarity = 'MR' WHERE rarity = 'UR';"); // 評価 Z は UR → MR に (倍率はどちらも 1.2)
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
@@ -665,8 +672,8 @@ function install(app, ctx) {
   const qMonCard = db.prepare('SELECT * FROM card_monsters WHERE id = ?');
   const monCardsOwned = (uid) => db.prepare('SELECT * FROM card_monsters WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // モンスターのカードの能力 (文房具の statsOf と同じ形)
-  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = (c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1)); // MR は rarityMult で 1.2
-    return { id: 'm:' + c.id, name: c.name, emoji: '🧬', rarity: c.rarity, type: c.type, skill: c.skill, level: lv, monster: true, monsterId: c.monster_id, monRank: c.mon_rank, monType: c.mon_type, updatedAt: c.updated_at,
+  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = Math.max(c.limited ? MONCARD_LIMITED_MULT : 0, c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1)); // MR は rarityMult で 1.2・限定級も 1.2
+    return { id: 'm:' + c.id, name: c.name, emoji: '🧬', rarity: c.rarity, type: c.type, skill: c.skill, level: lv, monster: true, limitedLevel: !!c.limited, monsterId: c.monster_id, monRank: c.mon_rank, monType: c.mon_type, updatedAt: c.updated_at,
       maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, skillName: SKILLS[c.skill].name, skillDesc: SKILLS[c.skill].desc }; };
   const cardStats = (uid, id, o) => {
     if (id.startsWith('h:')) { const h = qHorse.get(id.slice(2)); return h && h.user_id === uid ? horseStats(h) : null; }
@@ -790,10 +797,25 @@ function install(app, ctx) {
     res.json({ ready: horsesLeft(req.user.id) > 0, left: horsesLeft(req.user.id), perDay: HORSES_PER_DAY, horses: list });
   });
   // ブリードモンスターズのモンスター (自分のもの・売却していないもの) をカードにする。もう連れてきたものは「最新の強さに写し直す」(レベルはそのまま)
+  const saveMonCard = (id, uid, m, b, now) => db.prepare('UPDATE card_monsters SET name = ?, look = ?, mon_type = ?, mon_rank = ?, type = ?, skill = ?, rarity = ?, hp = ?, atk = ?, def = ?, spd = ?, limited = ?, formula = ?, updated_at = ? WHERE id = ? AND user_id = ?')
+    .run(m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, b.limited ? 1 : 0, MONCARD_FORMULA, now, id, uid);
+  // 計算のしかたが変わったら、起動したあとに 1 回だけ、連れてきたカードを今のモンスターから計算し直す (売ったモンスターのカードはそのまま。レベルはそのまま)
+  setTimeout(() => {
+    try {
+      const rows = db.prepare('SELECT * FROM card_monsters WHERE formula < ?').all(MONCARD_FORMULA); if (!rows.length || !ctx.monCardSource) return;
+      let n = 0; const src = new Map();
+      for (const c of rows) {
+        if (!src.has(c.user_id)) src.set(c.user_id, new Map(ctx.monCardSource(c.user_id).map((m) => [m.id, m])));
+        const m = src.get(c.user_id).get(c.monster_id); if (!m) continue;
+        saveMonCard(c.id, c.user_id, m, monCardBase(m), c.updated_at); n++;
+      }
+      if (n) console.log(`[cards] モンスターのカード ${n} 枚を新しい計算 (上限なし・限定級) で計算し直しました`);
+    } catch (e) { console.error('[cards] モンスターのカードの計算し直しに失敗', e.message); }
+  }, 0);
   app.get('/api/cards/monster-candidates', requireAuth, (req, res) => {
     const have = new Map(monCardsOwned(req.user.id).map((c) => [c.monster_id, c]));
     const list = (ctx.monCardSource ? ctx.monCardSource(req.user.id) : []).map((m) => { const b = monCardBase(m), c = have.get(m.id);
-      return { id: m.id, name: m.name, type: m.type, rank: m.rank, rarity: b.rarity, cardType: b.type, skillName: SKILLS[b.skill].name, status: m.status, have: !!c, cardId: c ? 'm:' + c.id : null }; });
+      return { id: m.id, name: m.name, type: m.type, rank: m.rank, rarity: b.rarity, limited: b.limited, mutant: m.mutant || null, cardType: b.type, skillName: SKILLS[b.skill].name, status: m.status, have: !!c, cardId: c ? 'm:' + c.id : null }; });
     res.json({ monsters: list });
   });
   app.post('/api/cards/monster', requireAuth, writeLimit, (req, res) => {
@@ -803,12 +825,11 @@ function install(app, ctx) {
     if (!m) return res.status(404).json({ error: 'そのモンスターは連れてこられません' });
     const b = monCardBase(m), now = Date.now(), cur = db.prepare('SELECT * FROM card_monsters WHERE user_id = ? AND monster_id = ?').get(uid, mid);
     let id = cur?.id;
-    if (cur) db.prepare('UPDATE card_monsters SET name = ?, look = ?, mon_type = ?, mon_rank = ?, type = ?, skill = ?, rarity = ?, hp = ?, atk = ?, def = ?, spd = ?, updated_at = ? WHERE id = ? AND user_id = ?')
-      .run(m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, now, cur.id, uid);
+    if (cur) saveMonCard(cur.id, uid, m, b, now);
     else {
       id = crypto.randomBytes(9).toString('base64url');
-      try { db.prepare('INSERT INTO card_monsters (id, user_id, monster_id, name, look, mon_type, mon_rank, type, skill, rarity, hp, atk, def, spd, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(id, uid, mid, m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, now, now); }
+      try { db.prepare('INSERT INTO card_monsters (id, user_id, monster_id, name, look, mon_type, mon_rank, type, skill, rarity, hp, atk, def, spd, limited, formula, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, uid, mid, m.name, JSON.stringify(m.look), m.type, m.rank, b.type, b.skill, b.rarity, b.hp, b.atk, b.def, b.spd, b.limited ? 1 : 0, MONCARD_FORMULA, now, now); }
       catch { return res.status(409).json({ error: 'このモンスターはもう連れてきています' }); }
     }
     console.log(`[cards] @${req.user.username} がモンスター「${m.name}」を${cur ? '最新の強さに写し直した' : '連れてきた'} (${b.rarity})`);
