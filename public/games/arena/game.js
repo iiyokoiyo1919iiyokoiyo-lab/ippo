@@ -6,7 +6,7 @@
 //   ・スマホ: 左のスティックで移動、右側をなぞって視点、うつ・ジャンプ・リロードのボタン
 // =====================================================================
 import * as THREE from './vendor/three.module.min.js';
-import { createGraphics } from './world.js?v=10';
+import { createGraphics } from './world.js?v=11';
 import { Ragdoll, RagdollManager } from './ragdoll.js?v=3';
 import { NpcView } from './npcs.js?v=3';
 import { Sound } from './sound.js?v=3';
@@ -17,8 +17,8 @@ const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches; // 指で操作する端末だけ (タッチもできるパソコンはマウス操作)
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').innerHTML = isTouch
-  ? '左のスティックで移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」<br>「武器」でスナイパーに持ちかえ・「スコープ」でのぞく'
-  : 'WASD で移動・マウスで見回す・クリックで撃つ・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)・スナイパーは右クリックでスコープ<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止';
+  ? '左のスティックで移動・右側をなぞって見回す<br>「うつ」を押しているあいだ連射・近くの相手は「なぐる」<br>左の「のぞく」でサイト・スコープをのぞく・「武器」でスナイパーに持ちかえ'
+  : 'WASD で移動・マウスで見回す・クリックで撃つ・右クリックでサイトをのぞく・F でなぐる<br>1 ライフル / 2 スナイパー (Q で切りかえ)<br>Space ジャンプ・Shift ダッシュ・R リロード・V 視点・Esc で一時停止';
 
 // ---------- 画面・街・キャラクター (world.js) ----------
 const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
@@ -51,7 +51,7 @@ const MAG = 15, RELOAD_MS = 1400;
 // 武器: ライフル (連射・15 発) / スナイパー (1 発ずつ・5 発・スコープ)。間かくとダメージはサーバーが決める
 const WEAPON = { rifle: { name: 'ライフル', mag: 15, reload: 1400, ms: 130, auto: true }, sniper: { name: 'スナイパー', mag: 5, reload: 2600, ms: 1300, auto: false } };
 const W = () => WEAPON[me.w] || WEAPON.rifle;
-let scoped = false, scopeK = 0;
+let scoped = false, aiming = false, scopeK = 0, aimK = 0; // aiming: サイトをのぞく (両方の武器) / scoped: スナイパーのスコープ (黒いふち)
 let you = null, ws = null, playing = false, lastSend = 0, lastShot = 0, rules = { fireMs: 130 };
 const others = new Map(); // sid → { name, color, bot, model, tx,ty,tz, yaw, alive, kills, deaths }
 const scores = new Map();
@@ -95,10 +95,10 @@ const move = { x: 0, y: 0, run: false };
 addEventListener('keydown', (e) => { keys.add(e.code); if (e.code === 'Digit1') setWeapon('rifle'); if (e.code === 'Digit2') setWeapon('sniper'); if (e.code === 'KeyQ') setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); if (e.code === 'KeyV') settings.set('view', fps() ? 'tps' : 'fps'); if (e.code === 'KeyF') doPunch(); if (e.code === 'KeyR') reload(); if (e.code === 'Space') { e.preventDefault(); jump(); } });
 addEventListener('keyup', (e) => keys.delete(e.code));
 const canvas = $('#c');
-canvas.addEventListener('mousedown', (e) => { if (!playing) return; if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; } if (e.button === 0) firing = true; if (e.button === 2) { if (me.w === 'sniper') setScope(true); else doPunch(); } });
+canvas.addEventListener('mousedown', (e) => { if (!playing) return; if (document.pointerLockElement !== canvas) { canvas.requestPointerLock?.(); return; } if (e.button === 0) firing = true; if (e.button === 2) setScope(true); }); // 右クリック: サイトをのぞく (ライフルもスナイパーも)
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('mouseup', (e) => { if (e.button === 2) setScope(false); else firing = false; });
-addEventListener('mousemove', (e) => { if (document.pointerLockElement !== canvas) return; const k = scoped ? 0.0006 : 0.0023; me.yaw -= e.movementX * k; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - e.movementY * k)); });
+addEventListener('mousemove', (e) => { if (document.pointerLockElement !== canvas) return; const k = scoped ? 0.0006 : aiming ? 0.0014 : 0.0023; me.yaw -= e.movementX * k; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - e.movementY * k)); });
 document.addEventListener('pointerlockchange', () => { if (!isTouch && playing && document.pointerLockElement !== canvas) { firing = false; showCenter('一時停止中', 'つづける'); } });
 // スマホ: スティック・視点・ボタン
 if (isTouch) {
@@ -112,7 +112,7 @@ if (isTouch) {
   // 視点: スティックとボタン以外の場所をなぞる
   const look = new Map();
   canvas.addEventListener('touchstart', (e) => { for (const t of e.changedTouches) look.set(t.identifier, [t.clientX, t.clientY]); }, { passive: true });
-  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) { const p = look.get(t.identifier); if (!p) continue; const sk = scoped ? 0.3 : 1; me.yaw -= (t.clientX - p[0]) * 0.0052 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - p[1]) * 0.0042 * sk)); look.set(t.identifier, [t.clientX, t.clientY]); } }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); for (const t of e.changedTouches) { const p = look.get(t.identifier); if (!p) continue; const sk = scoped ? 0.3 : aiming ? 0.6 : 1; me.yaw -= (t.clientX - p[0]) * 0.0052 * sk; me.pitch = Math.max(-1.2, Math.min(0.7, me.pitch - (t.clientY - p[1]) * 0.0042 * sk)); look.set(t.identifier, [t.clientX, t.clientY]); } }, { passive: false });
   const lend = (e) => { for (const t of e.changedTouches) look.delete(t.identifier); };
   canvas.addEventListener('touchend', lend); canvas.addEventListener('touchcancel', lend);
   // うつ: 押しながらなぞると、視点も動かせる
@@ -125,7 +125,7 @@ if (isTouch) {
   $('#reload').addEventListener('touchstart', (e) => { e.preventDefault(); reload(); }, { passive: false });
   $('#punch').addEventListener('touchstart', (e) => { e.preventDefault(); doPunch(); }, { passive: false });
   $('#weapon').addEventListener('touchstart', (e) => { e.preventDefault(); setWeapon(me.w === 'sniper' ? 'rifle' : 'sniper'); }, { passive: false });
-  $('#scope').addEventListener('touchstart', (e) => { e.preventDefault(); setScope(!scoped); }, { passive: false });
+  $('#aim').addEventListener('touchstart', (e) => { e.preventDefault(); setScope(!aiming); }, { passive: false }); // 左側の「のぞく」
 }
 // なぐる: 当たったかどうかはサーバーが決める。ここではうでをふる
 let lastPunch = 0;
@@ -137,11 +137,14 @@ function doPunch() {
 function swing(model) { if (model) model.swing = performance.now(); }
 function setWeapon(w) {
   if (!WEAPON[w] || w === me.w || !you) return;
-  me.mags[me.w] = me.ammo; me.w = w; me.ammo = me.mags[w]; me.reloading = 0; setScope(false);
+  me.mags[me.w] = me.ammo; me.w = w; me.ammo = me.mags[w]; me.reloading = 0; setScope(aiming);
   myModel?.setWeapon(w); viewModel?.setWeapon(w); lastShot = performance.now() + 450 - W().ms; send({ t: 'weapon', w }); updHud();
 }
 // スコープ (スナイパーのとき): 視野をせまくして、黒いふちの照準を出す
-function setScope(on) { scoped = !!on && me.w === 'sniper' && canControl(); document.body.classList.toggle('scoped', scoped); }
+function setScope(on) {
+  aiming = !!on && canControl(); scoped = aiming && me.w === 'sniper';
+  document.body.classList.toggle('scoped', scoped); document.body.classList.toggle('aiming', aiming); $('#aim')?.classList.toggle('on', aiming);
+}
 function jump() { if (playing && canControl() && me.onGround) { me.vy = 7; me.onGround = false; } }
 function reload() { if (me.reloading || me.ammo === W().mag || !me.alive) return; me.reloading = performance.now() + W().reload; setScope(false); updHud(); }
 
@@ -304,7 +307,7 @@ function frame() {
     if (isTouch) { fx0 = move.x; fz0 = move.y; run = move.run; }
     else { if (keys.has('KeyW') || keys.has('ArrowUp')) fz0 -= 1; if (keys.has('KeyS') || keys.has('ArrowDown')) fz0 += 1; if (keys.has('KeyA') || keys.has('ArrowLeft')) fx0 -= 1; if (keys.has('KeyD') || keys.has('ArrowRight')) fx0 += 1; run = keys.has('ShiftLeft') || keys.has('ShiftRight'); }
     const L = Math.hypot(fx0, fz0); if (L > 1) { fx0 /= L; fz0 /= L; }
-    const sp = (run ? 8 : 5.5) * dt, s = Math.sin(me.yaw), c = Math.cos(me.yaw);
+    const sp = (aiming ? 3 : run ? 8 : 5.5) * dt, s = Math.sin(me.yaw), c = Math.cos(me.yaw); // のぞいているあいだは走れない
     me.x += (fx0 * c + fz0 * s) * sp; me.z += (-fx0 * s + fz0 * c) * sp;
     if (me.kx || me.kz) { me.x += me.kx * dt; me.z += me.kz * dt; const f = Math.exp(-dt * 5); me.kx *= f; me.kz *= f; if (Math.hypot(me.kx, me.kz) < 0.2) me.kx = me.kz = 0; }
     me.vy -= 20 * dt; me.y += me.vy * dt;
@@ -329,16 +332,18 @@ function frame() {
     if (camera.position.y < 0.45) camera.position.y = 0.45; // 地面の下には行かない
     camera.rotation.set(me.pitch, me.yaw, 0, 'YXZ');
     // 一人称: 目の高さ (倒れているあいだは三人称で自分の体を映す)
-    if (scoped && !canControl()) setScope(false);
+    if (aiming && !canControl()) setScope(false);
     scopeK += ((scoped ? 1 : 0) - scopeK) * Math.min(1, dt * 12);
-    const fov = (innerWidth < innerHeight ? 82 : 70), want = fov + (16 - fov) * scopeK; if (Math.abs(camera.fov - want) > 0.05) { camera.fov = want; camera.updateProjectionMatrix(); }
-    const firstP = (fps() || scoped) && !myModel.ragdoll && location.hash !== '#inspect';
+    aimK += ((aiming && !scoped ? 1 : 0) - aimK) * Math.min(1, dt * 12);
+    // 視野: スナイパーのスコープは 16°・ライフルでのぞくと 48°
+    const fov = (innerWidth < innerHeight ? 82 : 70), want = fov + (16 - fov) * scopeK + (48 - fov) * aimK; if (Math.abs(camera.fov - want) > 0.05) { camera.fov = want; camera.updateProjectionMatrix(); }
+    const firstP = (fps() || aiming) && !myModel.ragdoll && location.hash !== '#inspect';
     myModel.g.visible = !firstP;
     if (viewModel) viewModel.g.visible = firstP && me.alive && scopeK < 0.5;
     if (firstP) {
       const walking = canControl() && (keys.size || Math.hypot(move.x, move.y) > 0.1), bob = walking ? Math.sin(now / 105) * 0.035 : 0;
       camera.position.set(me.x, me.y + curb + 1.62 + bob, me.z);
-      viewModel.update(dt, { speed: myModel.speed || 0, run: keys.has('ShiftLeft') || move.run, reloading: !!me.reloading });
+      viewModel.update(dt, { speed: myModel.speed || 0, run: !aiming && (keys.has('ShiftLeft') || move.run), reloading: !!me.reloading, aim: aimK });
     }
     if (location.hash === '#inspect') { // 確認用: 自分のキャラを前から近くで見る
       camera.position.set(me.x - Math.sin(me.yaw) * 1.25 + Math.cos(me.yaw) * 0.35, me.y + curb + 1.55, me.z - Math.cos(me.yaw) * 1.25 - Math.sin(me.yaw) * 0.35);

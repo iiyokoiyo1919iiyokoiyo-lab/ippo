@@ -407,15 +407,15 @@ export function createGraphics({ canvasEl, isTouch, map, A }) {
     const api = { g: vm, gun, tip, left, own: [jacket, cuff],
       setWeapon(w) { const s2 = w === 'sniper'; gun.visible = !s2; sGun.visible = s2; cur = s2 ? sGun : gun; api.tip = s2 ? sTip : tip; st.swap = 1; },
       kick(k = 1) { st.recoil = k; }, punch() { st.punch = performance.now(); },
-      update(dt, { speed = 0, run = false, reloading = false } = {}) {
+      update(dt, { speed = 0, run = false, reloading = false, aim = 0 } = {}) {
         st.walk += dt * (speed > 0.3 ? 6 + speed : 0); st.recoil = Math.max(0, st.recoil - dt * 9);
         st.reload += ((reloading ? 1 : 0) - st.reload) * Math.min(1, dt * 8);
-        const sway = Math.min(1, speed / 5), bx = Math.sin(st.walk) * 0.012 * sway, by = Math.abs(Math.cos(st.walk)) * 0.012 * sway;
+        const sway = Math.min(1, speed / 5) * (1 - aim * 0.8), bx = Math.sin(st.walk) * 0.012 * sway, by = Math.abs(Math.cos(st.walk)) * 0.012 * sway;
         const pt = st.punch ? (performance.now() - st.punch) / 300 : 1, pk = pt < 1 ? Math.sin(Math.PI * pt) : 0; if (pt >= 1) st.punch = 0;
         st.swap = Math.max(0, (st.swap || 0) - dt * 3); // 持ちかえ: 下から上がってくる
-        cur.position.set(0.13 + bx + pk * 0.08, -0.17 - by - (run ? 0.05 : 0) - st.reload * 0.06 - pk * 0.05 - st.swap * 0.25, -0.42 + st.recoil * 0.05);
+        cur.position.set(0.13 * (1 - aim) + bx + pk * 0.08, -0.17 + aim * 0.055 - by - (run ? 0.05 : 0) - st.reload * 0.06 - pk * 0.05 - st.swap * 0.25, -0.42 + aim * 0.06 + st.recoil * 0.05); // aim: 照準 (y 0.115) が目の高さに
         cur.rotation.set(st.recoil * 0.08 + st.reload * 0.7 - (run ? 0.25 : 0) + st.swap * 0.6, (run ? 0.5 : 0) + pk * 0.3, st.reload * 0.3);
-        left.position.set(pk * -0.05, -st.reload * 0.12 + pk * 0.08 - st.swap * 0.25, -pk * 0.35 + st.reload * 0.15);
+        left.position.set(pk * -0.05 - aim * 0.13, -st.reload * 0.12 + pk * 0.08 - st.swap * 0.25 + aim * 0.055, -pk * 0.35 + st.reload * 0.15 + aim * 0.06);
       } };
     return api;
   }
