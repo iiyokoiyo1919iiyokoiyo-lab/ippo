@@ -1862,6 +1862,17 @@ body.arena-open { overflow: hidden; }
 .ev-cap .ev-tag { color: #fff !important; font-size: 13px; } .ev-cap small { font-size: 12px; opacity: .9; }
 .ev-img .ev-close { background: rgba(0, 0, 0, .35); color: #fff !important; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) { .ev-shine { animation: none; display: none; } }
+/* 高難易度クエストのまとめバナー: 1 枚ぶんの大きさで、中をスライド */
+.ev-multi .ev-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 16px; }
+.ev-multi .ev-track::-webkit-scrollbar { display: none; }
+.ev-multi .ev-slide { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+.ev-multi .ev-slide-text { display: flex; align-items: center; gap: 12px; aspect-ratio: 16 / 9; padding: 16px; color: #fff; text-decoration: none; }
+.ev-multi .ev-slide-text .ev-art { width: 40%; }
+.ev-mtag { position: absolute; right: 46px; top: 10px; z-index: 2; padding: 3px 10px; border-radius: 999px; background: rgba(20, 10, 60, .72); color: #ffe066; font-size: 12px; font-weight: 900; pointer-events: none; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .5); }
+.ev-dots { position: absolute; left: 0; right: 0; bottom: 8px; z-index: 2; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
+.ev-dots button { pointer-events: auto; width: 8px; height: 8px; padding: 0; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .55); box-shadow: 0 0 0 1px rgba(0, 0, 0, .3); cursor: pointer; transition: width .2s; }
+.ev-dots button.on { width: 22px; background: #fff; }
+.ev-soon { position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, .55); color: #fff; font-size: 11px; font-weight: 800; }
 
 /* デッキ採用率 */
 .cbu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }

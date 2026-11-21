@@ -197,6 +197,17 @@ function banners(now = Date.now()) {
       art: { id: g.pickups[0]?.id || 'case', rarity: g.pickups[0]?.card.rarity || 'SSR' }, tag: '🎰 ガチャのお知らせ', title: g.sale ? g.sale.name : 'ガチャ',
       text: [g.sale ? `1 回 ${g.sale.pull} コイン` : '', ...g.pickups.map((p) => `${p.card.name} ${p.rate}%`)].filter(Boolean).join(' · '), sub: `${fmt(n.until)} まで`, start: n.at - 1, end: n.until });
   }
+  // 高難易度クエストが 2 つ以上あるときは、1 つのバナーにまとめる (スライドで切りかえ)
+  const hard = out.filter((b) => b.kind === 'quest' && QUESTS.find((q) => 'quest:' + q.id === b.id)?.hard);
+  if (hard.length >= 2) {
+    const live = hard.filter((b) => b.live).length;
+    const set = { id: 'hardset:' + hard.map((b) => b.id.slice(6)).join('+'), kind: 'quest', multi: true, live: live > 0, href: '#/games/cards/quest',
+      tag: `⚔️ 高難易度クエスト ${live ? `${live} つ開催中` : 'もうすぐ開始'}`, title: '高難易度クエスト', text: hard.map((b) => b.title).join('・'), sub: '',
+      items: hard.map((b) => ({ id: b.id, image: b.image, art: b.art, title: b.title, text: b.text, sub: b.sub, live: b.live, href: b.href })), start: Math.min(...hard.map((b) => b.start)), end: Math.max(...hard.map((b) => b.end)) };
+    const rest = out.filter((b) => !hard.includes(b));
+    rest.push(set);
+    return rest.sort((a, b) => a.start - b.start);
+  }
   return out.sort((a, b) => a.start - b.start);
 }
 

@@ -1072,7 +1072,15 @@ async function loadEventBanners() {
   if (!$('#event-banners')) return;
   const closed = store.get('ippo_ev_closed', []);
   const list = r.banners.filter((b) => !closed.includes(`${b.id}:${b.live ? 1 : 0}`));
-  el.innerHTML = list.map((b) => b.image ? `<div class="ev-bn ev-img ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
+  // 高難易度クエストのまとめ (1 つのバナーの中でスライド)
+  const slide = (x) => x.image ? `<a class="ev-pic ev-slide" href="${esc(x.href)}"><img src="${esc(x.image)}" alt="${esc(x.title)} ${esc(x.text)}" width="1200" height="675" loading="lazy"><span class="ev-shine" aria-hidden="true"></span>${x.live ? '' : '<span class="ev-soon">⏳ もうすぐ</span>'}</a>`
+    : `<a class="ev-slide ev-body ev-slide-text" href="${esc(x.href)}"><span class="ev-art" aria-hidden="true">${window.CBArt ? CBArt.svg(x.art.id, x.art.rarity) : ''}</span><span class="ev-text"><b>${esc(x.title)}</b><span>${esc(x.text)}</span><small>${esc(x.sub)}</small></span></a>`;
+  const multi = (b) => `<div class="ev-bn ev-img ev-multi quest${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
+      <div class="ev-track">${b.items.map(slide).join('')}</div>
+      <span class="ev-mtag">${esc(b.tag)}</span>
+      <span class="ev-dots">${b.items.map((x, i) => `<button type="button" class="${i ? '' : 'on'}" aria-label="${esc(x.title)}"></button>`).join('')}</span>
+      <button class="icon-btn ev-close" type="button" aria-label="このお知らせを閉じる">${icon('x')}</button></div>`;
+  el.innerHTML = list.map((b) => b.multi ? multi(b) : b.image ? `<div class="ev-bn ev-img ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
       <a class="ev-pic" href="${esc(b.href)}"><img src="${esc(b.image)}" alt="${esc(b.title)} ${esc(b.text)}" width="1200" height="675" loading="lazy"><span class="ev-shine" aria-hidden="true"></span></a>
       <button class="icon-btn ev-close" type="button" aria-label="このお知らせを閉じる">${icon('x')}</button></div>`
     : `<div class="ev-bn ${esc(b.kind)}${b.live ? ' live' : ''}" data-ev="${esc(b.id)}:${b.live ? 1 : 0}">
@@ -1083,6 +1091,16 @@ async function loadEventBanners() {
       </a>
       <button class="icon-btn ev-close" type="button" aria-label="このお知らせを閉じる">${icon('x')}</button></div>`).join('')
     + (list.length && r.official ? `<a class="ev-official" href="#/u/${esc(r.official)}">📢 アップデート情報は公式アカウント <b>@${esc(r.official)}</b> でお知らせしています</a>` : '');
+  // スライド: 点を押す・指でめくる・5 秒ごとに自動で次へ (さわったら自動はとめる)
+  $$('.ev-multi', el).forEach((m) => {
+    const tr = $('.ev-track', m), dots = $$('.ev-dots button', m); let auto = true;
+    const cur = () => Math.round(tr.scrollLeft / Math.max(1, tr.clientWidth));
+    const go = (i) => tr.scrollTo({ left: i * tr.clientWidth, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    tr.addEventListener('scroll', () => { const i = cur(); dots.forEach((d, k) => d.classList.toggle('on', k === i)); }, { passive: true });
+    dots.forEach((d, i) => d.addEventListener('click', () => { auto = false; go(i); }));
+    ['pointerdown', 'touchstart', 'wheel'].forEach((e) => tr.addEventListener(e, () => { auto = false; }, { passive: true }));
+    const t = setInterval(() => { if (!m.isConnected) return clearInterval(t); if (auto && !document.hidden) go((cur() + 1) % dots.length); }, 5000);
+  });
   $$('.ev-close', el).forEach((b) => b.addEventListener('click', () => {
     const card = b.closest('.ev-bn');
     store.set('ippo_ev_closed', [card.dataset.ev, ...store.get('ippo_ev_closed', [])].slice(0, 40));
