@@ -2097,6 +2097,15 @@ body.arena-open { overflow: hidden; }
 @keyframes cb-tk-open { 0% { transform: scaleX(0); } 70% { transform: scaleX(1.06); } 100% { transform: scaleX(1); } }
 @keyframes cb-tk-flash { 0% { background: rgba(250, 176, 5, 0); } 15% { background: rgba(250, 176, 5, .35); } 100% { background: rgba(250, 176, 5, 0); } }
 @media (prefers-reduced-motion: reduce) { .cb-taika { animation: none; } .cb-taika * { animation: none !important; } }
+/* DNAを取り出す (魔法使いすえつぐ): ピンクの魔法陣とハート */
+.cb-dna { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; align-content: center; gap: 4px; background: radial-gradient(circle at 50% 50%, rgba(255, 105, 180, .55), rgba(190, 75, 219, .25) 45%, transparent 70%); animation: cb-tk-flash 1.7s ease both; }
+.cb-dna::before { content: ''; position: absolute; width: 220px; height: 220px; left: calc(50% - 110px); top: calc(50% - 110px); border-radius: 50%; border: 4px dashed #ff8cc6; box-shadow: 0 0 24px #f783ac, inset 0 0 24px #da77f2; animation: cb-dna-spin 1.7s linear both; }
+.cb-dna b { position: relative; padding: 8px 22px; border-radius: 999px; background: linear-gradient(90deg, #ff8cc6, #fff0f6 30%, #fff0f6 70%, #da77f2); color: #a61e4d; font-size: 28px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 5px 0 rgba(166, 30, 77, .3), 0 0 26px #f783ac; animation: cb-tk-open .8s cubic-bezier(.2, 1.4, .4, 1) both; }
+.cb-dna i { position: relative; font-style: normal; font-weight: 900; color: #fff; -webkit-text-stroke: 5px #c2255c; paint-order: stroke fill; font-size: 18px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .25s both; }
+.cb-dna em { position: relative; font-style: normal; font-weight: 900; color: #fff; background: linear-gradient(90deg, #ae3ec9, #e64980); padding: 2px 14px; border-radius: 999px; font-size: 15px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .45s both; }
+@keyframes cb-dna-spin { from { transform: rotate(0) scale(.3); opacity: 0; } 20% { opacity: 1; } to { transform: rotate(320deg) scale(1.1); opacity: 0; } }
+.cb-sealed { color: #e64980; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) { .cb-dna, .cb-dna::before { animation: none; } .cb-dna * { animation: none !important; } }
 /* 説教 (ウォーターミッドナイト) */
 .cb-scolded { color: #1971c2; font-weight: 800; }
 .cb-float.skill.sermon { color: #1971c2; }

@@ -3729,6 +3729,7 @@ async function viewBattle(params) {
     : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
+    : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.turns}ターンのあいだ わざが使えない`
     : e.k === 'taika' ? `📜 大化の改新！ ${e.p === you ? '味方' : '相手'}の${e.fixed.length || e.meteor ? `${e.fixed.map((x) => `${x.card}の${x.what.join('・')}`).join('、')}${e.meteor ? `${e.fixed.length ? '、' : ''}流星` : ''}が取りのぞかれた` : '状態異常はなかった (こうげきだけ)'}`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
     : e.k === 'meteor' ? `流星が${e.p === you ? '' : '相手の'}${e.card}に ${e.dmg} ダメージ！${e.left ? ` (あと${e.left}ターン)` : ' (流星がやんだ)'}`
@@ -3743,7 +3744,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.sealed > 0 ? ` · <span class="cb-sealed">🧬わざ封じ あと${c.sealed}</span>` : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3762,7 +3763,7 @@ async function viewBattle(params) {
         : `<div class="cb-acts">
           <button class="btn btn-primary btn-lg" type="button" data-act="attack" ${chosen ? 'disabled' : ''}>こうげき</button>
           <button class="btn btn-outline btn-lg" type="button" data-act="guard" ${chosen ? 'disabled' : ''}>ガード</button>
-          <button class="btn btn-outline btn-lg cb-skill" type="button" data-act="skill" ${chosen || my.cd ? 'disabled' : ''}>わざ「${esc(skill?.skillName || '')}」${my.cd ? `<small>あと${my.cd}ターン</small>` : `<small>${esc(skill?.skillDesc || '')}</small>`}</button>
+          <button class="btn btn-outline btn-lg cb-skill" type="button" data-act="skill" ${chosen || my.cd || my.sealed > 0 ? 'disabled' : ''}>わざ「${esc(skill?.skillName || '')}」${my.sealed > 0 ? `<small>🧬 わざ封じ あと${my.sealed}ターン</small>` : my.cd ? `<small>あと${my.cd}ターン</small>` : `<small>${esc(skill?.skillDesc || '')}</small>`}</button>
           <button class="btn btn-outline btn-lg" type="button" data-act="switch" ${chosen || !canSwitch ? 'disabled' : ''}>こうたい</button>
           ${items ? (Date.now() >= items.from ? `<button class="btn btn-lg cb-item-btn" type="button" data-act="item" ${chosen ? 'disabled' : ''}>🧪 アイテム<small>コインで回復・眠らせる (🪙 ${Number(coins).toLocaleString()})</small></button>`
             : `<button class="btn btn-lg cb-item-btn" type="button" disabled>🧪 アイテム<small>${esc(new Date(items.from).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }))} から使えます</small></button>`) : ''}
@@ -3838,6 +3839,13 @@ async function viewBattle(params) {
           overlayFx('cb-sermon' + (e.p === you ? ' to-foe' : ' to-me'), `<b>コラーッ！！</b><i>📢 説教タイム</i>${e.to !== null ? `<em>攻撃 ${e.from} → ${e.to}</em>` : ''}`, 1600, e.p === you ? 'top' : 'bottom');
           if (e.to !== null) setTimeout(() => { replay(el(1 - e.p), 'hurt'); pop(1 - e.p, '攻撃ダウン…', 'tag'); }, 500);
           if (e.cured.length) setTimeout(() => pop(e.p, '💧 毒が治った', 'heal'), 800);
+        }, t);
+        t += 900;
+      }
+      else if (e.k === 'sealed') { // DNAを取り出す: ピンクの魔法陣から二重らせんが抜き取られる
+        setTimeout(() => {
+          overlayFx('cb-dna' + (e.p === you ? ' on-me' : ''), `<b>DNAを取り出す</b><i>🩷 マジカル☆抜き取り！</i><em>🧬 わざ封じ ${e.turns}ターン</em>`, 1700, e.p === you ? 'bottom' : 'top');
+          setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, '🧬 わざ封じ！', 'skill flinch'); }, 500);
         }, t);
         t += 900;
       }

@@ -36,6 +36,7 @@ const H = 3600_000, D = 24 * H;
 const GACHA_NOTICES = [
   { id: '2026-11-18', at: Date.parse('2026-11-18T08:40:00+09:00'), until: Date.parse('2026-11-19T08:35:00+09:00') },
   { id: '2026-11-19', at: Date.parse('2026-11-19T08:35:00+09:00'), until: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ ピックアップ + セール
+  { id: '2026-11-23', at: Date.parse('2026-11-23T08:00:00+09:00'), until: Date.parse('2026-11-24T08:00:00+09:00') }, // 毎週月曜のIppO祭: 限定キャラ 魔法使いすえつぐ ピックアップ 2% (+ 16:45 までのセール)
   { id: '2026-11-20', at: Date.parse('2026-11-20T08:00:00+09:00'), until: Date.parse('2026-11-21T08:30:00+09:00'), skip: ['tadokoro'] }, // 8:00 に告知: 筆の剣士 ピックアップ (8:35〜) + セール。もうすぐ終わるタドコロ PU は載せない (8:29 でタドコロ・ハサミ丸は排出終了)
 ];
 // その告知の時点でのガチャの情報 (セール・これからのピックアップ・確率アップ)。skip: 載せないピックアップのキャラ
@@ -63,6 +64,11 @@ const UPDATES = [
 ・試合でもらえる「レベルアップ書」でカードのレベル上げ
 ・ガチャ限定 SSR は 3 枚で UR に昇格
 ゲーム → ぶんぼうぐバトラーズ ${TAG}` },
+  { key: 'preview-suetsugu-2026-11-23', at: Date.parse('2026-11-21T21:00:00+09:00'), until: Date.parse('2026-11-23T08:00:00+09:00'), banner: 'char-suetsugu',
+    text: `📣【新ガチャ予告】11/23(月) 8:00 から「毎週月曜のIppO祭」スタート！
+🩷 期間限定 SSR「魔法使いすえつぐ」がピックアップ 2% で登場 (11/24 8:00 まで。終わるとガチャに出なくなります)
+わざ「DNAを取り出す」: 1.8 倍のこうげき + 相手の場のカードは 2 ターンわざが使えない！
+自分を魔法少女だと思っているおばさん…その魔法はホンモノ！？ ${TAG}` },
   { key: 'preview-tadokoro-2026-11-18', at: Date.parse('2026-11-18T11:25:00+09:00'), until: Date.parse('2026-11-19T08:35:00+09:00'), banner: 'char-tadokoro',
     text: `📣【新キャラ予告】明日 11/19(木) 10:30、SSR「タドコロ」がガチャに登場！
 わざ「野獣の眼光」: 相手を毒にして、次のターン怯ませる
@@ -120,7 +126,7 @@ function schedule() {
     const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity] || cards.BULK_IDS.has(id)) continue;        // ガチャに出ないキャラ (クエストの報酬) はクエストの投稿で知らせる
     const pk = PICKUPS.find((x) => x.id === id);
     out.push({ key: `release:${id}`, at, until: at + D, banner: bannerName('char', id),
-      text: `🆕【新キャラ登場】${c.rarity}「${c.name}」がガチャに登場しました！
+      text: `${pk && /祭/.test(pk.name) ? `🎊【${pk.name}】期間限定キャラ ` : '🆕【新キャラ登場】'}${c.rarity}「${c.name}」がガチャに登場しました！
 わざ「${SKILLS[c.skill].name}」${SKILLS[c.skill].desc.replace(/\s*\([^()]*だけのわざ\)/, '')}${cards.CARD_PASSIVE[id] ? `\n🔥 パッシブ「${cards.PASSIVES[cards.CARD_PASSIVE[id]].name}」${cards.PASSIVES[cards.CARD_PASSIVE[id]].desc}` : ''}${pk ? `\n🎯 ピックアップ中は 1 体 ${pk.rate}%！${pk.end ? ` (${fmt(pk.end)} まで)` : ''}` : ''}\n${TAG}` });
   }
   for (const pk of PICKUPS) {
@@ -129,7 +135,7 @@ function schedule() {
     out.push({ key: `pickup-end-soon:${pk.id}:${pk.end}`, at: pk.end - 3 * H, until: pk.end,
       text: `⏰「${c.name}」のピックアップ (1 体 ${pk.rate}%) は ${fmt(pk.end)} までです。お見のがしなく！ ${TAG}` });
     out.push({ key: `pickup-end:${pk.id}:${pk.end}`, at: pk.end, until: pk.end + 3 * H,
-      text: `「${c.name}」のピックアップは終了しました。ご参加ありがとうございました！ ${c.name}はこれからもガチャに登場します (ふつうの確率)。 ${TAG}` });
+      text: `「${c.name}」のピックアップは終了しました。ご参加ありがとうございました！ ${cards.GACHA_ENDS[pk.id] && cards.GACHA_ENDS[pk.id] <= pk.end + 60_000 ? `${c.name}は期間限定キャラなので、ガチャからの排出も終了しました (持っているカードはそのまま使えます)。` : `${c.name}はこれからもガチャに登場します (ふつうの確率)。`} ${TAG}` });
   }
   for (const q of QUESTS) {
     const r = CARDS[q.reward];

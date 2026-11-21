@@ -24,6 +24,7 @@ const SKILLS = {
   venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
   taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
+  dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、次の 2 ターンわざを使えなくする (かけ直すと 2 ターンにもどる)' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
@@ -67,6 +68,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 60.27, 21.21, 10.05, 18, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 270・攻撃 95・防御 45・速さ 18 (×SSR 1.12×STAT_SCALE 4)
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
   // ---- 2026-11-19 大量追加: R 20 体・SR 20 体・SSR 10 体 (すべて恒常。能力は既存カードと 1 対 1 で勝率 50% 前後に合わせた) ----
   ['crayon', 'クレヨン坊や', '🖍️', 'R', 'cut', 59, 16, 10, 12, 'power'],
@@ -131,7 +133,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -143,7 +145,7 @@ const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
 // 期間限定キャラの排出終了 (この時刻からガチャに出ない。図鑑・持っているカード・デッキはそのまま)
-const GACHA_ENDS = { tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
+const GACHA_ENDS = { suetsugu: Date.parse('2026-11-24T08:00:00+09:00'), tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
 const inGacha = (id, now = Date.now()) => isReleased(id, now) && !(GACHA_ENDS[id] && now >= GACHA_ENDS[id]);
 const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => inGacha(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
@@ -190,6 +192,7 @@ const RATE_UPS = [
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
   { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ 1 体で 2% (11/20 8:29 まで。8:30 から筆の剣士)
+  { name: '毎週月曜のIppO祭', id: 'suetsugu', rate: 2, start: Date.parse('2026-11-23T08:00:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 限定キャラ 魔法使いすえつぐ 1 体で 2% (11/23(月) 8:00〜11/24 8:00)
   { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:35:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:35〜11/21 8:30。8:30 開始から 8:35 に変更)
 ];
 if (Number(process.env.CB_PICKUP_START)) PICKUPS[0].start = Number(process.env.CB_PICKUP_START);
@@ -251,6 +254,7 @@ const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最�
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const SERMON_ATK = 0.6;   // 説教: 相手の攻撃力を 0.6 倍
 const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の状態異常・デバフをすべて取りのぞく
+const DNA_POWER = 1.8, DNA_TURNS = 2; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは次の 2 ターンわざを使えない (わざ封じ)
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
 const ITEMS = {
   potion: { name: '回復薬', emoji: '🧪', price: 300, desc: '場のカードの HP を最大 HP の 30% 回復' },
@@ -273,7 +277,7 @@ function resolveTurn(state, acts, rnd) {
     if (a.a === 'switch' && Number.isInteger(a.i) && a.i !== s.active && s.cards[a.i]?.hp > 0) return a;
     if (a.a === 'item' && ITEMS[a.item]) return a; // アイテムは怯んでいても使える (使うのはプレイヤー)
     if (me.flinch === 1) return { a: 'flinch' }; // 怯み: 交代のほかは何もできない
-    if (a.a === 'skill' && me.cd === 0) return a;
+    if (a.a === 'skill' && me.cd === 0 && !(me.sealed > 0)) return a; // わざ封じ (DNAを取り出す) のあいだは、わざのかわりにこうげき
     if (a.a === 'attack' || a.a === 'skill') return { a: 'attack' };
     return { a: 'guard' };
   });
@@ -350,10 +354,16 @@ function resolveTurn(state, acts, rnd) {
           if (c.poison > 0) { c.poison = 0; got.push('毒'); }
           if (c.flinch) { c.flinch = 0; got.push(c.sleep ? '眠り' : '怯み'); } c.sleep = false;
           if (c.scolded) { c.atk = Math.round(c.atk / SERMON_ATK); c.scolded = false; got.push('攻撃ダウン'); } // 説教の分をもどす (また説教されることはある)
+          if (c.sealed > 0) { c.sealed = 0; got.push('わざ封じ'); }
           if (got.length) fixed.push({ card: c.name, what: got });
         });
         const meteor = !!sides[p].meteor; if (meteor) { sides[p].meteor = null; }
         ev.push({ k: 'taika', p, card: me.name, fixed, meteor });
+      }
+      else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを封じる (次の 2 ターン)
+        const o = 1 - p, foe = sides[o].cards[sides[o].active];
+        hit(p, DNA_POWER);
+        if (foe.hp > 0) { foe.sealed = DNA_TURNS + 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, turns: DNA_TURNS }); } // このターンの終わりに 1 つ減るので +1
       }
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -402,7 +412,7 @@ function resolveTurn(state, acts, rnd) {
   // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
   [0, 1].forEach((p) => {
     const s = sides[p];
-    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; if (!c.flinch) c.sleep = false; });
+    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; if (!c.flinch) c.sleep = false; if (c.sealed > 0) c.sealed--; });
     if (s.cards[s.active].hp <= 0) { const next = s.cards.findIndex((c) => c.hp > 0); if (next >= 0) { s.active = next; ev.push({ k: 'switch', p, card: s.cards[next].name, forced: true }); } }
   });
   state.turn++;
@@ -421,7 +431,7 @@ function cpuAct(state, p, rnd) {
   const s = state.sides[p], me = s.cards[s.active], foe = state.sides[1 - p].cards[state.sides[1 - p].active];
   const meteorLeft = state.sides[1 - p].meteor?.left || 0;
   const sermonUseful = !foe.scolded || s.cards.some((c) => c.hp > 0 && c.poison > 0);
-  if (me.cd === 0 && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
+  if (me.cd === 0 && !(me.sealed > 0) && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
   if (typeMult(foe.type, me.type) > 1 && rnd() < 0.5) {
     const i = s.cards.findIndex((c, k) => k !== s.active && c.hp > c.maxHp * 0.4 && typeMult(c.type, foe.type) >= 1);
     if (i >= 0) return { a: 'switch', i };
@@ -439,7 +449,7 @@ function score(state, p) { // 0 (負け) 〜 1 (勝ち)。決着していなけ�
 }
 function candidates(state, p) {
   const s = state.sides[p], me = s.cards[s.active], out = [{ a: 'attack' }, { a: 'guard' }];
-  if (me.cd === 0) out.push({ a: 'skill' });
+  if (me.cd === 0 && !(me.sealed > 0)) out.push({ a: 'skill' });
   s.cards.forEach((c, i) => { if (i !== s.active && c.hp > 0) out.push({ a: 'switch', i }); });
   return out;
 }
@@ -547,7 +557,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;

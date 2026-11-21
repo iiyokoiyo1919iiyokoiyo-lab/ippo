@@ -365,6 +365,41 @@
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
       // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
+      // 魔法使いすえつぐ (SSR・つつむ・DNAを取り出す): 自分を魔法少女だと思っている人型のおばさん。
+      // パーマの髪にティアラ、ピンクのフリフリ衣装、ハートのステッキ。片手に抜き取った DNA (二重らせん)
+      suetsugu: () => {
+        const skin = rg('sk', [[0, '#ffe3d1'], [1, '#f2b99a']], 0.4, 0.35, 0.8), dress = lg('dr', [[0, '#ffb3d9'], [0.5, '#f783ac'], [1, '#d6336c']]);
+        const curl = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${lg('hr' + x + '_' + y, [[0, '#b197fc'], [1, '#6741d9']])}" stroke="#4c2a85" stroke-width="1"/>`;
+        const helix = [];
+        for (let i = 0; i <= 8; i++) { const y = 30 + i * 6, a = i * 0.8, dx = Math.sin(a) * 7; helix.push(`<path d="M${(16 - dx).toFixed(1)},${y} L${(16 + dx).toFixed(1)},${y}" stroke="${i % 2 ? '#74c0fc' : '#ffd43b'}" stroke-width="2" opacity=".9"/>`); }
+        const strand = (ph, c) => `<path d="${Array.from({ length: 17 }, (_, i) => `${i ? 'L' : 'M'}${(16 + Math.sin(i * 0.4 + ph) * 7).toFixed(1)},${30 + i * 3}`).join(' ')}" stroke="${c}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+        return `
+        <circle cx="60" cy="64" r="54" fill="${rg('aura', [[0, '#ffdeeb', 0.9], [0.6, '#fcc2d7', 0.35], [1, '#fcc2d7', 0]])}"/>
+        <path d="M30,118 Q26,92 40,84 Q60,76 80,84 Q94,92 90,118Z" fill="${dress}" stroke="#a61e4d" stroke-width="2"/>
+        <path d="M30,112 Q36,106 42,112 Q48,106 54,112 Q60,106 66,112 Q72,106 78,112 Q84,106 90,112" stroke="#fff" stroke-width="3" fill="none"/>
+        <path d="M44,86 L60,96 L76,86 L72,82 L60,88 L48,82Z" fill="#fff" stroke="#f06595" stroke-width="1.2"/>
+        <path d="M52,92 C46,86 46,100 56,96 Z M68,92 C74,86 74,100 64,96 Z" fill="#e64980" stroke="#a61e4d" stroke-width="1"/><circle cx="60" cy="95" r="3.4" fill="#ffd43b" stroke="#e67700" stroke-width="1"/>
+        <ellipse cx="34" cy="86" rx="10" ry="7" fill="#fff0f6" stroke="#f06595" stroke-width="1.4"/><ellipse cx="86" cy="86" rx="10" ry="7" fill="#fff0f6" stroke="#f06595" stroke-width="1.4"/>
+        ${curl(38, 46, 9)}${curl(82, 46, 9)}${curl(40, 62, 8)}${curl(80, 62, 8)}${curl(44, 32, 9)}${curl(76, 32, 9)}${curl(54, 26, 9)}${curl(66, 26, 9)}${curl(60, 24, 8)}
+        <ellipse cx="60" cy="56" rx="21" ry="23" fill="${skin}" stroke="#c9825f" stroke-width="1.6"/>
+        ${curl(48, 36, 7)}${curl(60, 34, 7)}${curl(72, 36, 7)}
+        <path d="M46,24 L50,14 L55,22 L60,10 L65,22 L70,14 L74,24Z" fill="${lg('tr', [[0, '#fff3bf'], [1, '#fab005']])}" stroke="#e67700" stroke-width="1.2"/>
+        <circle cx="60" cy="18" r="2.6" fill="#f783ac" stroke="#fff" stroke-width=".8"/>
+        ${face(60, 54, { eyes: 'star', mouth: 'open', s: 0.78, iris: '#862e9c' })}
+        <path d="M44,47 Q48,44 53,46 M67,46 Q72,44 76,47" stroke="#5f3dc4" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <path d="M45,58 Q48,61 51,59 M69,59 Q72,61 75,58" stroke="#c9825f" stroke-width="1" fill="none" opacity=".8"/>
+        <ellipse cx="60" cy="63.6" rx="5" ry="1.2" fill="#e03131" opacity=".55"/>
+        <circle cx="39" cy="62" r="2.4" fill="#ffd43b" stroke="#e67700" stroke-width=".8"/><circle cx="81" cy="62" r="2.4" fill="#ffd43b" stroke="#e67700" stroke-width=".8"/>
+        <path d="M92,90 L108,52" stroke="${lg('wd', [[0, '#fff0f6'], [1, '#f783ac']])}" stroke-width="4" stroke-linecap="round"/>
+        <path d="M108,52 C100,40 112,34 112,44 C112,34 124,40 116,52 L112,58Z" transform="translate(-4 -4)" fill="${lg('ht', [[0, '#ff8cc6'], [1, '#e64980']])}" stroke="#fff" stroke-width="1.6"/>
+        ${twinkle(118, 34, 6, '#fff3bf')}${twinkle(98, 40, 3.4, '#fff')}
+        <circle cx="90" cy="92" r="5" fill="${skin}" stroke="#c9825f" stroke-width="1.2"/>
+        <g>${helix.join('')}${strand(0, '#e64980')}${strand(Math.PI, '#7048e8')}</g>
+        <circle cx="26" cy="86" r="5" fill="${skin}" stroke="#c9825f" stroke-width="1.2"/>
+        <path d="M18,80 L22,76" stroke="#c9825f" stroke-width="1"/>
+        ${twinkle(8, 30, 4, '#ffd43b')}${twinkle(28, 22, 3, '#fff')}
+        <path d="M12,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#f783ac"/><path d="M100,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#da77f2"/>`;
+      },
       nakanoooe: () => {
         const stone = lg('sz', [[0, '#5c636a'], [0.5, '#343a40'], [1, '#16191c']]), ink = rg('ik', [[0, '#495057'], [0.6, '#0b0c0e'], [1, '#000']], 0.4, 0.35, 0.9);
         return `
