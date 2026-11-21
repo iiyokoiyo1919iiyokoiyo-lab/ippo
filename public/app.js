@@ -3747,7 +3747,7 @@ async function viewBattle(params) {
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
   const evText = (e) => e.k === 'item' ? (e.item === 'tea' ? `${e.p === you ? 'あなた' : '相手'}は🧋アイスティーを使った！` : `${e.p === you ? 'あなた' : '相手'}は${e.item === 'elixir' ? '💖' : '🧪'}${e.name}を使った！ ${e.card}の HP が ${e.amount} 回復`)
-    : e.k === 'flinched' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠ってしまった！💤 (次のターン動けない)` : `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`)
+    : e.k === 'flinched' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠ってしまった！💤 (次のターン動けない)` : `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (${e.now ? 'このターンは動けない' : '次のターン動けない'})`)
     : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
     : e.k === 'dogma' ? `🧬 ${name(e.p, e.card)}のセントラルドグマ！ ${e.healed.map((x) => `${x.card} +${x.amount}`).join('・')} 回復`
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`

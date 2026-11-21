@@ -21,7 +21,7 @@ const SKILLS = {
   heal: { name: 'なおす', desc: '最大 HP の 45% 回復して、このターンのダメージを半分にする' },
   barrier: { name: 'バリア', desc: 'このターンのダメージを 0 にして、0.8 倍で反撃' },
   starlight: { name: 'スターライトマーチ', desc: '流星を降らせる: 5 ターンのあいだ、ターンの終わりに相手の場のカードへ最大 HP の 30% のダメージ (ガード無視。かけ直すと 5 ターンにもどる)' },
-  venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
+  venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして怯ませる (こうげき・わざができない)。相手より先に使えばそのターン、後なら次のターン' },
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
   taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
   dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、そのバトル中ずっとわざを使えなくする (交代しても・大化の改新でも戻らない)' },
@@ -328,8 +328,12 @@ function resolveTurn(state, acts, rnd) {
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     return dmg;
   };
+  // 行動できなくする わざ (野獣の眼光) を相手より先に使ったら、相手はそのターンもう動けない (こうげき・わざができない。ガードと交代はそのまま)
+  const stunNow = new Set(), acted = new Set();
   for (const p of order) {
     const s = sides[p], me = s.cards[s.active];
+    acted.add(p);
+    if (stunNow.has(p) && (act[p].a === 'attack' || act[p].a === 'skill')) { if (me.hp > 0) ev.push({ k: 'flinch', p, card: me.name }); continue; }
     if (act[p].a === 'flinch') { if (me.hp > 0) ev.push({ k: 'flinch', p, card: me.name, sleep: !!me.sleep }); continue; }
     if (act[p].a === 'item') continue;
     if (me.hp <= 0 || act[p].a === 'switch' || act[p].a === 'guard') { if (act[p].a === 'guard' && me.hp > 0) ev.push({ k: 'guard', p, card: me.name }); continue; }
@@ -373,9 +377,13 @@ function resolveTurn(state, acts, rnd) {
         hit(p, DNA_POWER);
         if (foe.hp > 0) { const again = foe.sealed > 0; foe.sealed = 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, again }); }
       }
-      else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
+      else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして怯ませる (ダメージはなし)。相手より先なら、そのターンの相手の行動を止める・後なら次のターン
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
-        if (foe.hp > 0) { foe.poison = POISON_TURNS; foe.flinch = 2; ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); ev.push({ k: 'flinched', p: o, card: foe.name }); }
+        if (foe.hp > 0) {
+          const now = !acted.has(o); foe.poison = POISON_TURNS;
+          if (now) stunNow.add(o); else foe.flinch = 2;
+          ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); ev.push({ k: 'flinched', p: o, card: foe.name, now });
+        }
       } else if (me.skill === 'starlight') { // 相手の盤面に流星を降らせる (このターンの終わりから 5 ターン)
         const o = 1 - p;
         sides[o].meteor = { left: METEOR_TURNS, atk: me.atk, by: me.name };
