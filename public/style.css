@@ -1629,6 +1629,9 @@ body.arena-open { overflow: hidden; }
 
 /* 競走馬版から連れてきた馬のカード */
 .cb-horse { position: absolute; z-index: 5; bottom: 6px; right: 6px; font-size: 14px; }
+.cb-fes { position: absolute; z-index: 5; top: 26px; left: 4px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 900; color: #fff; background: linear-gradient(90deg, #ff2e93, #c13dff); box-shadow: 0 0 0 1.5px #fff, 0 2px 6px rgba(193, 61, 255, .45); }
+.cb-card.sm .cb-fes { top: 22px; font-size: 9px; padding: 0 5px; }
+.cb-new.lr { background: linear-gradient(90deg, #ff6b6b, #ffd43b, #69db7c, #4dabf7, #da77f2); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
 .cb-horse-banner { display: flex; align-items: center; gap: var(--s4); padding: var(--s4); background: linear-gradient(120deg, var(--surface) 50%, color-mix(in srgb, #e67700 16%, transparent)); }
 .cb-horse-banner > span:nth-child(2) { flex: 1; display: grid; gap: 2px; min-width: 0; }
 .cb-horse-banner > span:nth-child(2) span { font-size: var(--fs-sm); color: var(--text-2); }

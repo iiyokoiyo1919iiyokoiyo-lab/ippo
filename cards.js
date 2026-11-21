@@ -163,7 +163,14 @@ const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from
 // 高難易度クエストの報酬キャラは、25 枚集めると LR に昇格 (高難易度クエストは勝つたびに 1 枚もらえる)
 const LR_PROMOTE = { copies: 25, mult: 1.35 };
 const lrEligible = (cardId) => QUESTS.some((q) => q.hard && q.reward === cardId);
-const isLR = (cardId, copies) => lrEligible(cardId) && copies >= LR_PROMOTE.copies;
+// IppO祭の限定キャラ (ガチャ限定の SSR)。3 枚で UR、同じカードを 15 枚集めると LR に昇格 (新凸)。UR のあとのダブりも LR まではカードの枚数として数える
+const FES_LIMITED = ['scissors', 'tadokoro', 'suetsugu'];
+const FES_LR = { copies: 15 };
+const isFes = (cardId) => FES_LIMITED.includes(cardId);
+const lrNeed = (cardId) => (isFes(cardId) ? FES_LR.copies : lrEligible(cardId) ? LR_PROMOTE.copies : null); // LR に必要な枚数 (LR にならないカードは null)
+const isLR = (cardId, copies) => { const n = lrNeed(cardId); return n !== null && copies >= n; };
+// もう昇格しきっていて、ダブりをレベルアップ書に変える状態か (祭の限定キャラは LR まで、ほかの SSR は UR まで)
+const dupMaxed = (cardId, copies) => (isFes(cardId) ? isLR(cardId, copies) : isPromoted(cardId, copies));
 // レベル (同じカードを引くと上がる) とレア度で強さが決まる。ur: UR に昇格したカード (true) / LR に昇格したカード ('LR')
 function statsOf(cardId, level = 1, ur = false) {
   const c = CARDS[cardId], lr = ur === 'LR', m = (lr ? LR_PROMOTE.mult : ur ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (Math.min(level, MAX_LEVEL) - 1));
@@ -706,6 +713,8 @@ function install(app, ctx) {
     db.migrate('2026-11-28-user-titles', TITLE_MIGRATION);
     db.migrate('2026-11-29-card-monsters', MONCARD_MIGRATION);
     db.migrate('2026-11-30-card-monsters-limited', 'ALTER TABLE card_monsters ADD COLUMN limited INTEGER NOT NULL DEFAULT 0; ALTER TABLE card_monsters ADD COLUMN formula INTEGER NOT NULL DEFAULT 1;');
+    // 新凸: IppO祭の限定キャラは UR のあとのダブりも数えるので、これまでにレベルアップ書に変換されたぶんを、ガチャの記録 (card_pulls) から枚数にもどす (書はそのまま)
+    db.migrate('2026-11-21-fes-lr-copies', `UPDATE card_owned SET count = MAX(count, (SELECT COUNT(*) FROM card_pulls p WHERE p.user_id = card_owned.user_id AND p.card_id = card_owned.card_id)) WHERE card_id IN (${FES_LIMITED.map((id) => `'${id}'`).join(', ')});`);
     db.migrate('2026-11-29-card-monsters-z-mr', "UPDATE card_monsters SET rarity = 'MR' WHERE rarity = 'UR';"); // 評価 Z は UR → MR に (倍率はどちらも 1.2)
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
@@ -758,13 +767,13 @@ function install(app, ctx) {
   const urOf = (uid) => Object.entries(copiesOf(uid)).filter(([id, n]) => isPromoted(id, n)).map(([id]) => id);
   const lrOf = (uid) => Object.entries(copiesOf(uid)).filter(([id, n]) => isLR(id, n)).map(([id]) => id);
   const promoOf = (uid, id) => (lrOf(uid).includes(id) ? 'LR' : urOf(uid).includes(id)); // statsOf の 3 つ目に渡す
-  const lrCountOf = (uid) => { const cp = copiesOf(uid); return Object.fromEntries(CARD_LIST.map((c) => c[0]).filter(lrEligible).map((id) => [id, cp[id] || 0])); };
+  const lrCountOf = (uid) => { const cp = copiesOf(uid); return Object.fromEntries(CARD_LIST.map((c) => c[0]).filter((id) => lrNeed(id) && isReleased(id)).map((id) => [id, cp[id] || 0])); };
   const levelOfRow = (r) => Math.min(DUP_MAX_LEVEL, r.count + r.lv_bonus) + Math.min(MAX_LEVEL - DUP_MAX_LEVEL, r.lv_high || 0);
   const owned = (uid) => Object.fromEntries(db.prepare('SELECT card_id, count, lv_bonus, lv_high FROM card_owned WHERE user_id = ?').all(uid).map((r) => [r.card_id, levelOfRow(r)]));
   const deckStats = (uid) => { const p = player(uid), o = owned(uid); return JSON.parse(p.deck).map((id) => cardStats(uid, id, o) || statsOf(STARTER[0], 1)); };
   function me(uid) {
     const p = player(uid), o = owned(uid);
-    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), lr: lrOf(uid), lrCount: lrCountOf(uid), horses: horsesOwned(uid).map(horseStats), monsters: monCardsOwned(uid).map(monCardStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
+    return { coins: p.coins, pity: p.pity, deck: JSON.parse(p.deck), owned: o, ur: urOf(uid), lr: lrOf(uid), lrCount: lrCountOf(uid), lrNeed: Object.fromEntries(Object.keys(lrCountOf(uid)).map((id) => [id, lrNeed(id)])), horses: horsesOwned(uid).map(horseStats), monsters: monCardsOwned(uid).map(monCardStats), horseReady: horsesLeft(uid) > 0, horseLeft: horsesLeft(uid), horsesPerDay: HORSES_PER_DAY,
       rating: p.rating, wins: p.wins, losses: p.losses, draws: p.draws, scrolls: p.scrolls,
       quests: questsNow().map((q) => ({ id: q.id, name: q.name, emoji: q.emoji, end: q.end, reward: q.reward, hard: !!q.hard, cleared: clearedOf(uid).has(q.id) })),
       prices: pricesNow(), dailyReady: p.daily_day !== jstDay(), rewardsLeft: REWARDS_PER_DAY - (p.reward_day === jstDay() ? p.reward_count : 0) };
@@ -775,13 +784,14 @@ function install(app, ctx) {
     cards: releasedIds().map((id) => ({ ...statsOf(id, 1), ...(RARITY[CARDS[id].rarity] ? {} : { questOnly: true }),
       ...(CARD_PASSIVE[id] ? { passiveName: PASSIVES[CARD_PASSIVE[id]].name, passiveDesc: PASSIVES[CARD_PASSIVE[id]].desc } : {}), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc,
       ...(CARDS[id].rarity === UR_PROMOTE.from ? { urStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, true)) } : {}),
-      ...(lrEligible(id) ? { lrStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, 'LR')) } : {}) })),
+      ...(isFes(id) ? { fes: true } : {}), ...(lrNeed(id) ? { lrNeed: lrNeed(id) } : {}),
+      ...(lrNeed(id) ? { lrStats: (({ maxHp, atk, def }) => ({ maxHp, atk, def }))(statsOf(id, 1, 'LR')) } : {}) })),
     newCards: releasedIds().filter((id) => RELEASES[id] && !BULK_IDS.has(id) && RARITY[CARDS[id].rarity] && inGacha(id) && Date.now() - RELEASES[id] < NEW_DAYS * 86400_000),
     newBulk: BULK_RELEASES.filter((g) => Date.now() >= g.at && Date.now() - g.at < NEW_DAYS * 86400_000).map((g) => ({ id: g.id, name: g.name, at: g.at, ids: g.ids, count: Object.fromEntries(['R', 'SR', 'SSR'].map((r) => [r, g.ids.filter((id) => CARDS[id].rarity === r).length])) })),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
-    urPromote: UR_PROMOTE, lrPromote: { copies: LR_PROMOTE.copies, bonus: Math.round((LR_PROMOTE.mult - 1) * 100) }, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, hardQuestScrolls: HARD_QUEST_SCROLLS, coinsPerScroll: COINS_PER_SCROLL, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
+    urPromote: UR_PROMOTE, lrPromote: { copies: LR_PROMOTE.copies, bonus: Math.round((LR_PROMOTE.mult - 1) * 100) }, fesLr: { copies: FES_LR.copies, ids: FES_LIMITED.filter((id) => isReleased(id)) }, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, hardQuestScrolls: HARD_QUEST_SCROLLS, coinsPerScroll: COINS_PER_SCROLL, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
   // 鬼難のデッキ (CPU が使う 5 種類)
@@ -815,7 +825,7 @@ function install(app, ctx) {
       const now = Date.now(), cnt = { ...copies };
       for (const c of r.cards) {
         db.prepare('INSERT INTO card_pulls (user_id, card_id, rarity, created_at) VALUES (?, ?, ?, ?)').run(req.user.id, c.id, c.rarity, now);
-        if (isPromoted(c.id, cnt[c.id] || 0)) { c.converted = UR_DUP_SCROLLS; continue; } // もう UR: 枚数はふやさず、レベルアップ書に変換
+        if (dupMaxed(c.id, cnt[c.id] || 0)) { c.converted = UR_DUP_SCROLLS; continue; } // もう UR (祭の限定キャラは LR): 枚数はふやさず、レベルアップ書に変換
         cnt[c.id] = (cnt[c.id] || 0) + 1;
         db.prepare('INSERT INTO card_owned (user_id, card_id, count) VALUES (?, ?, 1) ON CONFLICT(user_id, card_id) DO UPDATE SET count = count + 1').run(req.user.id, c.id);
       }
@@ -825,14 +835,15 @@ function install(app, ctx) {
     } catch (e) { db.exec('ROLLBACK'); return res.status(400).json({ error: 'コインが足りません' }); }
     const seen = { ...before };
     const results = r.cards.map((c) => {
-      if (c.converted) { const lv = seen[c.id] || 1; return { ...statsOf(c.id, lv, true), level: lv, copies: copies[c.id], converted: c.converted }; }
+      if (c.converted) { const lv = seen[c.id] || 1; return { ...statsOf(c.id, lv, isLR(c.id, copies[c.id]) ? 'LR' : true), level: lv, copies: copies[c.id], converted: c.converted }; }
       const prev = seen[c.id] || 0, n = (copies[c.id] || 0) + 1; seen[c.id] = prev + 1; copies[c.id] = n;
-      const ur = isPromoted(c.id, n);
+      const lr = isLR(c.id, n), ur = lr ? 'LR' : isPromoted(c.id, n);
       const lv = prev >= DUP_MAX_LEVEL ? prev : prev + 1; // Lv15 より上は、引いても上がらない
       seen[c.id] = lv;
-      return { ...statsOf(c.id, lv, ur), level: lv, copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < DUP_MAX_LEVEL, urUp: ur && n === UR_PROMOTE.copies };
+      return { ...statsOf(c.id, lv, ur), level: lv, copies: n, isNew: prev === 0, levelUp: prev > 0 && prev < DUP_MAX_LEVEL, urUp: !!ur && n === UR_PROMOTE.copies, ...(lrNeed(c.id) ? { lrNeed: lrNeed(c.id) } : {}), lrUp: lr && n === lrNeed(c.id) };
     });
     if (results.some((c) => c.converted)) console.log(`[cards] @${req.user.username} UR のダブりをレベルアップ書に変換: ${results.filter((c) => c.converted).length} 枚`);
+    if (results.some((c) => c.lrUp)) console.log(`[cards] @${req.user.username} LR に昇格 (新凸): ${results.filter((c) => c.lrUp).map((c) => c.id).join(',')}`);
     if (results.some((c) => c.urUp)) console.log(`[cards] @${req.user.username} UR に昇格: ${results.filter((c) => c.urUp).map((c) => c.id).join(',')}`);
     console.log(`[cards] @${req.user.username} ガチャ ${n} 回: ${r.cards.map((c) => c.rarity).join(',')}`);
     res.json({ results, ...me(req.user.id) });
@@ -1248,4 +1259,4 @@ function install(app, ctx) {
   };
 }
 module.exports = install;
-Object.assign(module.exports, { STAT_SCALE, GACHA_ENDS, inGacha, LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });
+Object.assign(module.exports, { FES_LIMITED, FES_LR, isFes, lrNeed, dupMaxed, STAT_SCALE, GACHA_ENDS, inGacha, LR_PROMOTE, isLR, lrEligible, BULK_RELEASES, BULK_IDS, ITEMS, ITEMS_AFTER, questBonus, questEnemyStats, THUNDER_POWER, CARD_PASSIVE, PASSIVES, ONI_DECKS, oniDeckStats, REWARD, MAX_LEVEL, DUP_MAX_LEVEL, levelCost, EXCLUSIVE_SKILLS, TYPES, SKILLS, SALES, PICKUPS, pickupsNow, QUESTS, questsNow, METEOR_TURNS, EXTRA_RARITY, UR_PROMOTE, isPromoted, CARDS, CARD_LIST, statsOf, pull, resolveTurn, newSide, cpuAct, smartAct, typeMult, RARITY, PITY, RELEASES, isReleased, ratesNow, RATE_UPS });

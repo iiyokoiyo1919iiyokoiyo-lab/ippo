@@ -3155,7 +3155,7 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
-    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
+    ${(c.fes ?? cbCatalogCache?.cards?.find((x) => x.id === c.id)?.fes) && !c.horse && !c.monster ? '<span class="cb-fes" title="IppO祭の限定キャラ">🎊祭</span>' : ''}${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
@@ -3165,10 +3165,10 @@ function cbMine(c, mine) {
   if (mine?.lr?.includes(c.id) && c.lrStats) return { ...c, ...c.lrStats, rarity: 'LR', baseRarity: c.rarity, promoted: true };
   return mine?.ur?.includes(c.id) && c.urStats ? { ...c, ...c.urStats, rarity: 'UR', baseRarity: c.rarity, promoted: true } : c;
 }
-// LR まであと何枚か (高難易度クエストの報酬キャラ)
+// LR まであと何枚か (高難易度クエストの報酬キャラは 25 枚・IppO祭の限定キャラは 15 枚)
 function cbLrCounter(id, mine, cat) {
   if (!mine?.lrCount || !(id in mine.lrCount)) return '';
-  const n = mine.lrCount[id], need = cat.lrPromote?.copies || 25, done = n >= need;
+  const n = mine.lrCount[id], need = mine.lrNeed?.[id] || cat.cards?.find((x) => x.id === id)?.lrNeed || cat.lrPromote?.copies || 25, done = n >= need;
   return `<span class="cb-lrc${done ? ' done' : ''}"><span>${done ? '🌈 LR 昇格ずみ！' : `🌈 LR まで ${n}/${need}`}</span><i style="width:${Math.min(100, (n / need) * 100)}%"></i></span>`;
 }
 // カードを指 (マウス) でなぞると傾いて、ホロの光が動く
@@ -3419,8 +3419,9 @@ async function viewGacha() {
         <div class="cb-stage${results ? ' rolling best-' + best : ''}" id="cb-stage">
           ${results ? `<div class="cb-capsule"><i></i><b></b></div><div class="cb-burst"></div><div class="cb-shout">${best === 'SSR' ? 'SSR！！' : best === 'SR' ? 'SR！' : ''}</div>
             <div class="cb-reveal">${results.map((c) => `<div class="cb-flip r-${esc(c.baseRarity || c.rarity)}"><div class="cb-flip-in"><div class="cb-back"><span>✦</span></div>
-              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.converted ? `<span class="cb-new conv">📜×${c.converted}</span>` : c.urUp ? '<span class="cb-new ur">UR 昇格！</span>' : c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
-            ${results.some((c) => c.converted) ? `<p class="cb-conv-note">📜 UR のダブり ${results.filter((c) => c.converted).length} 枚を、レベルアップ書 <b>${results.reduce((s, c) => s + (c.converted || 0), 0)}</b> 冊に変換しました</p>` : ''}
+              <div class="cb-front">${cbCard(c, { level: c.level, small: true, cls: 'tilt' })}${c.converted ? `<span class="cb-new conv">📜×${c.converted}</span>` : c.lrUp ? '<span class="cb-new lr">LR 昇格！</span>' : c.urUp ? '<span class="cb-new ur">UR 昇格！</span>' : c.isNew ? '<span class="cb-new">NEW</span>' : c.levelUp ? '<span class="cb-new up">Lv UP</span>' : ''}</div></div></div>`).join('')}</div>
+            ${results.some((c) => c.converted) ? `<p class="cb-conv-note">📜 昇格しきったカードのダブり ${results.filter((c) => c.converted).length} 枚を、レベルアップ書 <b>${results.reduce((s, c) => s + (c.converted || 0), 0)}</b> 冊に変換しました</p>` : ''}
+            ${results.some((c) => c.lrUp) ? `<p class="cb-lr-shout cb-gacha-ur">🌈 ${results.filter((c) => c.lrUp).map((c) => esc(c.name)).join('・')} が LR に昇格！！ 🌈</p>` : ''}
             ${results.some((c) => c.urUp) ? `<p class="cb-ur-shout cb-gacha-ur">✨ ${results.filter((c) => c.urUp).map((c) => esc(c.name)).join('・')} が UR に昇格！！ ✨</p>` : ''}
             <p class="cb-skip">タップでとばす</p>`
           : `<div class="cb-machine">${CBArt.svg('case', 'SSR')}<p>きょうは何が出るかな？</p></div>`}
@@ -3439,6 +3440,7 @@ async function viewGacha() {
           <li>同じカードが出るとレベルが上がり、強くなります (レベル 1 つにつき +${Math.round(cat.levelBonus * 100)}%、同じカードで上がるのは Lv${cat.dupMaxLevel || 15} まで。Lv${cat.maxLevel} まではレベルアップ書で)</li>
           <li>レア度が高いほど強い: R +${cat.rarityBonus.R}% / SR +${cat.rarityBonus.SR}% / SSR +${cat.rarityBonus.SSR}% / UR +${cat.urBonus}%</li>
           <li>ガチャ限定の ${esc(cat.urPromote?.from || 'SSR')} は、同じカードを ${cat.urPromote?.copies || 3} 枚引くと UR に昇格します (UR はガチャからは直接出ません)。UR になったあとに同じカードが出たら、レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換されます</li>
+          ${cat.fesLr?.ids?.length ? `<li>🎊 IppO祭の限定キャラ (${cat.fesLr.ids.map((id) => esc(cat.cards.find((x) => x.id === id)?.name || id)).join('・')}) は、同じカードを <b>${cat.fesLr.copies} 枚</b>集めると <b class="cb-lr-word">LR</b> に昇格 (能力 +${cat.lrPromote?.bonus || 35}%)。UR のあとのダブりも LR までは枚数に数え、LR のあとのダブりがレベルアップ書になります</li>` : ''}
           ${(cat.pickups || []).map((x) => `<li>${esc(x.name)}: ${esc(cat.cards.find((c) => c.id === x.id)?.name || '')} 1体の出る確率が ${x.rate}%。ほかのキャラは元の確率のままで、ふえた分だけ ほかのレア度の確率が少し下がります</li>`).join('')}
           ${(cat.rateUps || []).map((x) => `<li>${esc(x.name)}: ${x.ids.map((id) => esc(cat.cards.find((c) => c.id === id)?.name || '')).join('・')} の出る確率が ${x.mult} 倍。上がった分、ほかのレア度の確率が少し下がります</li>`).join('')}
           <li>コインはお金では買えません</li></ul></section>`;
@@ -3458,6 +3460,7 @@ async function viewGacha() {
       stage.classList.remove('rolling'); stage.classList.add('opened', 'shown');
       flips.forEach((f) => f.classList.add('open'));
       if (best === 'SSR' || best === 'SR') cbConfetti(stage, best === 'SSR' ? 70 : 36, best === 'SSR' ? undefined : ['#b197fc', '#e5dbff', '#fff', '#ffd43b']);
+      if (results.some((c) => c.lrUp)) cbConfetti(stage, 160, ['#ff6b6b', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2', '#fff']);
       if (results.some((c) => c.urUp)) cbConfetti(stage, 120, ['#ffd43b', '#ff6b6b', '#fff3bf', '#fab005', '#e8590c', '#fff']);
     };
     at(900, () => stage.classList.add('burst'));                       // 光る
@@ -3507,6 +3510,7 @@ async function viewCollection() {
           : `<p class="text-sm muted" style="margin:8px 0 0">競走馬版の馬を、1日${mine.horsesPerDay || 3}頭まで連れてこられます (ホームの「連れてくる」から)。</p>`}</section>
       <section class="card card-pad"><div class="panel-head"><h3>図鑑</h3><span class="text-xs muted">${have} / ${cat.cards.length} 種類</span></div>
         <p class="text-xs muted" style="margin:4px 0 8px">ガチャ限定の <b>${esc(cat.urPromote?.from || 'SSR')}</b> は、同じカードを <b>${cat.urPromote?.copies || 3} 枚</b>引くと <b class="cb-ur-word">UR</b> に昇格！ (能力 +${cat.urBonus}%)。UR のあとのダブりは 📜 レベルアップ書 ${cat.urDupScrolls || 50} 冊に変換</p>
+        ${cat.fesLr?.ids?.length ? `<p class="text-xs muted" style="margin:0 0 8px">🎊 <b>IppO祭の限定キャラ</b> (${cat.fesLr.ids.map((id) => esc(cat.cards.find((x) => x.id === id)?.name || id)).join('・')}) は、同じカードを <b>${cat.fesLr.copies} 枚</b>集めると <b class="cb-lr-word">LR</b> に昇格！ (能力 +${cat.lrPromote?.bonus || 35}%)</p>` : ''}
         <p class="text-xs muted" style="margin:0 0 8px">高難易度クエストの報酬キャラは、クエストに勝つたびに 1 枚もらえて、<b>${cat.lrPromote?.copies || 25} 枚</b>で <b class="cb-lr-word">LR</b> に昇格！ (能力 +${cat.lrPromote?.bonus || 35}%)</p>
         <div class="cb-grid">${cat.cards.map((c) => (mine.owned[c.id]
           ? cbCard(C[c.id], { level: lvOf(c), cls: pickCls(c), attrs: `data-card="${esc(c.id)}" title="${esc(c.skillName)}: ${esc(c.skillDesc)}${c.passiveName ? ` / パッシブ ${esc(c.passiveName)}: ${esc(c.passiveDesc)}` : ''}"` })
