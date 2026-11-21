@@ -3752,6 +3752,8 @@ async function viewBattle(params) {
     : e.k === 'dogma' ? `🧬 ${name(e.p, e.card)}のセントラルドグマ！ ${e.healed.map((x) => `${x.card} +${x.amount}`).join('・')} 回復`
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
+    : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
+    : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
     : e.k === 'taika' ? `📜 大化の改新！ ${e.p === you ? '味方' : '相手'}の${e.fixed.length || e.meteor ? `${e.fixed.map((x) => `${x.card}の${x.what.join('・')}`).join('、')}${e.meteor ? `${e.fixed.length ? '、' : ''}流星` : ''}が取りのぞかれた` : '状態異常はなかった (こうげきだけ)'}`
     : e.k === 'starfall' ? `${name(e.p, e.card)}の流星が、${e.target === you ? 'あなた' : '相手'}の盤面に降りそそぐ！ 🌠 (${e.turns}ターン)`
@@ -3865,6 +3867,14 @@ async function viewBattle(params) {
         }, t);
         t += 900;
       }
+      else if (e.k === 'deathsong') { // 死の歌声: 黒とピンクの音符があふれる
+        setTimeout(() => {
+          overlayFx('cb-dsong' + (e.p === you ? ' on-foe' : ' on-me'), `<b>死の歌声</b><i>─一方的な愛─</i><em>💀 このターンに倒すと道連れ</em>${Array.from({ length: 12 }, (_, i) => `<s style="--x:${(i * 41) % 100}%;--d:${(i % 6) * 0.12}s">${i % 3 ? '♪' : '💀'}</s>`).join('')}`, 1800, e.p === you ? 'top' : 'bottom');
+          setTimeout(() => { replay(el(1 - e.p), 'hurt'); pop(1 - e.p, '💀 呪い', 'skill flinch'); }, 500);
+        }, t);
+        t += 900;
+      }
+      else if (e.k === 'curse') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>道連れ</b><i>💔 一方的な愛</i><em>${esc(e.card)}</em>`, 1700, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
       else if (e.k === 'sealed') { // DNAを取り出す: ピンクの魔法陣から二重らせんが抜き取られる
         setTimeout(() => {
           overlayFx('cb-dna' + (e.p === you ? ' on-me' : ''), `<b>DNAを取り出す</b><i>🩷 マジカル☆抜き取り！</i><em>🧬 このバトル中 わざ封じ</em>`, 1700, e.p === you ? 'bottom' : 'top');

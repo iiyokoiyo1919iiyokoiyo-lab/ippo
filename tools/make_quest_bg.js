@@ -135,8 +135,33 @@ ${petals}
 </svg>`;
 }
 
+// Y降臨: 夜のライブステージ。ピンクと紫のスポットライト・客席のペンライト・宙を舞う音符 (ところどころドクロ)
+function ystage() {
+  const r = rng(7171);
+  const notes = Array.from({ length: 22 }, (_, i) => { const x = r() * W, y = 80 + r() * 560, s = 18 + r() * 22, d = 5 + r() * 6, ch = i % 5 === 0 ? '💀' : ['♪', '♫', '♬'][i % 3];
+    return `<text x="${f(x)}" y="${f(y)}" font-size="${f(s)}" fill="${i % 2 ? '#ff8cc6' : '#d0bfff'}" opacity=".85">${ch}<animate attributeName="y" values="${f(y)};${f(y - 60)};${f(y)}" dur="${f(d)}s" repeatCount="indefinite"/></text>`; }).join('');
+  const lights = Array.from({ length: 40 }, () => { const x = r() * W, y = 780 + r() * 100, c = ['#ff8cc6', '#b197fc', '#ffe066', '#74c0fc'][Math.floor(r() * 4)];
+    return `<path d="M${f(x)},${f(y)} l${f((r() - 0.5) * 10)},-22" stroke="${c}" stroke-width="3" stroke-linecap="round" opacity=".9"/>`; }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0012"/><stop offset=".45" stop-color="#3b0a3a"/><stop offset=".75" stop-color="#7a1450"/><stop offset="1" stop-color="#1a0010"/></linearGradient>
+<linearGradient id="spot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8cc6" stop-opacity=".55"/><stop offset="1" stop-color="#ff8cc6" stop-opacity="0"/></linearGradient>
+<linearGradient id="spot2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b197fc" stop-opacity=".5"/><stop offset="1" stop-color="#b197fc" stop-opacity="0"/></linearGradient>
+<linearGradient id="stage" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c0a3a"/><stop offset="1" stop-color="#1a0010"/></linearGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#sky)"/>
+<path d="M120,0 L20,720 H300 L200,0Z" fill="url(#spot)"/><path d="M480,0 L300,720 H580 L520,0Z" fill="url(#spot2)"/><path d="M300,0 L180,720 H420 L320,0Z" fill="url(#spot)" opacity=".6"/>
+<path d="M0,40 Q150,90 300,40 Q450,90 600,40 V0 H0Z" fill="#a61e4d"/><path d="M0,40 Q150,90 300,40 Q450,90 600,40" stroke="#ffd43b" stroke-width="4" fill="none"/>
+${notes}
+<rect x="0" y="690" width="${W}" height="70" fill="url(#stage)"/><path d="M0,690 H${W}" stroke="#ff8cc6" stroke-width="3"/>
+${Array.from({ length: 12 }, (_, i) => `<circle cx="${f(25 + i * 50)}" cy="700" r="4" fill="#ffe066"><animate attributeName="opacity" values="1;.3;1" dur="${f(0.8 + (i % 3) * 0.3)}s" repeatCount="indefinite"/></circle>`).join('')}
+<rect x="0" y="760" width="${W}" height="${H - 760}" fill="#0d0012"/>
+${lights}
+</svg>`;
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika })) {
+for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika, ystage })) {
   const svg = fn(); fs.writeFileSync(path.join(OUT, name + '.svg'), svg);
   console.log('作った:', `public/bg/${name}.svg`, svg.length, 'bytes');
 }

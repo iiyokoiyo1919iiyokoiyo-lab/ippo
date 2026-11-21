@@ -400,6 +400,30 @@
         ${twinkle(8, 30, 4, '#ffd43b')}${twinkle(28, 22, 3, '#fff')}
         <path d="M12,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#f783ac"/><path d="M100,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#da77f2"/>`;
       },
+      // Y (MR・つつむ・死の歌声─一方的な愛─): 歌姫にあこがれる、歌のへたなマイク。まるい網の頭にピンクのリボンとティアラ、
+      // 目をつぶって大きな口で熱唱。音程のはずれたぐにゃぐにゃの音符と、こっそりドクロの音符
+      yhime: () => {
+        const mesh = rg('ms', [[0, '#f8f9fa'], [0.55, '#ced4da'], [1, '#868e96']], 0.38, 0.3, 0.8), body = lg('bd', [[0, '#ff8cc6'], [0.5, '#e64980'], [1, '#a61e4d']], 1, 0);
+        const grid = [];
+        for (let i = -3; i <= 3; i++) { grid.push(`<path d="M${60 + i * 7},18 Q${60 + i * 9},46 ${60 + i * 7},74" stroke="#adb5bd" stroke-width="1" fill="none" opacity=".8"/>`, `<path d="M28,${46 + i * 7} Q60,${46 + i * 9} 92,${46 + i * 7}" stroke="#adb5bd" stroke-width="1" fill="none" opacity=".8"/>`); }
+        const note = (x, y, s, c, r) => `<g transform="translate(${x} ${y}) rotate(${r}) scale(${s})"><path d="M0,0 V-16 Q6,-14 9,-20" stroke="${c}" stroke-width="2.4" fill="none" stroke-linecap="round"/><ellipse cx="-3" cy="1" rx="4.4" ry="3.4" fill="${c}" transform="rotate(-20 -3 1)"/></g>`;
+        return `
+        <path d="M6,40 Q14,30 10,22 Q20,30 14,44" stroke="#da77f2" stroke-width="2" fill="none" opacity=".7"/>
+        ${note(16, 66, 1.1, '#f783ac', -18)}${note(104, 30, 1, '#b197fc', 16)}${note(110, 74, 0.8, '#f783ac', 30)}
+        <g transform="translate(14 96)"><circle r="7" fill="#f8f9fa" stroke="#495057" stroke-width="1.2"/><circle cx="-2.4" cy="-1" r="1.6" fill="#212529"/><circle cx="2.4" cy="-1" r="1.6" fill="#212529"/><path d="M-2.4,3 h4.8" stroke="#212529" stroke-width="1.2"/></g>
+        <path d="M46,74 L52,112 Q60,118 68,112 L74,74Z" fill="${body}" stroke="#7a1450" stroke-width="2"/>
+        <rect x="44" y="70" width="32" height="8" rx="3" fill="#ffd43b" stroke="#e67700" stroke-width="1.4"/>
+        <circle cx="60" cy="96" r="3" fill="#fff" opacity=".8"/><path d="M54,104 h12" stroke="#fff" stroke-width="1.4" opacity=".5"/>
+        <circle cx="60" cy="46" r="32" fill="${mesh}" stroke="#495057" stroke-width="2.2"/>
+        <g clip-path="${clip('mc', '<circle cx="60" cy="46" r="31"/>')}">${grid.join('')}</g>
+        <ellipse cx="48" cy="30" rx="10" ry="6" fill="#fff" opacity=".55" transform="rotate(-30 48 30)"/>
+        ${face(60, 46, { eyes: 'happy', mouth: 'open', s: 1, iris: '#5c0a3a' })}
+        <path d="M70,34 q5,-3 8,2" stroke="#5c0a3a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M42,36 q4,-5 9,-2" stroke="#5c0a3a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M84,40 q3,6 0,9 q-3,-3 0,-9z" fill="#74c0fc" stroke="#1c7ed6" stroke-width=".8"/>
+        <path d="M40,16 L44,6 L50,13 L56,2 L62,13 L68,6 L72,16Z" transform="rotate(-14 56 10)" fill="${lg('tia', [[0, '#fff3bf'], [1, '#fab005']])}" stroke="#e67700" stroke-width="1.2"/>
+        <path d="M78,18 C70,8 92,4 88,16 C98,10 104,28 88,24 Z" fill="#f06595" stroke="#a61e4d" stroke-width="1.4"/><circle cx="87" cy="19" r="3" fill="#ffdeeb"/>
+        ${twinkle(100, 52, 4, '#fff3bf')}${twinkle(22, 24, 3.4, '#ffd6ec')}`;
+      },
       nakanoooe: () => {
         const stone = lg('sz', [[0, '#5c636a'], [0.5, '#343a40'], [1, '#16191c']]), ink = rg('ik', [[0, '#495057'], [0.6, '#0b0c0e'], [1, '#000']], 0.4, 0.35, 0.9);
         return `

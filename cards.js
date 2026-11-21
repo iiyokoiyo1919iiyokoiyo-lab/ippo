@@ -25,6 +25,7 @@ const SKILLS = {
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
   taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
   dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、そのバトル中ずっとわざを使えなくする (交代しても・大化の改新でも戻らない)' },
+  deathsong: { name: '死の歌声─一方的な愛─', desc: '1.2 倍のこうげき。このターンにこのわざを受けた相手が、そのターンのうちに使い手を倒すと、相手の場と控えのカードからランダムで 1 枚を道連れにする' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
@@ -126,7 +127,8 @@ const CARD_LIST = [
   ['star', '星キャンディー', '🍬', 'MR', 'wrap', 80, 19, 13, 13, 'starlight'], // MR: 期間限定クエストのクリア報酬 (ガチャには出ない)
   ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:00 から)。体力と防御が高く、攻撃が低い
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
-  ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'], // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
+  ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'],
+  ['yhime', 'Y', '🎤', 'MR', 'wrap', 84, 17, 12, 14, 'deathsong'], // MR: 高難易度クエスト「Y降臨」のクリア報酬 (2026-11-22 8:00 から)。歌姫にあこがれる歌のへたなマイク。わざ「死の歌声─一方的な愛─」 // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -135,7 +137,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -263,6 +265,7 @@ const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最�
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const SERMON_ATK = 0.6;   // 説教: 相手の攻撃力を 0.6 倍
 const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の状態異常・デバフをすべて取りのぞく
+const DEATHSONG_POWER = 1.2; // 死の歌声─一方的な愛─: 1.2 倍のこうげき + このターンに受けた相手が使い手を倒すと、相手のカードをランダムで 1 枚道連れ
 const DNA_POWER = 1.8; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは、そのバトル中ずっとわざを使えない (わざ封じ。交代しても・大化の改新でも戻らない)
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
 const ITEMS = {
@@ -313,6 +316,7 @@ function resolveTurn(state, acts, rnd) {
     const a = sides[x].cards[sides[x].active].spd, b = sides[y].cards[sides[y].active].spd;
     return b - a || (rnd() < 0.5 ? -1 : 1);
   });
+  const loved = new Map(); // 死の歌声: 歌を受けたカード → 歌ったカード (このターンだけ)
   // opt.target: 相手の何枚目に当てるか (なければ場に出ているカード)。opt.typeless: 相性をかけない (無属性)
   const hit = (p, power, opt = {}) => {
     const me = sides[p].cards[sides[p].active], o = 1 - p;
@@ -324,8 +328,15 @@ function resolveTurn(state, acts, rnd) {
     if (!opt.pierce) dmg = Math.round(dmg * g);
     dmg = Math.min(dmg, foe.hp);
     foe.hp -= dmg;
+    const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
+    if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
+      loved.delete(me);
+      const live = sides[p].cards.map((c, i) => [c, i]).filter(([c]) => c.hp > 0);
+      if (live.length) { const [v, vi] = live[Math.floor(rnd() * live.length)]; v.hp = 0; v.poison = 0;
+        ev.push({ k: 'curse', p, by: foe.name, card: v.name, bench: vi !== sides[p].active }); ev.push({ k: 'ko', p, card: v.name, bench: vi !== sides[p].active }); }
+    }
     return dmg;
   };
   // 行動できなくする わざ (野獣の眼光) を相手より先に使ったら、相手はそのターンもう動けない (こうげき・わざができない。ガードと交代はそのまま)
@@ -371,6 +382,11 @@ function resolveTurn(state, acts, rnd) {
         });
         const meteor = !!sides[p].meteor; if (meteor) { sides[p].meteor = null; }
         ev.push({ k: 'taika', p, card: me.name, fixed, meteor });
+      }
+      else if (me.skill === 'deathsong') { // 死の歌声─一方的な愛─: 1.2 倍のこうげき → 受けた相手に「一方的な愛」の印 (このターンだけ)
+        const o = 1 - p, foe = sides[o].cards[sides[o].active];
+        hit(p, DEATHSONG_POWER);
+        if (foe.hp > 0 && me.hp > 0) { loved.set(foe, me); ev.push({ k: 'deathsong', p, card: me.name, target: foe.name }); }
       }
       else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを、そのバトル中ずっと封じる
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -582,7 +598,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -635,7 +651,7 @@ const QUESTS = [
     text: '夜空から現れた 3 体のキャラクター。勝てば MR「星キャンディー」が仲間になる！',
     tip: '星キャンディーの「スターライトマーチ」は、5 ターンのあいだ毎ターン流星でダメージを与えてきます。相性 (✂️きる は 📄つつむ に強い) を考えてデッキを組もう！',
     enemy: [['star', 2], ['leaf', 3], ['gold', 1]],
-    start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
+    start: Date.parse('2026-11-18T08:00:00+09:00'), end: Date.parse('2026-11-22T03:25:00+09:00') }, // 11/25 8:00 まで → 11/22 3:25 で終わり
   // 高難易度 (hard): 敵は先を読む強い CPU。能力に boost をかける (雷神降臨は 1.1 倍。Lv18 の SSR・MR デッキで勝率 タドコロ入り 23% / なし 13% くらい)
   { id: 'raijin-2026', name: '雷神降臨', boss: '雷神クリりん', emoji: '⚡', reward: 'raijin', bg: 'raijin-night', award: '雷鳴が止んだ…伝説の始まりだ🔥🔥🔥', hard: true, boost: 1.1,
     hint: '敵は全員 ✂️きる → 🪨おもいのタドコロが有利！',
@@ -663,6 +679,15 @@ const QUESTS = [
     enemy: [['nakanoooe', 20], ['scissors', 20], ['raimei', 20]],
     titles: { 1: '大化最速クリア👑', 2: '大化準最速クリア👑' },
     start: Date.parse('2026-11-20T23:30:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 11/21 8:00 開始 → 11/20 23:30 に前倒し (終わりはそのまま)
+  { id: 'y-2026', name: 'Y降臨', boss: 'Y', emoji: '🎤', reward: 'yhime', bg: 'ystage', hard: true, boost: 1.0,
+    award: '歌声がやんだ…伝説の始まりだ🎤🎤🎤',
+    hint: '敵は 📄つつむ 2 体 + ✂️きる 1 体 → ✂️きるが有利 (不死鳥には 🪨おもい)',
+    pr: 'わざ「死の歌声─一方的な愛─」は 1.2 倍のこうげき。でも、このわざを受けたそのターンに Y を倒すと… 場と控えから 1 枚が道連れに！ 敵は先を読む強い CPU。\n敵は つつむ 2 体 (Y・星キャンディー) と きる 1 体 (不死鳥の羽ペン)。✂️きる が有利！',
+    text: '歌姫にあこがれる、歌のへたなマイク「Y」が降臨。わざ「死の歌声─一方的な愛─」を受けたそのターンに倒すと、道連れにされてしまう… 勝てば MR「Y」が仲間になる',
+    tip: '敵は 📄つつむ の Y・星キャンディーと、✂️きる の不死鳥の羽ペン (全員 Lv20)。✂️きる のカードが有利だが、不死鳥には 🪨おもい が効く。Y の「死の歌声」を受けたターンに Y を倒すと、こちらのカードが 1 枚道連れになる。歌を受けたターンはガードでしのいで、次のターンに倒すのがコツ',
+    enemy: [['yhime', 20], ['star', 20], ['phoenix', 20]],
+    titles: { 1: 'Y降臨最速クリア🎤', 2: 'Y降臨準最速クリア🎤' },
+    start: Date.parse('2026-11-22T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)

@@ -2111,6 +2111,15 @@ body.arena-open { overflow: hidden; }
 @keyframes cb-tk-open { 0% { transform: scaleX(0); } 70% { transform: scaleX(1.06); } 100% { transform: scaleX(1); } }
 @keyframes cb-tk-flash { 0% { background: rgba(250, 176, 5, 0); } 15% { background: rgba(250, 176, 5, .35); } 100% { background: rgba(250, 176, 5, 0); } }
 @media (prefers-reduced-motion: reduce) { .cb-taika { animation: none; } .cb-taika * { animation: none !important; } }
+/* 死の歌声─一方的な愛─ (Y): 黒とピンクの音符・ドクロ */
+.cb-dsong { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; align-content: center; gap: 4px; background: radial-gradient(circle, rgba(40, 0, 40, .78), rgba(120, 10, 70, .45) 55%, transparent 75%); animation: cb-tk-flash 1.8s ease both; }
+.cb-dsong b { position: relative; padding: 6px 22px; border-radius: 10px; background: linear-gradient(90deg, #1a0010, #5c0a3a 50%, #1a0010); color: #ff8cc6; font-size: 30px; font-weight: 900; letter-spacing: .12em; border: 2px solid #f06595; box-shadow: 0 0 26px #e64980; animation: cb-tk-open .8s cubic-bezier(.2, 1.4, .4, 1) both; }
+.cb-dsong i { position: relative; font-style: normal; font-weight: 900; color: #fff; -webkit-text-stroke: 5px #5c0a3a; paint-order: stroke fill; font-size: 18px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .25s both; }
+.cb-dsong em { position: relative; font-style: normal; font-weight: 900; color: #fff; background: linear-gradient(90deg, #343a40, #a61e4d); padding: 2px 14px; border-radius: 999px; font-size: 14px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .45s both; }
+.cb-dsong s { position: absolute; left: var(--x); bottom: -30px; text-decoration: none; font-size: 26px; color: #ff8cc6; text-shadow: 0 0 10px #e64980; animation: cb-dsong-up 1.6s ease-out var(--d) both; }
+.cb-dsong.curse b { color: #fff; background: linear-gradient(90deg, #000, #3b0a1a, #000); }
+@keyframes cb-dsong-up { from { transform: translateY(0) rotate(-10deg); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-260px) rotate(14deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cb-dsong { animation: none; } .cb-dsong * { animation: none !important; } }
 /* DNAを取り出す (魔法使いすえつぐ): ピンクの魔法陣とハート */
 .cb-dna { position: absolute; left: 0; right: 0; height: 55%; z-index: 60; pointer-events: none; overflow: hidden; border-radius: 16px; display: grid; place-items: center; align-content: center; gap: 4px; background: radial-gradient(circle at 50% 50%, rgba(255, 105, 180, .55), rgba(190, 75, 219, .25) 45%, transparent 70%); animation: cb-tk-flash 1.7s ease both; }
 .cb-dna::before { content: ''; position: absolute; width: 220px; height: 220px; left: calc(50% - 110px); top: calc(50% - 110px); border-radius: 50%; border: 4px dashed #ff8cc6; box-shadow: 0 0 24px #f783ac, inset 0 0 24px #da77f2; animation: cb-dna-spin 1.7s linear both; }
