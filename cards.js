@@ -528,10 +528,10 @@ CREATE TABLE card_monsters (
 CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
 `;
 // モンスターの評価 → カードのレア度。能力はモンスターの能力に比例 (上限なし。育てるほど強い)。はじめのモンスター (HP280・攻55・防55・速50) が R の平均くらい
-// 突然変異 R 以上のモンスターは「限定級」: 能力は限定キャラ (MONCARD_LIMITED) の平均より下にならず、倍率は限定キャラ (MR・UR) と同じ 1.2
-const MONCARD_FORMULA = 3; // 3: 限定級の下限を STAT_SCALE に合わせた // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
+// 突然変異 R 以上のモンスターは「限定級」: 能力は限定キャラ (MONCARD_LIMITED) の平均の 90% より下にならず、倍率は SSR と同じ 1.12
+const MONCARD_FORMULA = 4; // 3: 限定級の下限を STAT_SCALE に合わせた・4: 限定級を弱く (下限 90%・倍率 1.2 → 1.12) // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
 const MONCARD_SCALE = { hp: 66.6 / 280, atk: 16.2 / 55, def: 11.1 / 55, spd: 10.8 / 50 };
-const MONCARD_LIMITED = ['tadokoro', 'scissors', 'star', 'raijin', 'watermid'], MONCARD_LIMITED_MULT = 1.2;
+const MONCARD_LIMITED = ['tadokoro', 'scissors', 'star', 'raijin', 'watermid'], MONCARD_LIMITED_MULT = 1.12, MONCARD_LIMITED_FLOOR = 0.9;
 const MUT_ORDER = ['N', 'R', 'SR', 'SSR', 'UR', 'MR'];
 const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'MR' }; // Z だけ MR (強さは SSR の平均 × MR の倍率 1.2)
 // 属性 → 相性 (火 > 草 > 水 > 火 が、きる > つつむ > おもい > きる と同じ向きになるように)
@@ -542,7 +542,7 @@ function monCardBase(m) {
   const limited = MUT_ORDER.indexOf(m.mutant) >= 1; // 突然変異 R 以上
   const own = { hp: m.hp * MONCARD_SCALE.hp, atk: Math.max(m.atk, m.mag) * MONCARD_SCALE.atk, def: m.def * MONCARD_SCALE.def, spd: m.spd * MONCARD_SCALE.spd };
   const lim = MONCARD_LIMITED.map((id) => CARD_LIST.find((c) => c[0] === id)).filter(Boolean), lavg = (i) => lim.reduce((a, c) => a + c[i], 0) / lim.length;
-  const floor = { hp: lavg(5) * STAT_SCALE, atk: lavg(6) * STAT_SCALE, def: lavg(7) * STAT_SCALE, spd: lavg(8) };
+  const F = MONCARD_LIMITED_FLOOR, floor = { hp: lavg(5) * STAT_SCALE * F, atk: lavg(6) * STAT_SCALE * F, def: lavg(7) * STAT_SCALE * F, spd: lavg(8) * F };
   const st = (k) => Math.max(1, Math.round(limited ? Math.max(own[k], floor[k]) : own[k]));
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
@@ -701,7 +701,7 @@ function install(app, ctx) {
   const qMonCard = db.prepare('SELECT * FROM card_monsters WHERE id = ?');
   const monCardsOwned = (uid) => db.prepare('SELECT * FROM card_monsters WHERE user_id = ? ORDER BY created_at DESC').all(uid);
   // モンスターのカードの能力 (文房具の statsOf と同じ形)
-  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = Math.max(c.limited ? MONCARD_LIMITED_MULT : 0, c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1)); // MR は rarityMult で 1.2・限定級も 1.2
+  const monCardStats = (c) => { const lv = Math.min(c.level || 1, MAX_LEVEL), m = Math.max(c.limited ? MONCARD_LIMITED_MULT : 0, c.rarity === 'UR' ? UR_MULT : rarityMult(c.rarity)) * (1 + LEVEL_BONUS * (lv - 1)); // MR は rarityMult で 1.2・限定級は 1.12
     return { id: 'm:' + c.id, name: c.name, emoji: '🧬', rarity: c.rarity, type: c.type, skill: c.skill, level: lv, monster: true, limitedLevel: !!c.limited, monsterId: c.monster_id, monRank: c.mon_rank, monType: c.mon_type, updatedAt: c.updated_at,
       maxHp: Math.round(c.hp * m), atk: Math.round(c.atk * m), def: Math.round(c.def * m), spd: c.spd, skillName: SKILLS[c.skill].name, skillDesc: SKILLS[c.skill].desc }; };
   const cardStats = (uid, id, o) => {
