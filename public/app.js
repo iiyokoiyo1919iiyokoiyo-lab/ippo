@@ -3727,6 +3727,7 @@ async function viewBattle(params) {
   const evText = (e) => e.k === 'item' ? (e.item === 'tea' ? `${e.p === you ? 'あなた' : '相手'}は🧋アイスティーを使った！` : `${e.p === you ? 'あなた' : '相手'}は${e.item === 'elixir' ? '💖' : '🧪'}${e.name}を使った！ ${e.card}の HP が ${e.amount} 回復`)
     : e.k === 'flinched' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠ってしまった！💤 (次のターン動けない)` : `${e.p === you ? '' : '相手の'}${e.card}は野獣の眼光に怯んだ！ (次のターン動けない)`)
     : e.k === 'flinch' ? (e.sleep ? `${e.p === you ? '' : '相手の'}${e.card}は眠っていて動けない…💤` : `${e.p === you ? '' : '相手の'}${e.card}は怯んで動けない！`)
+    : e.k === 'dogma' ? `🧬 ${name(e.p, e.card)}のセントラルドグマ！ ${e.healed.map((x) => `${x.card} +${x.amount}`).join('・')} 回復`
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
@@ -3865,6 +3866,7 @@ async function viewBattle(params) {
       else if (e.k === 'item') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, e.item === 'tea' ? '🧋 アイスティー！' : `${e.item === 'elixir' ? '💖' : '🧪'} +${e.amount}`, e.item === 'tea' ? 'skill' : 'heal'); }, t); t += 450; }
       else if (e.k === 'flinched') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, e.sleep ? '💤 眠った！' : '😨 怯み！', 'skill flinch'); }, t); t += 400; }
       else if (e.k === 'flinch') { setTimeout(() => { replay(el(e.p), 'shake'); pop(e.p, '怯んで動けない…', 'tag'); }, t); t += 350; }
+      else if (e.k === 'dogma') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, '🧬 セントラルドグマ 回復', 'heal'); }, t); t += 450; }
       else if (e.k === 'morale') { setTimeout(() => { replay(el(e.p), 'charge'); pop(e.p, '🔥 士気UP！', 'skill morale'); }, t); t += 500; }
       else if (e.k === 'meteor') { setTimeout(() => { replay(el(e.p), 'hurt'); pop(e.p, `🌠-${e.dmg}`, 'dmg met'); }, t); t += 260; }
       else if (e.k === 'poisoned') { setTimeout(() => pop(e.p, '☠️ 毒！', 'skill psn'), t); t += 250; }

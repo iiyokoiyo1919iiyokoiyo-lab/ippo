@@ -29,9 +29,11 @@ const SKILLS = {
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' } };
+// dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
-const CARD_PASSIVE = { tadokoro: 'morale' };
+const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma' };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv15 で +28%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
@@ -397,6 +399,14 @@ function resolveTurn(state, acts, rnd) {
       ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active });
       if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
     });
+  });
+  // 4.4 パッシブ「セントラルドグマ」: 控えで生きているあいだ、味方全員 (生きているカード) の HP を最大 HP の 10% 回復 (控えに何枚いても 1 回だけ)
+  [0, 1].forEach((p) => {
+    const s = sides[p], src = s.cards.find((c, i) => c.passive === 'dogma' && c.hp > 0 && i !== s.active);
+    if (!src) return;
+    const healed = [];
+    s.cards.forEach((c) => { if (c.hp <= 0 || c.hp >= c.maxHp) return; const h = Math.min(c.maxHp - c.hp, Math.max(1, Math.round(c.maxHp * DOGMA_RATE))); c.hp += h; healed.push({ card: c.name, amount: h }); });
+    if (healed.length) ev.push({ k: 'dogma', p, card: src.name, healed });
   });
   // 4.5 パッシブ「士気」: 倒れたカードに士気があれば、生き残っている味方の攻撃・防御が上がる (1 回だけ)
   [0, 1].forEach((p) => {

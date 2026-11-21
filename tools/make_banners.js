@@ -64,18 +64,19 @@ function festHtml(pk, at, right, { stamp = '期間限定' } = {}) {
     </div>
     <div class="badge" style="left:396px;top:438px;width:196px;height:196px;background:radial-gradient(#fff9db,#ffe066 45%,#fab005);color:#c2255c;filter:drop-shadow(0 6px 0 rgba(120,0,60,.3))"><div style="transform:rotate(-8deg)"><div style="font-size:22px">ピックアップ</div><div style="font-size:64px;line-height:1;-webkit-text-stroke:6px #fff;paint-order:stroke fill">${pk.rate.toFixed(1)}<small style="font-size:34px">%</small></div></div></div>
     <div style="position:absolute;left:470px;top:26px;transform:rotate(10deg);padding:6px 16px;border:5px solid #fff;border-radius:14px;color:#fff;font-size:34px;background:linear-gradient(135deg,#ff2e93,#c13dff);box-shadow:0 0 0 4px #ff2e93,0 8px 0 rgba(90,0,80,.35)">${esc(stamp)}</div>
-    <div style="position:absolute;left:610px;top:150px;width:570px;display:grid;gap:12px">${right}</div>
+    <div style="position:absolute;left:610px;top:138px;width:570px;display:grid;gap:10px">${right}</div>
     <div class="date" style="right:26px;bottom:22px;background:linear-gradient(90deg,#fff,#fff0f6);color:#c2255c;border:4px solid #ff5fae;box-shadow:0 0 22px rgba(255,255,255,.8),0 6px 0 rgba(90,0,80,.3)">${esc(fmt(at))}〜 ガチャに登場</div>
   </div>`;
 }
-function festCharRight(c, sk) {
-  const n = [...c.name], cut = c.name.startsWith('魔法使い') ? 4 : Math.ceil(n.length / 2), l1 = n.slice(0, cut).join(''), l2 = n.slice(cut).join('');
+function festCharRight(c, sk, { withSkill = true } = {}) {
+  const ps = withSkill && cards.CARD_PASSIVE[c.id], n = [...c.name], cut = c.name.startsWith('魔法使い') ? 4 : Math.ceil(n.length / 2), l1 = n.slice(0, cut).join(''), l2 = n.slice(cut).join('');
   const big = (t, fs) => `<div style="font-size:${fs}px;line-height:1.08;white-space:nowrap;color:#ff2e93;-webkit-text-stroke:16px #fff;paint-order:stroke fill;text-shadow:0 8px 0 #7b2cbf,0 0 30px rgba(255,255,255,.7)">${esc(t)}</div>`;
   return `<div><span style="display:inline-block;padding:4px 18px;border-radius:999px;background:linear-gradient(90deg,#ffd43b,#ff8cc6,#b197fc,#74c0fc);color:#fff;font-size:30px;-webkit-text-stroke:6px #7b2cbf;paint-order:stroke fill;border:3px solid #fff">✨ ${esc(c.rarity)} ★ ${esc(cards.TYPES?.[c.type]?.name || '')}</span></div>
-    <div>${big(l1, 64)}${big(l2, 104)}</div>
-    <div style="padding:14px 20px;border-radius:24px;background:linear-gradient(135deg,rgba(70,10,110,.78),rgba(160,20,110,.7));border:3px solid #ffb3d9;box-shadow:0 0 24px rgba(255,140,198,.8),inset 0 0 18px rgba(255,255,255,.15);color:#fff">
+    <div>${big(l1, ps ? 52 : 64)}${big(l2, ps ? 84 : 104)}</div>
+    ${withSkill ? `    <div style="padding:${ps ? '10px 18px' : '14px 20px'};border-radius:24px;background:linear-gradient(135deg,rgba(70,10,110,.78),rgba(160,20,110,.7));border:3px solid #ffb3d9;box-shadow:0 0 24px rgba(255,140,198,.8),inset 0 0 18px rgba(255,255,255,.15);color:#fff">
       <div style="font-size:31px;color:#ffe066;text-shadow:0 0 12px rgba(255,224,102,.7)">🧬 わざ「${esc(sk.name)}」</div>
-      <div style="margin-top:4px;font-size:22px;line-height:1.45;font-weight:800">${esc(sk.desc.replace(/\s*\([^()]*\)\s*$/, ''))}</div></div>`;
+      <div style="margin-top:4px;font-size:22px;line-height:1.45;font-weight:800">${esc(sk.desc.replace(/\s*\([^()]*\)\s*$/, ''))}</div>
+      ${cards.CARD_PASSIVE[c.id] ? `<div style="margin-top:6px;font-size:25px;color:#a5f3ff;text-shadow:0 0 12px rgba(165,243,255,.7)">💗 パッシブ「${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].name)}」</div><div style="font-size:20px;line-height:1.35;font-weight:800">${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].desc)}</div>` : ''}</div>` : ''}`;
 }
 // 新キャラ
 function charHtml(id, at) {
@@ -208,7 +209,7 @@ function bulkHtml(g) {
 function gachaHtml(n) {
   const g = gachaInfo(n), pk = g.pickups[0];
   const fp = g.pickups.find((p) => /祭/.test(p.name));
-  if (fp) return festHtml(fp, fp.start, `${festCharRight(fp.card, cards.SKILLS[fp.card.skill]).split('<div style="padding:14px')[0]}
+  if (fp) return festHtml(fp, fp.start, `${festCharRight(fp.card, cards.SKILLS[fp.card.skill], { withSkill: false })}
       ${g.sale ? `<div style="padding:10px 20px;border-radius:22px;background:linear-gradient(135deg,rgba(70,10,110,.8),rgba(160,20,110,.72));border:3px solid #ffe066;box-shadow:0 0 22px rgba(255,224,102,.7);color:#fff">
         <div style="font-size:28px;color:#ffe066">🔥 ${esc(g.sale.name)} <span style="font-size:20px;color:#fff">${esc(fmt(g.sale.end))} まで</span></div>
         <div style="font-size:28px">1回 <s style="opacity:.7">100</s> → <span style="font-size:60px;color:#ffe066;line-height:1">${g.sale.pull}</span>🪙 <span style="font-size:24px;margin-left:6px">10回 <b style="font-size:36px;color:#ffe066">${g.sale.ten}</b></span></div></div>` : ''}
