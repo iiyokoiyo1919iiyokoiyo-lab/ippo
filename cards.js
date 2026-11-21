@@ -679,7 +679,7 @@ const QUESTS = [
     enemy: [['nakanoooe', 20], ['scissors', 20], ['raimei', 20]],
     titles: { 1: '大化最速クリア👑', 2: '大化準最速クリア👑' },
     start: Date.parse('2026-11-20T23:30:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 11/21 8:00 開始 → 11/20 23:30 に前倒し (終わりはそのまま)
-  { id: 'y-2026', name: 'Y降臨', boss: 'Y', emoji: '🎤', reward: 'yhime', bg: 'ystage', hard: true, boost: 1.0,
+  { id: 'y-2026', name: 'Y降臨', boss: 'Y', emoji: '🎤', reward: 'yhime', bg: 'ystage', hard: true, boost: 1.185, // tools/tune_oni.js quest:y-2026 → 1.185 (Lv18 の SSR・MR デッキで勝率 26.5%)
     award: '歌声がやんだ…伝説の始まりだ🎤🎤🎤',
     hint: '敵は 📄つつむ 2 体 + ✂️きる 1 体 → ✂️きるが有利 (不死鳥には 🪨おもい)',
     pr: 'わざ「死の歌声─一方的な愛─」は 1.2 倍のこうげき。でも、このわざを受けたそのターンに Y を倒すと… 場と控えから 1 枚が道連れに！ 敵は先を読む強い CPU。\n敵は つつむ 2 体 (Y・星キャンディー) と きる 1 体 (不死鳥の羽ペン)。✂️きる が有利！',
