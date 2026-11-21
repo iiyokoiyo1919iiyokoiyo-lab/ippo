@@ -46,7 +46,7 @@
   - 変異の能力は保存した能力値に足さず、表示とバトルで計算する (配合で子に渡すのは変異なしの能力)。R 以上の変異で生まれたら市場価値 1000 (`init_score`。種モンの条件には数えない)
   - テストで必ず変異させるときは `MON_MUTATION_FORCE=1` (本番では設定しない)
 - 売却: モンスターの詳細から。値段は強さの 8% + 市場価値の 2% (10〜500 コイン。`monster.js` の `SELL`)。状態を `sold` にしてデータは残す (血統のため。自分の一覧・数・ランキングには出ない)。セリ中・バトル中・最後の 1 体は売れない
-- ぶんバトに連れていく: `cards.js` の表 `card_monsters` (カード ID は `m:`)。評価 → レア度 (`MONCARD_RARITY`: C→N・B→R・A→SR・S/SS→SSR・Z→MR)、属性 → 相性・わざ (`MONCARD_TYPE` / `MONCARD_SKILL`)。能力はモンスターの能力に比例 (上限なし。`MONCARD_SCALE`: はじめのモンスターで R の平均くらい)。突然変異 R 以上は「限定級」(限定キャラ `MONCARD_LIMITED` の平均の 90% (`MONCARD_LIMITED_FLOOR`) より下にならず、倍率 1.12)。計算を変えたら `MONCARD_FORMULA` を上げる (起動時に連れてきたカードを計算し直す)。1 体 1 枚、連れてきたあとも「最新の強さにする」で写し直せる (レベルはそのまま)。絵は `GET /api/cards/mon-art/:id` (サーバーで mon-art.js を動かして SVG)
+- ぶんバトに連れていく: `cards.js` の表 `card_monsters` (カード ID は `m:`)。評価 → レア度 (`MONCARD_RARITY`: C→N・B→R・A→SR・S/SS→SSR・Z→MR)、属性 → 相性・わざ (`MONCARD_TYPE` / `MONCARD_SKILL`)。能力はモンスターの能力に比例 (上限なし。`MONCARD_SCALE`: はじめのモンスターで R の平均くらい)。突然変異 R 以上は「限定級」(恒常の SSR の平均の 95%〜100% にそろえる (`MONCARD_LIMITED_FLOOR` / `MONCARD_LIMITED_CAP`)・倍率は評価にかかわらず 1.12)。計算を変えたら `MONCARD_FORMULA` を上げる (起動時に連れてきたカードを計算し直す)。1 体 1 枚、連れてきたあとも「最新の強さにする」で写し直せる (レベルはそのまま)。絵は `GET /api/cards/mon-art/:id` (サーバーで mon-art.js を動かして SVG)
 - フォルダ: 自分のモンスターをフォルダに分けて整理できる (表 `mon_folders` / `mon_folder_items`。1 体は 1 つのフォルダだけ・入っていなければ「未分類」・20 個まで・名前 12 文字)。ホームのタブで切りかえ、「📁 整理する」でえらんでまとめて移す・詳細画面からも移せる。フォルダを消してもモンスターは消えない (未分類にもどる)。ほかの人には見えない
 - 血統書シェア: モンスターの詳細 → `#pedigree/<id>` で 3 世代の家系図を画像 (1080×1350) にして保存・タイムラインに投稿 (`GET /api/mon/monster/:id/pedigree`。未発見の変異は出さない)
 - セリは 15 分ごと (毎時 5・20・35・50 分。`monster.js` の `PERIOD`。テストは `MON_AUCTION_TEST=1` と `POST /api/mon/auction/test-start`)

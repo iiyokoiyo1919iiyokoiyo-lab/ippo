@@ -3155,7 +3155,7 @@ function cbCard(c, { level = 0, locked = false, small = false, cls = '', attrs =
   if (locked) return `<div class="cb-card locked${small ? ' sm' : ''} ${cls}" ${attrs}><span class="cb-pic cb-silhouette">${CBArt.svg(c.id, 'N')}</span><b>？？？</b><span class="cb-meta">${esc(c.rarity)}</span></div>`;
   return `<div class="cb-card r-${esc(c.rarity)}${small ? ' sm' : ''} ${cls}" style="--rc:${CB_RCOL[c.rarity]}" ${attrs}>
     <span class="cb-rar">${esc(c.rarity)}</span>${level ? `<span class="cb-lv">Lv${Number(level)}</span>` : ''}
-    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}${c.limitedLevel ? '<span class="cb-lim" title="突然変異 R 以上: 限定キャラ級の強さ">限定級</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
+    ${c.horse ? '<span class="cb-horse" title="競走馬版から連れてきた馬">🐴</span>' : c.monster ? '<span class="cb-horse" title="ブリードモンスターズから連れてきたモンスター">🧬</span>' : ''}${c.limitedLevel ? '<span class="cb-lim" title="突然変異 R 以上: 恒常の SSR くらいの強さ">限定級</span>' : ''}<span class="cb-pic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span><b>${esc(c.name)}</b>
     <span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · ${esc(skillName)}</span>
     ${small ? '' : `<span class="cb-stats"><i>HP ${sv(c.maxHp)}</i><i>攻 ${sv(c.atk)}</i><i>防 ${sv(c.def)}</i><i>速 ${Number(c.spd)}</i></span>`}
   </div>`;
