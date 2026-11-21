@@ -2884,7 +2884,9 @@ window.addEventListener('message', (e) => {
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'exit') location.hash = '#/games';
 });
 // 宝探し (/games/treasure/ を iframe で開く。シティバトルと同じく画面いっぱい)
-function viewTreasure() {
+async function viewTreasure() {
+  let st = null; try { st = await api('/treasure/status', { noAuthPrompt: true }); } catch {}
+  if (st?.maint && !st.admin) { main.innerHTML = pageHead({ title: '宝探し', sub: 'ミニゲーム', back: '#/games' }) + `<div class="content">${emptyState({ icon: 'sparkle', title: '🛠️ ただいまメンテナンス中です', text: 'もうしばらくお待ちください' })}</div>`; return; } // メンテ中 (管理者は遊べる)
   main.innerHTML = pageHead({ title: '宝探し', sub: 'ミニゲーム · キャンパスの宝箱をみんなで探す', back: '#/games' }) + `<div class="horse-wrap"></div>`;
   $('#treasure-frame')?.remove();
   const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'treasure-frame'; frame.src = '/games/treasure/'; frame.title = '宝探し'; frame.allow = 'fullscreen';
@@ -2947,7 +2949,7 @@ function viewGames() {
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/treasure">
       <span class="game-card-art mb-art" aria-hidden="true">🗝️</span>
-      <span class="game-card-body"><b>宝探し <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>コンクリートの校舎がならぶキャンパスに、宝箱が 12 個。みんなで早いもの勝ちで探そう (戦いなし)</span>
+      <span class="game-card-body"><b>宝探し <span class="chip" style="font-size:10px">🛠️ メンテ中</span></b><span>コンクリートの校舎がならぶキャンパスに、宝箱が 12 個。みんなで早いもの勝ちで探そう (戦いなし)</span>
         <span class="chip chip-accent">🗝️ 3D・オンライン</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/arena">
       <span class="game-card-art mb-art" aria-hidden="true">🏙️</span>

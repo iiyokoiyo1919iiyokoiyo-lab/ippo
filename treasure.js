@@ -11,6 +11,8 @@ const { WebSocketServer } = require('ws');
 const A = require('./public/games/arena/arena-map.js');
 const Campus = require('./public/games/treasure/campus-map.js');
 
+// メンテナンス中: 管理者のほかは遊べない (環境変数 TREASURE_MAINT=0 で解除)
+const MAINT = process.env.TREASURE_MAINT !== '0';
 const MAX = 20, TICK_MS = 100, ROUND_MS = 4 * 60 * 1000, REST_MS = 12000, COUNT = 12, GRAB = 1.6, SEE = 22, MAX_SPEED = 9.5;
 const KINDS = { bronze: { pts: 1, name: '宝箱', p: 0.6 }, silver: { pts: 2, name: '銀の宝箱', p: 0.3 }, rainbow: { pts: 5, name: '虹の宝箱', p: 0.1 } };
 const COLORS = ['#ff6b6b', '#4dabf7', '#ffd43b', '#69db7c', '#da77f2', '#ff922b', '#3bc9db', '#f783ac', '#a9e34b', '#748ffc'];
@@ -89,7 +91,9 @@ module.exports = function install(app, ctx) {
   const startLoop = () => { if (!loop) loop = setInterval(tick, TICK_MS); };
   const stopLoop = () => { if (loop && !players.size) { clearInterval(loop); loop = null; round = null; } };
 
+  const isAdmin = (u) => !!(ctx.isAdmin && ctx.isAdmin(u));
   wss.on('connection', (ws, req, user) => {
+    if (MAINT && !isAdmin(user)) { ws.send(JSON.stringify({ t: 'maint' })); return ws.close(4003, 'maintenance'); } // メンテ中
     for (const p of players.values()) if (p.uid === user.id) { try { p.ws.close(4000, 'other-tab'); } catch {} }
     if ([...players.values()].filter((p) => p.uid !== user.id).length >= MAX) { ws.send(JSON.stringify({ t: 'full' })); return ws.close(); }
     const sp = map.spawns[crypto.randomInt(0, map.spawns.length)];
@@ -114,6 +118,6 @@ module.exports = function install(app, ctx) {
   });
   ctx.treasureUpgrade = (req, socket, head, user) => wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
   app.get('/api/treasure/ranking', (req, res) => res.json({ ranking: top(20) }));
-  app.get('/api/treasure/status', (req, res) => res.json({ players: players.size, max: MAX }));
+  app.get('/api/treasure/status', (req, res) => res.json({ players: players.size, max: MAX, maint: MAINT, admin: isAdmin(req.user) }));
   ctx.treasureDebug = { players, get round() { return round; }, map };
 };

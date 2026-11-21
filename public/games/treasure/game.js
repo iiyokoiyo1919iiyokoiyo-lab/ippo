@@ -170,7 +170,7 @@ if (parent !== window) { const b = document.createElement('button'); b.id = 'exi
 
 // ---------- 状態・通信 ----------
 const me = { x: 0, y: 0, z: 0, vy: 0, yaw: Math.PI, pitch: -0.15, onGround: true, score: 0 };
-let ws = null, you = null, playing = false, lastSend = 0, round = null, kinds = {}, heat = null, myModel = null;
+let maint = false, ws = null, you = null, playing = false, lastSend = 0, round = null, kinds = {}, heat = null, myModel = null;
 const names = new Map(); // sid → { name, color, score }
 const E = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
 function feed(text, mine) { const d = E('div', mine ? 'me' : '', text); const f = $('#feed'); f.prepend(d); while (f.children.length > 5) f.lastChild.remove(); setTimeout(() => d.remove(), 6000); }
@@ -205,6 +205,7 @@ function connect() {
       renderStats(m.stats, m.top); renderInfo(); renderHeat();
       const b = $('#start'); b.disabled = false; b.textContent = 'さがしに行く！'; $('#status').textContent = `いま ${m.players.length} 人がさがしています`;
     } else if (m.t === 'full') $('#status').textContent = '満員です。少し待ってからもう一度どうぞ';
+    else if (m.t === 'maint') { maint = true; $('#status').textContent = '🛠️ ただいまメンテナンス中です。もうしばらくお待ちください'; const b = $('#start'); b.disabled = true; b.textContent = 'メンテナンス中'; }
     else if (m.t === 'join') { addPlayer(m.p); if (m.p.sid !== you) feed(`${m.p.name} が来た`); renderInfo(); }
     else if (m.t === 'leave') { const o = others.get(m.sid); if (o) { scene.remove(o.g); others.delete(m.sid); } names.delete(m.sid); renderInfo(); }
     else if (m.t === 'round') { round = { id: m.id, end: m.end, rest: 0, count: m.count, left: m.count }; clearChests(); for (const s of names.values()) s.score = 0; $('#over').classList.add('hide'); pop('🗝️ ラウンド開始！ 宝箱が 12 個かくれた'); renderInfo(); }
@@ -222,6 +223,7 @@ function connect() {
     } else if (m.t === 'fix') Object.assign(me, { x: m.x, y: m.y, z: m.z });
   };
   ws.onclose = (e) => {
+    if (maint || e.code === 4003) return; // メンテ中はつなぎ直さない
     if (e.code === 4000) { $('#center').classList.remove('hide'); $('#status').textContent = 'ほかの画面で開きました'; playing = false; return; }
     if (e.code === 1006 && !you) { $('#status').textContent = 'ログインすると遊べます'; const b = $('#start'); b.disabled = false; b.textContent = 'ログインする'; b.onclick = () => parent.postMessage({ source: 'ippo-treasure', type: 'login' }, location.origin); return; }
     you = null; $('#status').textContent = '接続が切れました。つなぎ直しています…'; setTimeout(connect, 1500);
