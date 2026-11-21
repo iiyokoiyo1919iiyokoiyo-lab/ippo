@@ -24,7 +24,7 @@ const SKILLS = {
   venom: { name: '野獣の眼光', desc: '相手の場のカードを毒 (毎ターン最大 HP の 8%・3 ターン) にして、次のターン怯ませる (こうげき・わざ・ガードができない)' },
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
   taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
-  dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、次の 2 ターンわざを使えなくする (かけ直すと 2 ターンにもどる)' },
+  dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、そのバトル中ずっとわざを使えなくする (交代しても・大化の改新でも戻らない)' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
@@ -254,7 +254,7 @@ const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最�
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const SERMON_ATK = 0.6;   // 説教: 相手の攻撃力を 0.6 倍
 const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の状態異常・デバフをすべて取りのぞく
-const DNA_POWER = 1.8, DNA_TURNS = 2; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは次の 2 ターンわざを使えない (わざ封じ)
+const DNA_POWER = 1.8; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは、そのバトル中ずっとわざを使えない (わざ封じ。交代しても・大化の改新でも戻らない)
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
 const ITEMS = {
   potion: { name: '回復薬', emoji: '🧪', price: 300, desc: '場のカードの HP を最大 HP の 30% 回復' },
@@ -354,16 +354,15 @@ function resolveTurn(state, acts, rnd) {
           if (c.poison > 0) { c.poison = 0; got.push('毒'); }
           if (c.flinch) { c.flinch = 0; got.push(c.sleep ? '眠り' : '怯み'); } c.sleep = false;
           if (c.scolded) { c.atk = Math.round(c.atk / SERMON_ATK); c.scolded = false; got.push('攻撃ダウン'); } // 説教の分をもどす (また説教されることはある)
-          if (c.sealed > 0) { c.sealed = 0; got.push('わざ封じ'); }
           if (got.length) fixed.push({ card: c.name, what: got });
         });
         const meteor = !!sides[p].meteor; if (meteor) { sides[p].meteor = null; }
         ev.push({ k: 'taika', p, card: me.name, fixed, meteor });
       }
-      else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを封じる (次の 2 ターン)
+      else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを、そのバトル中ずっと封じる
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         hit(p, DNA_POWER);
-        if (foe.hp > 0) { foe.sealed = DNA_TURNS + 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, turns: DNA_TURNS }); } // このターンの終わりに 1 つ減るので +1
+        if (foe.hp > 0) { const again = foe.sealed > 0; foe.sealed = 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, again }); }
       }
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして、次のターン怯ませる (ダメージはなし)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -412,7 +411,7 @@ function resolveTurn(state, acts, rnd) {
   // 5. わざの待ち時間を減らし、倒れたカードは次のカードに交代
   [0, 1].forEach((p) => {
     const s = sides[p];
-    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; if (!c.flinch) c.sleep = false; if (c.sealed > 0) c.sealed--; });
+    s.cards.forEach((c) => { if (c.cd > 0 && !usedSkill.has(c)) c.cd--; if (c.flinch > 0) c.flinch--; if (!c.flinch) c.sleep = false; });
     if (s.cards[s.active].hp <= 0) { const next = s.cards.findIndex((c) => c.hp > 0); if (next >= 0) { s.active = next; ev.push({ k: 'switch', p, card: s.cards[next].name, forced: true }); } }
   });
   state.turn++;
