@@ -6,32 +6,21 @@
 //   ・見た目: 打ちっぱなしのコンクリート (型枠の線・小さな穴)・ガラスの校舎・赤いテント・砂のグラウンド・クスノキ
 // =====================================================================
 import * as THREE from '../arena/vendor/three.module.min.js';
-import { Sky } from '../arena/vendor/jsm/objects/Sky.js';
+import { createLook } from './look.js?v=3';
 const A = window.ArenaMap, map = window.CampusMap.build();
 const $ = (s) => document.querySelector(s);
 const isTouch = matchMedia('(pointer: coarse)').matches;
 if (isTouch) document.body.classList.add('is-touch');
 $('#howto').textContent = isTouch ? '画面の左側を触ってスティックで移動・右側をなぞって見回す・「ジャンプ」' : 'WASD で移動・マウスで見回す (クリックで固定)・Space ジャンプ・Shift ダッシュ';
 
-// ---------- 描画 ----------
-const canvas = $('#c'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.5;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(70, 1, 0.1, 600);
-scene.fog = new THREE.Fog('#c3d6e8', 110, 300);
-const sky = new Sky(); sky.scale.setScalar(500); scene.add(sky);
-const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - 55), THREE.MathUtils.degToRad(150));
-Object.assign(sky.material.uniforms.turbidity, { value: 2 }); sky.material.uniforms.rayleigh.value = 1.2; sky.material.uniforms.sunPosition.value.copy(sunDir);
-{ const pm = new THREE.PMREMGenerator(renderer), env = new THREE.Scene(), s2 = new Sky(); s2.scale.setScalar(500); for (const k of ['turbidity', 'rayleigh']) s2.material.uniforms[k].value = sky.material.uniforms[k].value; s2.material.uniforms.sunPosition.value.copy(sunDir); env.add(s2); scene.environment = pm.fromScene(env, 0.02).texture; }
-const sun = new THREE.DirectionalLight('#fff4e0', 2.4); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
-scene.add(sun, sun.target, new THREE.HemisphereLight('#cfe3ff', '#8a7a62', 0.55));
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.fov = innerWidth < innerHeight ? 80 : 70; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
+// ---------- 描画 (光・空・仕上げは look.js: シティバトルの最高画質と同じしくみ) ----------
+const canvas = $('#c'), LOOK = createLook({ canvas, isTouch }), { renderer, scene, camera, sun } = LOOK;
+addEventListener('resize', LOOK.resize); LOOK.resize();
 
 // ---------- 質感 (絵はプログラムで描く) ----------
 let seed = 7; const R = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 const cv = (w, h = w) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-const tex = (c, rep = true) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t; };
+const tex = (c, rep = true) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = LOOK.ANISO; return t; };
 const speck = (g, w, h, n, cols, a = 0.5, s = 1.6) => { for (let i = 0; i < n; i++) { g.globalAlpha = a * (0.4 + R() * 0.6); g.fillStyle = cols[(R() * cols.length) | 0]; g.fillRect(R() * w, R() * h, s, s); } g.globalAlpha = 1; };
 // 打ちっぱなしのコンクリート: 1 枚 = 1.8m × 0.9m の型枠。継ぎ目の線と 6 つの小さな穴・雨のしみ
 function concreteTex(tone = 168) {
@@ -42,20 +31,20 @@ function concreteTex(tone = 168) {
   g.fillStyle = 'rgba(70,68,66,.7)'; for (const x of [32, 128, 224]) for (const y of [32, 96]) { g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
   const t = tex(c); return t;
 }
-const concrete = (rep, tone) => { const t = concreteTex(tone); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.92 }); };
+const concrete = (rep, tone) => { const t = concreteTex(tone); return new THREE.MeshStandardMaterial({ map: t, normalMap: LOOK.normalMap(t.image, 2.2), normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.9, envMapIntensity: 0.6 }); };
 const CON = concrete(), CON_D = concrete(0, 145);
 // 小さな窓が並ぶ塔の壁 (1 枚 = 1 階 3m × 幅 6m)
 const towerMat = (() => { const c = cv(256, 128), g = c.getContext('2d'); g.drawImage(concreteTex(170).image, 0, 0);
   for (let i = 0; i < 6; i++) { const x = 20 + i * 38; g.fillStyle = '#e9ecef'; g.fillRect(x - 2, 46, 24, 24); g.fillStyle = '#5b7a96'; g.fillRect(x, 48, 20, 20); g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(x, 48, 8, 20); }
-  g.fillStyle = 'rgba(60,58,55,.35)'; g.fillRect(0, 100, 256, 6); return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 0.9 }); })();
+  g.fillStyle = 'rgba(60,58,55,.35)'; g.fillRect(0, 100, 256, 6); return new THREE.MeshStandardMaterial({ map: tex(c), normalMap: LOOK.normalMap(c, 2), normalScale: new THREE.Vector2(0.7, 0.7), roughness: 0.88, envMapIntensity: 0.6 }); })();
 // ガラスの校舎: 床の帯 (コンクリート) と縦の桟・青緑のガラス (1 枚 = 1 階 3.6m × 4m)
 const glassMat = (() => { const c = cv(128, 128), g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 40, 128); gr.addColorStop(0, '#9cc3cf'); gr.addColorStop(0.6, '#4f7b8c'); gr.addColorStop(1, '#2d4a58'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
   g.fillStyle = 'rgba(255,255,255,.18)'; g.beginPath(); g.moveTo(0, 90); g.lineTo(50, 0); g.lineTo(70, 0); g.lineTo(0, 128); g.fill();
   g.fillStyle = '#d6d3cc'; g.fillRect(0, 0, 128, 18); g.fillStyle = '#8f8b84'; for (const x of [0, 42, 84, 124]) g.fillRect(x, 18, 4, 110);
-  return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 0.15, metalness: 0.4, envMapIntensity: 1.3 }); })();
+  return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 0.08, metalness: 0.55, envMapIntensity: 1.8 }); })();
 const glassWall = new THREE.MeshStandardMaterial({ color: '#a9d0dc', roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.32, envMapIntensity: 1.5, depthWrite: false });
-const sandMat = (() => { const c = cv(256), g = c.getContext('2d'); g.fillStyle = '#c4b088'; g.fillRect(0, 0, 256, 256); speck(g, 256, 256, 9000, ['#b09c74', '#d4c3a0', '#a08c66', '#dccdaa'], 0.6, 1.4); return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 1 }); })();
-const paveMat = (() => { const c = cv(256), g = c.getContext('2d'); g.fillStyle = '#9c9a94'; g.fillRect(0, 0, 256, 256); speck(g, 256, 256, 6000, ['#8a8882', '#b0aea8', '#76746f'], 0.5); g.strokeStyle = 'rgba(80,78,74,.4)'; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, 256); g.moveTo(0, i * 64); g.lineTo(256, i * 64); g.stroke(); } return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 0.95 }); })();
+const sandMat = (() => { const c = cv(256), g = c.getContext('2d'); g.fillStyle = '#c4b088'; g.fillRect(0, 0, 256, 256); speck(g, 256, 256, 9000, ['#b09c74', '#d4c3a0', '#a08c66', '#dccdaa'], 0.6, 1.4); for (let i = 0; i < 40; i++) { g.strokeStyle = 'rgba(120,100,70,.18)'; g.lineWidth = 2; g.beginPath(); const x = R() * 256, y = R() * 256; g.moveTo(x, y); g.quadraticCurveTo(x + 20, y + (R() - 0.5) * 10, x + 40, y + (R() - 0.5) * 6); g.stroke(); } return new THREE.MeshStandardMaterial({ map: tex(c), normalMap: LOOK.normalMap(c, 3), roughness: 1, envMapIntensity: 0.4 }); })();
+const paveMat = (() => { const c = cv(256), g = c.getContext('2d'); g.fillStyle = '#9c9a94'; g.fillRect(0, 0, 256, 256); speck(g, 256, 256, 6000, ['#8a8882', '#b0aea8', '#76746f'], 0.5); g.strokeStyle = 'rgba(80,78,74,.4)'; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, 256); g.moveTo(0, i * 64); g.lineTo(256, i * 64); g.stroke(); } return new THREE.MeshStandardMaterial({ map: tex(c), normalMap: LOOK.normalMap(c, 2.5), roughness: 0.9, envMapIntensity: 0.5 }); })();
 const grassMat = (() => { const c = cv(256), g = c.getContext('2d'); g.fillStyle = '#5e8a3a'; g.fillRect(0, 0, 256, 256); speck(g, 256, 256, 9000, ['#6e9c45', '#4f7a2f', '#86b155'], 0.6, 2); return new THREE.MeshStandardMaterial({ map: tex(c), roughness: 1 }); })();
 const wood = new THREE.MeshStandardMaterial({ color: '#9c6b3f', roughness: 0.8 }), red = new THREE.MeshStandardMaterial({ color: '#d6282f', roughness: 0.6, side: THREE.DoubleSide }), white = new THREE.MeshStandardMaterial({ color: '#f1f3f5', roughness: 0.5 }), roofMat = new THREE.MeshStandardMaterial({ color: '#5f6368', roughness: 0.55, metalness: 0.4 });
 const books = (() => { const c = cv(256, 64), g = c.getContext('2d'); g.fillStyle = '#6b4a2b'; g.fillRect(0, 0, 256, 64); for (let x = 2; x < 256; x += 6 + R() * 5) { g.fillStyle = ['#c92a2a', '#1864ab', '#2b8a3e', '#e67700', '#5f3dc4', '#f1f3f5'][(R() * 6) | 0]; g.fillRect(x, 6 + R() * 8, 5, 50); } return new THREE.MeshStandardMaterial({ map: tex(c, false), roughness: 0.8 }); })();
@@ -117,6 +106,7 @@ for (const c of map.deco.clocks) { const cc = cv(128), g = cc.getContext('2d'); 
     for (let k = 0; k < 8; k++) { const f = put(new THREE.ConeGeometry(0.5, 3.6, 4), new THREE.MeshStandardMaterial({ color: '#3f7a2a', roughness: 0.8, flatShading: true }), x, 7, z); const a = k / 8 * Math.PI * 2; f.rotation.set(Math.PI / 2 + 0.5, 0, a); f.position.set(x + Math.sin(a) * 1.4, 6.6, z + Math.cos(a) * 1.4); f.rotation.y = a; f.rotation.order = 'YXZ'; f.rotation.x = 1.9; } }
 }
 
+LOOK.captureEnv(new THREE.Vector3(-5, 7, -5)); // キャンパスの景色をガラスや床に映す (1 回だけ)
 // ---------- 宝箱 (近いものだけ。光の柱つき) ----------
 const KCOL = { bronze: ['#b5651d', '#ffd43b'], silver: ['#adb5bd', '#e7f5ff'], rainbow: ['#be4bdb', '#fff'] };
 const chests = new Map();
@@ -273,10 +263,13 @@ function frame() {
   for (const o of others.values()) { const gp = o.g.position; if (!o.seen) { gp.set(o.tx, o.ty, o.tz); o.seen = true; } const mv = Math.hypot(o.tx - gp.x, o.tz - gp.z) > 0.02; gp.x += (o.tx - gp.x) * k; gp.y += (o.ty - gp.y) * k; gp.z += (o.tz - gp.z) * k; let dy = o.tyaw - o.g.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.g.rotation.y += dy * k; animPerson(o, dt, mv); }
   for (const c of chests.values()) { c.g.rotation.y += dt * 0.8; c.g.position.y = Math.sin(now / 400) * 0.06; c.beam.material.opacity = 0.16 + Math.sin(now / 300) * 0.06; }
   if (round && !round.rest) { const s = Math.max(0, Math.ceil((round.end - Date.now()) / 1000)); $('#timer').textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; } else $('#timer').textContent = '⏳ 休けい中';
-  const sx = Math.round(me.x / 4) * 4, sz = Math.round(me.z / 4) * 4; sun.target.position.set(sx, 0, sz); sun.position.set(sx + sunDir.x * 80, sunDir.y * 80, sz + sunDir.z * 80);
+  LOOK.follow(me.x, me.z); // 影は自分のまわり
   if (window.__cam) { camera.position.set(...window.__cam.pos); camera.lookAt(...window.__cam.at); } // 確認用 (#debug のテストだけ)
-  renderer.render(scene, camera);
+  LOOK.render(now);
   requestAnimationFrame(frame);
 }
-if (location.hash === '#debug') window.__tr = { me, camera, chests, others, get round() { return round; } };
+if (location.hash === '#debug') window.__tr = { me, camera, chests, others, LOOK, THREE, get round() { return round; } };
+{ const sel = document.createElement('select'); sel.style.cssText = 'margin-top:10px;font:inherit;padding:4px 8px;border-radius:8px'; sel.setAttribute('aria-label', '画質');
+  for (const q of LOOK.qualities) { const o = document.createElement('option'); o.value = q; o.textContent = `画質: ${LOOK.QN[q]}`; if (q === LOOK.quality) o.selected = true; sel.append(o); }
+  sel.onchange = () => LOOK.setQuality(sel.value); $('#center > div').append(document.createElement('br'), sel); }
 connect(); requestAnimationFrame(frame);
