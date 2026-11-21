@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>宝探し</title>
+<style>
+:root{--hud:rgba(10,16,30,.55);--accent:#ffd43b;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#9fc5e8;color:#fff;font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud{position:fixed;pointer-events:none;z-index:5}
+#info{left:10px;top:calc(10px + env(safe-area-inset-top));background:var(--hud);border-radius:12px;padding:6px 10px;font-size:12px;min-width:160px}
+#info b{display:block;font-size:14px}#info .me{color:var(--accent);font-weight:900}#info div{display:flex;justify-content:space-between;gap:10px}
+#timer{left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);background:var(--hud);border-radius:999px;padding:4px 14px;font-weight:900;font-size:15px}
+#heat{left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);border-radius:999px;padding:8px 18px;font-weight:900;font-size:17px;background:var(--hud);border:3px solid var(--hc,#74c0fc);text-shadow:0 2px 0 #000;transition:border-color .3s}
+#heat small{font-size:12px;opacity:.85;margin-left:6px}
+#feed{right:10px;top:calc(56px + env(safe-area-inset-top));display:grid;gap:4px;justify-items:end;max-width:64vw}
+#feed div{background:var(--hud);border-radius:8px;padding:3px 9px;font-size:12px;font-weight:700;animation:fin .25s ease-out}#feed .me{background:rgba(255,212,59,.4)}
+@keyframes fin{from{transform:translateX(30px);opacity:0}}
+.pop{position:fixed;z-index:20;left:50%;top:36%;transform:translateX(-50%);font-weight:900;font-size:26px;color:#ffe066;text-shadow:0 3px 0 #000,0 0 14px rgba(0,0,0,.5);pointer-events:none;animation:pop 1.6s ease-out both;text-align:center}
+.pop.rainbow{background:linear-gradient(90deg,#ff6b6b,#ffd43b,#69db7c,#4dabf7,#da77f2);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1px #fff}
+@keyframes pop{0%{opacity:0;transform:translate(-50%,16px) scale(.7)}15%{opacity:1;transform:translate(-50%,0) scale(1.15)}25%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-30px)}}
+#center,#over{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:rgba(10,20,40,.6);text-align:center;padding:20px;overflow:auto}
+#center.hide,#over.hide{display:none}
+#center h1{margin:0 0 4px;font-size:34px;background:linear-gradient(180deg,#fff,#ffd43b 60%,#ff922b);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #000)}
+#center p,#over p{margin:6px 0;font-size:14px;line-height:1.6}
+.btn{border:0;border-radius:14px;padding:12px 26px;font:inherit;font-weight:900;font-size:18px;background:linear-gradient(135deg,#ffe066,#fab005);color:#3b1d00;box-shadow:0 4px 0 rgba(140,80,0,.5);cursor:pointer;pointer-events:auto}
+.card{width:min(360px,100%);margin:8px auto;background:rgba(255,255,255,.1);border-radius:14px;padding:8px 12px;text-align:left;font-size:13px}
+.card b{display:block;margin-bottom:4px}.row{display:flex;gap:6px;padding:1px 0}.row span:first-child{width:22px;opacity:.7;text-align:right}.row span:nth-child(2){flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hud-btn{position:fixed;z-index:31;top:calc(8px + env(safe-area-inset-top));border:0;border-radius:999px;background:var(--hud);color:#fff;font-size:17px;width:40px;height:40px;cursor:pointer}
+#exitbtn{right:10px;font-weight:900}
+body:not(.is-touch) .touch{display:none!important}
+#stick{position:fixed;left:18px;bottom:calc(80px + env(safe-area-inset-bottom));width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.3);z-index:8}
+#stick:not(.float){opacity:.55}#stick i{position:absolute;left:46px;top:46px;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.5)}
+#jump{position:fixed;right:24px;bottom:calc(90px + env(safe-area-inset-bottom));width:90px;height:90px;border-radius:50%;border:2px solid rgba(255,255,255,.4);background:rgba(255,212,59,.45);color:#fff;font-weight:900;font-size:16px;display:grid;place-items:center;z-index:8}
+@media (prefers-reduced-motion:reduce){.pop,#feed div{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud" id="info"></div>
+<div class="hud" id="timer"></div>
+<div class="hud" id="heat">🔍 さがそう</div>
+<div class="hud" id="feed"></div>
+<div class="touch" id="stick"><i></i></div>
+<div class="touch" id="jump">ジャンプ</div>
+<div id="over" class="hide"><div id="overbox"></div></div>
+<div id="center"><div>
+  <h1>🗝️ 宝探し</h1>
+  <p>キャンパスのどこかに <b>宝箱が 12 個</b>。みんなで早いもの勝ち！<br>近づくと画面の下のヒントが「あつい🔥」に変わる。4 分で 1 ラウンド</p>
+  <p id="howto"></p>
+  <p id="status" style="color:var(--accent)"></p>
+  <div id="mystats"></div>
+  <button class="btn" id="start" disabled>じゅんび中…</button>
+</div></div>
+<script src="../arena/arena-map.js?v=5"></script>
+<script src="campus-map.js?v=1"></script>
+<script type="module" src="game.js?v=2"></script>
+</body>
+</html>

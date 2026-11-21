@@ -2605,6 +2605,7 @@ function route() {
   if (h === '/horse') { setActiveNav('games'); return viewHorse(); }
   if (h === '/monster') { setActiveNav('games'); return viewMonster(); }
   if (h === '/arena') { setActiveNav('games'); return viewArena(); }
+  if (h === '/treasure') { setActiveNav('games'); return viewTreasure(); }
   if (h === '/horse/race') { setActiveNav('games'); return viewRace(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
@@ -2882,6 +2883,20 @@ window.addEventListener('message', (e) => {
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'login') openAuth();
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'exit') location.hash = '#/games';
 });
+// 宝探し (/games/treasure/ を iframe で開く。シティバトルと同じく画面いっぱい)
+function viewTreasure() {
+  main.innerHTML = pageHead({ title: '宝探し', sub: 'ミニゲーム · キャンパスの宝箱をみんなで探す', back: '#/games' }) + `<div class="horse-wrap"></div>`;
+  $('#treasure-frame')?.remove();
+  const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'treasure-frame'; frame.src = '/games/treasure/'; frame.title = '宝探し'; frame.allow = 'fullscreen';
+  document.body.append(frame); document.body.classList.add('arena-open'); window.scrollTo(0, 0);
+  viewCleanup = () => { frame.remove(); document.body.classList.remove('arena-open'); };
+}
+window.addEventListener('message', (e) => {
+  const tf = $('#treasure-frame');
+  if (!tf || e.source !== tf.contentWindow || e.origin !== location.origin) return;
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-treasure' && e.data.type === 'login') openAuth();
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-treasure' && e.data.type === 'exit') location.hash = '#/games';
+});
 // ブリードモンスターズ (/games/monster/ を iframe で開く。競走馬版と同じ形)
 async function viewMonster() {
   let ok = false; try { ok = (await api('/mon/access', { noAuthPrompt: true })).ok; } catch {}
@@ -2930,6 +2945,10 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card game-card-new" href="#/treasure">
+      <span class="game-card-art mb-art" aria-hidden="true">🗝️</span>
+      <span class="game-card-body"><b>宝探し <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>コンクリートの校舎がならぶキャンパスに、宝箱が 12 個。みんなで早いもの勝ちで探そう (戦いなし)</span>
+        <span class="chip chip-accent">🗝️ 3D・オンライン</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/arena">
       <span class="game-card-art mb-art" aria-hidden="true">🏙️</span>
       <span class="game-card-body"><b>シティバトル <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>街を舞台にした 3D の撃ち合い。みんなとオンラインで、たおした数をきそおう (人が少ないときはボットも参加)</span>
