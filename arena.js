@@ -15,6 +15,7 @@ const { NpcSystem } = require('./arena-npc');
 const { Traffic } = require('./arena-traffic');
 const { Incidents, GRID } = require('./arena-incidents');
 const { Services } = require('./arena-services');
+const Rank = require('./arena-rank');
 
 const MAX_HUMANS = 16, TICK_MS = 50, RESPAWN_MS = 3000, PROTECT_MS = 2000, HP = 100;
 const FIRE_MS = 130, RANGE = 90, DMG = { body: 22, head: 45 }, BOT_DMG = { body: 12, head: 24 };
@@ -47,7 +48,31 @@ module.exports = function install(app, ctx) {
   const pubCfg = () => ({ ...cfg });
   const nameOf = (uid) => { const u = db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(uid); return u ? String(u.display_name || u.username).slice(0, 20) : '???'; };
   const humans = () => [...players.values()].filter((p) => !p.bot);
-  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths, w: p.w || 'rifle', car: p.car || 0, cash: p.cash || 0 });
+  const pub = (p) => ({ sid: p.sid, name: p.name, color: p.color, bot: !!p.bot, kills: p.kills, deaths: p.deaths, w: p.w || 'rifle', car: p.car || 0, cash: p.cash || 0, rk: p.stats ? Rank.brief(Rank.rankOf(p.stats.xp)) : null });
+  // ---------- プレイヤーランク (arena-rank.js) ----------
+  const ranks = Rank.install(db);
+  // 経験値をあげる (人間だけ)。ランクが上がったら本人に知らせて、みんなのキルログにも出す
+  function gainXp(p, xp, why) {
+    if (!p || p.bot || !p.stats || xp <= 0) return;
+    const before = Rank.rankOf(p.stats.xp).i;
+    p.stats.xp += Math.round(xp); ranks.save(p.stats);
+    const r = Rank.rankOf(p.stats.xp);
+    send(p, { t: 'xp', xp: Math.round(xp), why, me: Rank.view(p.stats) });
+    if (r.i > before) all({ t: 'rankup', sid: p.sid, name: p.name, rank: Rank.brief(r) });
+  }
+  // 倒したときの記録と経験値 (人間・ボット)。通行人では呼ばない
+  function onKill(p, q, { head, melee }) {
+    if (p.stats && !p.bot) {
+      p.streak = (p.streak || 0) + 1;
+      if (q.bot) p.stats.bot_kills++; else { p.stats.kills++; if (head) p.stats.headshots++; }
+      p.stats.best_streak = Math.max(p.stats.best_streak, p.streak);
+      let xp = q.bot ? Rank.XP.bot : Rank.XP.kill + (head ? Rank.XP.head : 0) + (melee ? Rank.XP.melee : 0);
+      const bonus = Rank.XP.streak[p.streak] || 0;
+      gainXp(p, xp + bonus, bonus ? `${p.streak} 連続キル！` : q.bot ? 'ボットをたおした' : head ? 'ヘッドショット！' : melee ? 'なぐりたおした' : 'たおした');
+    }
+    if (q.stats && !q.bot) { q.stats.deaths++; ranks.save(q.stats); }
+    q.streak = 0;
+  }
   const send = (p, m) => { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(m)); };
   const all = (m) => { const s = JSON.stringify(m); for (const p of players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(s); };
   const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
@@ -142,6 +167,7 @@ module.exports = function install(app, ctx) {
     npcs.emit(res === 'stagger' ? 'hit' : 'down', q.x, q.z); incidents.report(res === 'stagger' ? 'assault' : 'down', q.x, q.z);
     if (res === 'incap') {
       q.alive = false; q.deaths++; if (p.kills != null) p.kills++; q.respawnAt = now + RESPAWN_MS; if (q.car) exitCar(q);
+      onKill(p, q, { head, melee });
       all({ t: 'kill', killer: p.sid, victim: q.sid, head, melee, w: melee ? 'punch' : weapon, score: [pub(p), pub(q)] });
     }
   }
@@ -271,7 +297,9 @@ module.exports = function install(app, ctx) {
       if (now - c.at > ROB.keepMs) { cash.delete(c.id); all({ t: 'cashgone', id: c.id }); continue; }
       for (const p of players.values()) {
         if (p.bot || !p.alive || p.car || Math.hypot(p.x - c.x, p.z - c.z) > 1.4) continue;
-        p.cash = (p.cash || 0) + c.a; cash.delete(c.id); all({ t: 'cashgone', id: c.id, sid: p.sid, a: c.a, total: p.cash }); break;
+        p.cash = (p.cash || 0) + c.a; cash.delete(c.id); all({ t: 'cashgone', id: c.id, sid: p.sid, a: c.a, total: p.cash });
+        if (p.stats) { p.stats.cash += c.a; gainXp(p, Math.min(Rank.XP.cashMax, Math.floor(c.a / Rank.XP.cashDiv)), 'お金を拾った'); }
+        break;
       }
     }
   }
@@ -322,12 +350,13 @@ module.exports = function install(app, ctx) {
     for (const p of players.values()) if (p.uid === user.id) { try { p.ws.close(4000, 'other-tab'); } catch {} }
     if (humans().filter((p) => p.uid !== user.id).length >= MAX_HUMANS) { ws.send(JSON.stringify({ t: 'full' })); return ws.close(); }
     const p = { sid: crypto.randomBytes(6).toString('base64url'), uid: user.id, ws, name: nameOf(user.id), color: COLORS[user.id % COLORS.length], kills: 0, deaths: 0, msgs: 0, msgWin: Date.now() };
+    p.stats = ranks.load(user.id); p.joinedAt = Date.now(); p.streak = 0;
     players.set(p.sid, p);
     syncBots(); startLoop();
     spawn(p);
     npcs.sync([...players.values()].map((q) => ({ x: q.x, z: q.z })));
     p.admin = isAdmin(user);
-    send(p, { t: 'welcome', you: p.sid, me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), vehicles: traffic.list(), cash: [...cash.values()], cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, weapons: Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, { ms: w.ms, dmg: w.dmg, range: w.range }])), switchMs: SWITCH_MS, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
+    send(p, { t: 'welcome', you: p.sid, rank: Rank.view(p.stats), place: ranks.place(p.stats.xp), ranking: ranks.top(10), tiers: Rank.TIERS.map(([name, icon, color, xp]) => ({ name, icon, color, xp })), me: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, players: [...players.values()].map(pub), npcs: npcs.list(), vehicles: traffic.list(), cash: [...cash.values()], cfg: pubCfg(), admin: p.admin, rules: { hp: HP, respawnMs: RESPAWN_MS, protectMs: PROTECT_MS, fireMs: FIRE_MS, dmg: DMG, weapons: Object.fromEntries(Object.entries(WEAPONS).map(([k, w]) => [k, { ms: w.ms, dmg: w.dmg, range: w.range }])), switchMs: SWITCH_MS, punch: { ms: PUNCH.ms, dmg: PUNCH.dmg, range: PUNCH.range } } });
     all({ t: 'join', p: pub(p) });
     console.log(`[arena] @${user.username} が入った (人間 ${humans().length} 人)`);
     ws.on('message', (raw) => {
@@ -375,12 +404,14 @@ module.exports = function install(app, ctx) {
       }
     });
     ws.on('close', () => {
+      if (p.stats) { p.stats.play_ms += Date.now() - p.joinedAt; ranks.save(p.stats); } // 遊んだ時間
       if (players.get(p.sid) !== p) return;
       if (p.car) exitCar(p);
       players.delete(p.sid); all({ t: 'leave', sid: p.sid }); syncBots(); stopLoop();
     });
   });
   ctx.arenaUpgrade = (req, socket, head, user) => wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, user));
+  app.get('/api/arena/ranking', (req, res) => res.json({ ranking: ranks.top(20) })); // ランキング (経験値の上位 20 人)
   app.get('/api/arena/status', (req, res) => res.json({ humans: humans().length, max: MAX_HUMANS, npcs: npcs.npcs.size }));
   ctx.arenaDebug = { cfg, npcs, players, traffic, incidents, services, debugState, get tickMs() { return tickMs; } }; // テスト用
 };

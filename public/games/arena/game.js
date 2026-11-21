@@ -30,7 +30,7 @@ const GFX = createGraphics({ canvasEl: $('#c'), isTouch, map, A });
 const { scene, camera } = GFX;
 addEventListener('resize', GFX.resize); GFX.resize();
 const seedOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-const makeChar = (color, name, isMe) => GFX.makeChar(color, name, isMe, seedOf(name));
+const makeChar = (color, name, isMe, label = name) => GFX.makeChar(color, label, isMe, seedOf(name)); // 見た目は名前から・頭の上の名札は label (ランクのアイコンつき)
 // ---------- 体の物理・通行人・音・血・設定 ----------
 const env = { groundAt: (x, z) => GFX.curbAt(x, z), boxes: map.solid, cam: camera.position };
 const ragdolls = new RagdollManager({ low: 3, medium: 6, high: 10, ultra: 14 }[GFX.quality] || 6);
@@ -75,10 +75,10 @@ const others = new Map(); // sid → { name, color, bot, model, tx,ty,tz, yaw, a
 const scores = new Map();
 let myModel = null, myColor = '#4dabf7';
 function addPlayer(p) {
-  scores.set(p.sid, { name: p.name, kills: p.kills || 0, deaths: p.deaths || 0, bot: p.bot });
+  scores.set(p.sid, { name: p.name, kills: p.kills || 0, deaths: p.deaths || 0, bot: p.bot, rk: p.rk || null });
   if (p.sid === you) { myColor = p.color; if (!myModel) myModel = makeChar(p.color, p.name, true); if (!viewModel) { viewModel = GFX.makeViewModel(p.color, seedOf(p.name)); camera.add(viewModel.g); } return; }
   if (others.has(p.sid)) return;
-  others.set(p.sid, { ...p, model: makeChar(p.color, p.name, false), tx: 0, ty: 0, tz: 0, yaw: 0, alive: true, seen: false });
+  others.set(p.sid, { ...p, model: makeChar(p.color, p.name, false, (p.rk ? p.rk.icon + ' ' : '') + p.name), tx: 0, ty: 0, tz: 0, yaw: 0, alive: true, seen: false });
   if (p.w) others.get(p.sid).model.setWeapon(p.w);
 }
 function removePlayer(sid) { const o = others.get(sid); if (o) { endRagdoll(o.model); GFX.disposeChar(o.model); others.delete(sid); } scores.delete(sid); renderScore(); }
@@ -197,7 +197,7 @@ function renderScore() {
   const el = $('#score'); el.textContent = '';
   const h = document.createElement('b'); h.textContent = `🏆 キル数 (${scores.size}人)`; el.append(h);
   if (me.cash) { const c = document.createElement('div'); c.className = 'cash'; c.textContent = `💰 所持金 ¥${me.cash.toLocaleString()}`; el.append(c); }
-  for (const [sid, s] of list) { const d = document.createElement('div'); if (sid === you) d.className = 'you'; const n = document.createElement('span'); n.textContent = (s.bot ? '🤖 ' : '') + s.name; const k = document.createElement('span'); k.textContent = `${s.kills} / ${s.deaths}`; d.append(n, k); el.append(d); }
+  for (const [sid, s] of list) { const d = document.createElement('div'); if (sid === you) d.className = 'you'; const n = document.createElement('span'); n.textContent = (s.bot ? '🤖 ' : s.rk ? s.rk.icon + ' ' : '') + s.name; const k = document.createElement('span'); k.textContent = `${s.kills} / ${s.deaths}`; d.append(n, k); el.append(d); }
 }
 function feed(text, mine) { const d = document.createElement('div'); d.textContent = text; if (mine) d.className = 'me'; const f = $('#feed'); f.prepend(d); while (f.children.length > 5) f.lastChild.remove(); setTimeout(() => d.remove(), 6000); }
 function flashDamage() { const d = $('#dmg'); d.style.opacity = 1; clearTimeout(flashDamage.t); flashDamage.t = setTimeout(() => { d.style.opacity = 0; }, 180); }
@@ -274,6 +274,7 @@ function connect() {
       for (const p of m.players) if (p.car && p.sid !== you) { const o = others.get(p.sid); if (o) o.car = p.car; }
       me.cash = m.players.find((p) => p.sid === you)?.cash || 0;
       settings.setServer(m.cfg || {}, m.admin); debug.enable(!!m.admin);
+      myRank = m.rank || null; myPlace = m.place || null; ranking = m.ranking || []; tiers = m.tiers || []; renderRank();
       Object.assign(me, { x: m.me.x, y: m.me.y, z: m.me.z, vy: 0, yaw: m.me.yaw, pitch: -0.1, hp: 100, alive: true, protect: true, ammo: MAG, reloading: 0 }); updHud();
       renderScore();
       const b = $('#start'); b.disabled = false; b.textContent = 'はじめる！'; $('#status').textContent = `いま ${m.players.filter((p) => !p.bot).length} 人が遊んでいます`;
@@ -285,6 +286,12 @@ function connect() {
     else if (m.t === 'dbg') debug.render(m.d);
     else if (m.t === 'cash') addCash(m.c);
     else if (m.t === 'cashgone') { const g = cashView.get(m.id); if (g) { scene.remove(g); cashView.delete(m.id); } if (m.sid === you) { me.cash = m.total; sound.play('cash'); feed(`💰 +¥${m.a}`, true); renderScore(); } }
+    else if (m.t === 'xp') { myRank = m.me; xpPop(m.xp, m.why); renderRank(); }
+    else if (m.t === 'rankup') {
+      const s = scores.get(m.sid); if (s) { s.rk = m.rank; renderScore(); }
+      feed(`🎉 ${m.name} が ${m.rank.icon}${m.rank.name} に昇格！`, m.sid === you);
+      if (m.sid === you) rankUpFx(m.rank);
+    }
     else if (m.t === 'robbed') { feed('🙌 手を上げた！ お金を落とすぞ', true); const o = npcView.list.get(m.id); if (o) o.robbed = true; }
     else if (m.t === 'enter') {
       if (m.sid === you) { const v = vehicles.get(m.id); me.car = m.id; firing = false; setScope(false); if (v) { v.local = true; car.sp = 0; car.x = v.x; car.z = v.z; car.yaw = v.yaw; me.yaw = v.yaw; me.pitch = 0; } document.body.classList.add('driving'); } // 乗ったら前を向く
@@ -550,5 +557,29 @@ function aimAssist(dt) {
 }
 // ---------- 落ちているお金 ----------
 function addCash(c) { if (cashView.has(c.id)) return; const g = GFX.makeCash(); g.position.set(c.x, GFX.curbAt(c.x, c.z), c.z); cashView.set(c.id, g); }
+// ---------- プレイヤーランク: はじめの画面のカード・ランキング・経験値の表示・昇格の演出 ----------
+let myRank = null, myPlace = null, ranking = [], tiers = [];
+const E = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
+function renderRank() {
+  const box = $('#rankbox'); if (!box || !myRank) return;
+  box.textContent = '';
+  const r = myRank, card = E('div', 'rk-card'); card.style.setProperty('--rc', r.color);
+  const top = E('div', 'rk-top'); top.append(E('span', 'rk-ic', r.icon), E('b', null, r.name), E('span', 'rk-xp', `${r.xp.toLocaleString()} XP`));
+  const bar = E('div', 'rk-bar'), fill = E('i'); fill.style.width = r.next ? `${Math.min(100, ((r.xp - r.base) / (r.next - r.base)) * 100)}%` : '100%'; bar.append(fill);
+  const nx = r.next ? tiers.find((t) => t.xp === r.next) : null;
+  card.append(top, bar, E('small', null, nx ? `次の ${nx.icon}${nx.name} まで あと ${(r.next - r.xp).toLocaleString()} XP` : '最高ランク！'),
+    E('small', 'rk-st', `キル ${r.kills} · デス ${r.deaths} · ヘッドショット ${r.headshots} · 最高 ${r.bestStreak} 連続${myPlace ? ` · 全体 ${myPlace} 位` : ''}`));
+  box.append(card);
+  if (ranking.length) {
+    const t = E('div', 'rk-list'); t.append(E('b', null, '🏆 ランキング (経験値)'));
+    for (const x of ranking.slice(0, 10)) { const row = E('div', 'rk-row'); row.append(E('span', 'rk-pl', `${x.place}`), E('span', 'rk-nm', `${x.rank.icon} ${x.name}`), E('span', 'rk-v', `${x.xp.toLocaleString()} XP`)); t.append(row); }
+    box.append(t);
+  }
+}
+function xpPop(xp, why) { const d = E('div', 'xp-pop', `+${xp} XP${why ? ' ' + why : ''}`); document.body.append(d); setTimeout(() => d.remove(), 1600); }
+function rankUpFx(rk) {
+  const d = E('div', 'rk-up'); d.style.setProperty('--rc', rk.color);
+  d.append(E('span', 'rk-up-ic', rk.icon), E('b', null, 'ランクアップ！'), E('em', null, rk.name)); document.body.append(d); setTimeout(() => d.remove(), 2600);
+}
 if (location.hash === '#debug') window.__arenaDebug = { npcView, ragdolls, GFX, me, camera, gore, settings, vehicles, car, others }; // 確認用 (#debug のときだけ)
 updHud(); connect(); requestAnimationFrame(frame);
