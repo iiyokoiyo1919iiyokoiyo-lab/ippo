@@ -27,8 +27,9 @@ function bindCommon() { $('#exit')?.addEventListener('click', () => parent.postM
 const statBar = (label, v, max = 100, suf = '') => `<span>${label}</span><span class="bar"><i style="width:${Math.min(100, v / max * 100)}%"></i></span><b>${v}${suf}</b>`;
 const spChips = (p) => (p.specials || []).map((s) => `<span class="chip ${s.award ? 'aw' : 'sp'}" title="${esc(s.desc)}">${esc(s.name)}</span>`).join('');
 // 選手画像 (自動で作るシルエット。bb-art.js)。文字は bb-art.js の中でエスケープしている
-const art = (p, size, name = true) => (window.BBArt ? window.BBArt.svg(p, { size, name }) : '');
-const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="pic">${art(p, 40, false)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.real ? ` <span class="chip">${esc(p.real.team || '実名')}</span>` : ''}${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>${p.real?.note ? `<small>🔥 ${esc(p.real.note)}</small> ` : ''}
+// 選手のイラスト (6〜7 等身のキャラ・bb-illust.js)。一覧の小さな絵は顔のアップ。なければシルエット (bb-art.js)
+const art = (p, size, name = true) => (window.BBIllust ? window.BBIllust.svg(p, { size, name, crop: size < 80 ? 'face' : null }) : window.BBArt ? window.BBArt.svg(p, { size, name }) : '');
+const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="pic">${art(p, 44, false)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.real ? ` <span class="chip">${esc(p.real.team || '実名')}</span>` : ''}${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>${p.real?.note ? `<small>🔥 ${esc(p.real.note)}</small> ` : ''}
   <small>${p.kind === 'P' ? `${p.stats.velo}km 変${p.stats.brk} 威${p.stats.stuff} · ${p.pitches.length}球種` : `ミ${p.stats.meet} パ${p.stats.power} 速${p.stats.speed} 守${p.stats.tech}`}</small> ${spChips(p)}</span>${extra}</div>`;
 function playerModal(p, { release = false } = {}) {
   const s = p.season;
