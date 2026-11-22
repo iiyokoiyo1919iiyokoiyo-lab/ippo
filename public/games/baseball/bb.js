@@ -158,7 +158,7 @@ function illustEditor(p) {
   m.innerHTML = `<div class="card"><div class="row"><h2 class="grow">✏️ ${esc(p.name)} のイラスト</h2><button class="x" data-close>✕</button></div>
     <div class="row" style="align-items:flex-start;gap:10px;flex-wrap:wrap"><div id="ipv" style="flex:none"></div><div id="ipf" style="flex:none"></div>
     <div class="grow" style="min-width:200px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
-      ${sel('pose', 'ポーズ', p.kind === 'P' ? [['', 'おまかせ'], [0, 'ボールを見せる'], [1, 'グラブを胸に']] : [['', 'おまかせ'], [0, 'バットを肩に'], [1, 'バットを掲げる']])}
+      ${sel('pose', 'ポーズ', p.kind === 'P' ? [['', 'おまかせ'], [0, 'ボールを見せる'], [1, 'セットポジション']] : [['', 'おまかせ'], [0, 'バットを肩に'], [1, '両手でバットを持つ']])}
       ${sel('bat', p.kind === 'P' ? '投げる手' : '打つ手', [['R', '右'], ['L', '左']])}
       ${sel('skin', '肌', [[0, 'とても明るい'], [1, '明るい'], [2, '小麦色'], [3, '濃い']])}
       ${sel('hairStyle', '髪型', [['', 'おまかせ'], [0, '短い'], [1, 'もみあげ長め'], [2, 'うしろが長い'], [3, '外はね'], [4, 'ぼうず']])}
