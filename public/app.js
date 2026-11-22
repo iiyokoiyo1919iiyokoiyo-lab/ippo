@@ -99,44 +99,66 @@ RT.on((m) => {
   if (location.hash !== '#/dm/' + m.from && location.hash !== '#/dm') toast(`@${m.from} さんからメッセージ: ${m.message.content.slice(0, 30)}`);
 });
 
-// ---------- 音声通話 (1 対 1・WebRTC。合図は RT で送る。音声はブラウザどうしで直接) ----------
+// ---------- 音声通話 (1 対 1 とグループ・WebRTC。合図は RT で送る。音声はブラウザどうしで直接。グループは全員がおたがいにつなぐ) ----------
 const CALL = (() => {
-  let cur = null; // { id, peer: { username, displayName }, role: 'caller' | 'callee', state, pc, stream, audio, startedAt, pending: [], muted }
-  let ui = null, tick = null, tone = null, cfg = null;
-  const FAIL = { nouser: '相手が見つかりません', notallowed: 'この相手にはまだかけられません (相手から DM が届いているか、相手にフォローされていると、かけられます)', 'self-busy': 'ほかの通話中です', busy: '相手はほかの通話中です', offline: '相手はいまオンラインではありません (不在着信を残しました)' };
-  const END = { declined: '相手は通話に出られませんでした', missed: '応答がありませんでした', canceled: '通話がキャンセルされました', hangup: '通話が終わりました', dropped: '通話が切れました', limit: '通話の時間の上限 (3 時間) になりました', elsewhere: 'ほかの端末で応答しました' };
+  // cur: { id, state: 'calling' | 'incoming' | 'active', from, stream, muted, peers: Map<username, { user, pc, audio, pending, level, muted, ok }>, invited: Map<username, user>, startedAt, resuming }
+  let cur = null, ui = null, tick = null, tone = null, cfg = null, meter = null, ac = null;
+  const FAIL = { nouser: '相手が見つかりません', notallowed: 'この相手にはまだかけられません (相手から DM が届いているか、相手にフォローされていると、かけられます)', 'self-busy': 'ほかの通話中です', busy: 'ほかの通話中です', offline: 'オンラインではありません (不在着信を残しました)', full: '通話は 6 人までです', already: 'もう通話に入っています', noroom: '通話が見つかりません' };
+  const END = { declined: '相手は通話に出られませんでした', missed: '応答がありませんでした', canceled: '通話がキャンセルされました', hangup: '通話が終わりました', dropped: '通話が切れました', limit: '通話の時間の上限 (3 時間) になりました', elsewhere: 'ほかの端末で応答しました', 'declined-here': '', gone: '通話は終わっていました', failed: '' };
   // 呼び出し音 (WebAudio で合成。かける側は「プルル」、かかってきた側は「ピロリロ」)
   function ring(kind) {
     stopRing();
     try {
-      const ac = new (window.AudioContext || window.webkitAudioContext)(), g = ac.createGain(); g.gain.value = 0; g.connect(ac.destination);
-      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = kind === 'in' ? 880 : 440; o.connect(g); o.start();
-      const beat = () => { const t = ac.currentTime; g.gain.cancelScheduledValues(t);
+      const a = new (window.AudioContext || window.webkitAudioContext)(), g = a.createGain(); g.gain.value = 0; g.connect(a.destination);
+      const o = a.createOscillator(); o.type = 'sine'; o.frequency.value = kind === 'in' ? 880 : 440; o.connect(g); o.start();
+      const beat = () => { const t = a.currentTime; g.gain.cancelScheduledValues(t);
         if (kind === 'in') [0, 0.18, 0.36].forEach((d, i) => { o.frequency.setValueAtTime([880, 1046, 1318][i], t + d); g.gain.setValueAtTime(0.12, t + d); g.gain.setValueAtTime(0, t + d + 0.15); });
         else { g.gain.setValueAtTime(0.08, t); g.gain.setValueAtTime(0, t + 1); } };
       beat(); const iv = setInterval(beat, kind === 'in' ? 1400 : 3000);
-      tone = { stop() { clearInterval(iv); try { o.stop(); ac.close(); } catch {} } };
+      tone = { stop() { clearInterval(iv); try { o.stop(); a.close(); } catch {} } };
     } catch {}
-    if (kind === 'in' && navigator.vibrate) try { navigator.vibrate([400, 300, 400]); } catch {}
+    if (kind === 'in' && navigator.vibrate) try { navigator.vibrate([400, 300, 400, 300, 400]); } catch {}
   }
-  function stopRing() { tone?.stop(); tone = null; }
+  function stopRing() { tone?.stop(); tone = null; try { navigator.vibrate?.(0); } catch {} }
   const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const ini = (u) => esc([...(u.displayName || u.username)][0] || '?');
+  // 通話の画面 (着信は大きく、通話中は画面の上の帯。グループは人の顔をならべる)
   function render() {
-    if (!cur) { ui?.remove(); ui = null; clearInterval(tick); tick = null; return; }
-    if (!ui) { ui = document.createElement('div'); ui.className = 'call-ui'; ui.setAttribute('role', 'dialog'); ui.setAttribute('aria-label', '音声通話'); document.body.append(ui);
-      ui.addEventListener('click', (e) => { const b = e.target.closest('[data-call]'); if (!b) return; const a = b.dataset.call; if (a === 'accept') accept(); else if (a === 'decline') decline(); else if (a === 'hangup') hangup(); else if (a === 'mute') mute(); }); }
-    const p = cur.peer, st = cur.state;
-    const status = st === 'calling' ? '呼び出し中…' : st === 'incoming' ? '着信中…' : st === 'connecting' ? 'つないでいます…' : st === 'active' ? `<span class="call-time">${fmt(Date.now() - cur.startedAt)}</span>` : '';
-    ui.className = `call-ui ${st}`;
+    if (!cur) { ui?.remove(); ui = null; clearInterval(tick); tick = null; mediaSession(false); return; }
+    if (!ui) {
+      ui = document.createElement('div'); ui.setAttribute('role', 'dialog'); ui.setAttribute('aria-label', '音声通話'); document.body.append(ui);
+      ui.addEventListener('click', (e) => { const b = e.target.closest('[data-call]'); if (!b) return; const a = b.dataset.call;
+        if (a === 'accept') accept(); else if (a === 'decline') decline(); else if (a === 'hangup') hangup(); else if (a === 'mute') mute(); else if (a === 'add') pickInvite(); else if (a === 'expand') { ui.classList.toggle('open'); } });
+    }
+    const st = cur.state, peers = [...cur.peers.values()], invited = [...cur.invited.values()];
+    const who = st === 'incoming' ? [cur.from] : peers.length ? peers.map((p) => p.user) : invited;
+    const title = st === 'incoming' ? `${esc(cur.from.displayName)}${cur.others?.length ? ` <small>ほか ${cur.others.length} 人</small>` : ''}` : who.length ? who.map((u) => esc(u.displayName)).slice(0, 3).join('・') + (who.length > 3 ? ` <small>ほか ${who.length - 3} 人</small>` : '') : '通話';
+    const status = st === 'calling' ? '呼び出し中…' : st === 'incoming' ? (cur.others?.length ? 'グループ通話の着信' : '着信中…') : cur.resuming ? 'つなぎ直しています…' : peers.some((p) => !p.ok) && !peers.some((p) => p.ok) ? 'つないでいます…' : `<span class="call-time">${fmt(Date.now() - cur.startedAt)}</span>${peers.length > 1 ? ` · ${peers.length + 1} 人` : ''}`;
+    ui.className = `call-ui ${st}${peers.length > 1 || invited.length && peers.length ? ' group' : ''}${ui.classList.contains('open') ? ' open' : ''}`;
+    const face = (u, p) => `<span class="call-face${p?.level > 0.04 ? ' talk' : ''}${p && !p.ok ? ' wait' : ''}" title="${esc(u.displayName)}">${ini(u)}${p?.muted ? '<em>🔇</em>' : ''}<b>${esc(u.displayName)}</b></span>`;
     ui.innerHTML = `<div class="call-card">
-      <div class="call-ava" aria-hidden="true">${esc([...(p.displayName || p.username)][0] || '?')}<i></i><i></i></div>
-      <div class="call-who"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></div>
+      <button type="button" class="call-ava" data-call="expand" aria-label="参加している人">${st === 'incoming' ? ini(cur.from) : ini(who[0] || { username: '?' })}<i></i><i></i></button>
+      <div class="call-who"><b>${title}</b><span>${st === 'incoming' ? '@' + esc(cur.from.username) : ''}</span></div>
       <div class="call-status" aria-live="polite">📞 ${status}</div>
       <div class="call-btns">${st === 'incoming'
         ? '<button type="button" class="call-btn no" data-call="decline" aria-label="拒否">✖<small>拒否</small></button><button type="button" class="call-btn yes" data-call="accept" aria-label="応答">📞<small>応答</small></button>'
-        : `${st === 'active' || st === 'connecting' ? `<button type="button" class="call-btn mute${cur.muted ? ' on' : ''}" data-call="mute" aria-pressed="${cur.muted ? 'true' : 'false'}">${cur.muted ? '🔇' : '🎙️'}<small>${cur.muted ? 'ミュート中' : 'ミュート'}</small></button>` : ''}<button type="button" class="call-btn no" data-call="hangup" aria-label="切る">✖<small>${st === 'calling' ? 'やめる' : '切る'}</small></button>`}</div>
+        : `${st === 'active' ? `<button type="button" class="call-btn" data-call="add" aria-label="ほかの人を呼ぶ">＋<small>呼ぶ</small></button><button type="button" class="call-btn mute${cur.muted ? ' on' : ''}" data-call="mute" aria-pressed="${cur.muted ? 'true' : 'false'}">${cur.muted ? '🔇' : '🎙️'}<small>${cur.muted ? 'ミュート中' : 'ミュート'}</small></button>` : ''}<button type="button" class="call-btn no" data-call="hangup" aria-label="切る">✖<small>${st === 'calling' ? 'やめる' : '切る'}</small></button>`}</div>
+      ${st !== 'incoming' && (peers.length + invited.length > 1 || ui.classList.contains('open')) ? `<div class="call-faces">${face({ username: 'me', displayName: 'あなた' }, { ok: true, level: cur.myLevel || 0, muted: cur.muted })}${peers.map((p) => face(p.user, p)).join('')}${invited.map((u) => `<span class="call-face wait ring" title="呼び出し中">${ini(u)}<b>${esc(u.displayName)} 📞</b></span>`).join('')}</div>` : ''}
     </div>`;
-    if (st === 'active' && !tick) tick = setInterval(() => { const t = ui && $('.call-time', ui); if (t && cur) t.textContent = fmt(Date.now() - cur.startedAt); }, 1000);
+    if (st === 'active' && !tick) tick = setInterval(() => { if (cur?.state === 'active') render(); }, 1000);
+    mediaSession(true);
+  }
+  // ロック画面・通知の場所に「通話中」を出し、そこから切る・ミュートできるようにする (対応しているブラウザだけ)
+  function mediaSession(on) {
+    const ms = navigator.mediaSession; if (!ms) return;
+    try {
+      if (!on || !cur || cur.state === 'incoming') { ms.metadata = null; ms.playbackState = 'none'; return; }
+      const names = [...cur.peers.values()].map((p) => p.user.displayName).join('・') || [...cur.invited.values()].map((u) => u.displayName).join('・');
+      ms.metadata = new MediaMetadata({ title: `📞 ${names || '通話'}`, artist: 'IppO 音声通話', artwork: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' }] });
+      ms.playbackState = 'playing';
+      for (const [a, f] of [['hangup', hangup], ['togglemicrophone', mute], ['pause', mute], ['stop', hangup]]) try { ms.setActionHandler(a, f); } catch {}
+      try { ms.setMicrophoneActive?.(!cur.muted); } catch {}
+    } catch {}
   }
   async function config() { if (!cfg) cfg = await api('/call/config').catch(() => ({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })); return cfg; }
   async function mic() {
@@ -144,80 +166,142 @@ const CALL = (() => {
     try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
     catch { throw new Error('マイクを使えませんでした。ブラウザの設定でマイクを許可してください'); }
   }
-  async function makePc() {
-    const c = cur, pc = new RTCPeerConnection({ iceServers: (await config()).iceServers });
-    c.pc = pc;
+  // 声の大きさ (話している人の顔を光らせる)
+  function level(stream, set) {
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const src = ac.createMediaStreamSource(stream), an = ac.createAnalyser(); an.fftSize = 256; src.connect(an); const buf = new Uint8Array(an.frequencyBinCount);
+      return () => { an.getByteTimeDomainData(buf); let s = 0; for (const v of buf) s += (v - 128) ** 2; set(Math.sqrt(s / buf.length) / 128); }; } catch { return () => {}; }
+  }
+  function startMeter() {
+    if (meter) return;
+    const own = cur?.stream ? level(cur.stream, (v) => { if (cur) cur.myLevel = cur.muted ? 0 : v; }) : () => {};
+    meter = setInterval(() => { if (!cur) { clearInterval(meter); meter = null; return; } own(); for (const p of cur.peers.values()) p.meter?.(); }, 250);
+  }
+  async function peerOf(user) {
+    const c = cur; let p = c.peers.get(user.username); if (p) return p;
+    const pc = new RTCPeerConnection({ iceServers: (await config()).iceServers });
+    p = { user, pc, audio: null, pending: [], level: 0, muted: false, ok: false };
+    c.peers.set(user.username, p);
     c.stream.getTracks().forEach((t) => pc.addTrack(t, c.stream));
-    pc.onicecandidate = (e) => { if (e.candidate && cur === c) RT.send({ t: 'call-signal', id: c.id, data: { candidate: e.candidate.toJSON() } }); };
-    pc.ontrack = (e) => { if (!c.audio) { c.audio = new Audio(); c.audio.autoplay = true; } c.audio.srcObject = e.streams[0]; c.audio.play().catch(() => {}); };
+    pc.onicecandidate = (e) => { if (e.candidate && cur === c) RT.send({ t: 'call-signal', id: c.id, to: user.username, data: { candidate: e.candidate.toJSON() } }); };
+    pc.ontrack = (e) => {
+      if (!p.audio) { p.audio = new Audio(); p.audio.autoplay = true; p.audio.setAttribute('playsinline', ''); }
+      p.audio.srcObject = e.streams[0]; p.audio.play().catch(() => {});
+      p.meter = level(e.streams[0], (v) => { p.level = v; });
+    };
     pc.onconnectionstatechange = () => {
       if (cur !== c) return;
-      if (pc.connectionState === 'connected' && c.state !== 'active') { c.state = 'active'; c.startedAt = Date.now(); render(); }
-      if (pc.connectionState === 'failed') { toast('通話をつなげませんでした (回線の都合かもしれません)', 'error'); hangup(); }
+      if (pc.connectionState === 'connected') { p.ok = true; if (c.state !== 'active') { c.state = 'active'; c.startedAt = Date.now(); stopRing(); } render(); }
+      if (pc.connectionState === 'failed') { toast(`${user.displayName} さんとつなげませんでした (回線の都合かもしれません)`, 'error'); dropPeer(user.username); }
     };
-    return pc;
+    return p;
+  }
+  function dropPeer(name) { const p = cur?.peers.get(name); if (!p) return; try { p.pc.close(); } catch {} if (p.audio) p.audio.srcObject = null; cur.peers.delete(name); render(); }
+  async function offerTo(user) {
+    const p = await peerOf(user);
+    const off = await p.pc.createOffer({ offerToReceiveAudio: true }); await p.pc.setLocalDescription(off);
+    RT.send({ t: 'call-signal', id: cur.id, to: user.username, data: { sdp: { type: off.type, sdp: off.sdp } } });
   }
   function cleanup(msg) {
     stopRing();
     if (!cur) return;
-    try { cur.pc?.close(); } catch {}
+    for (const p of cur.peers.values()) { try { p.pc.close(); } catch {} if (p.audio) p.audio.srcObject = null; }
     cur.stream?.getTracks().forEach((t) => t.stop());
-    if (cur.audio) { cur.audio.srcObject = null; }
-    cur = null; render();
+    cur = null; clearInterval(meter); meter = null; render();
     if (msg) toast(msg);
   }
+  // 着信をアプリが閉じていても受け取れるように、プッシュ通知を登録する (ボタンを押したときに 1 回だけ聞く)
+  async function enablePush() {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      if (Notification.permission === 'default') await Notification.requestPermission();
+      if (Notification.permission !== 'granted') return;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) { const { key } = await api('/push/key'); const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - key.length % 4) % 4)); sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) }); }
+      await api('/push/subscribe', { method: 'POST', body: { sub: sub.toJSON() } });
+    } catch (e) { console.warn('[push]', e); }
+  }
   async function start(username, displayName) {
-    if (cur) return toast('ほかの通話中です', 'error');
+    if (cur) { if (cur.state === 'active') return invite([username]); return toast('ほかの通話中です', 'error'); }
     if (!RT.connected) return toast('接続中です。少し待ってからもう一度どうぞ', 'error');
+    enablePush();
     let stream; try { stream = await mic(); } catch (e) { return toast(e.message, 'error'); }
-    cur = { id: null, peer: { username, displayName: displayName || username }, role: 'caller', state: 'calling', stream, pending: [], muted: false };
-    render(); ring('out');
-    RT.send({ t: 'call-invite', to: username });
+    cur = { id: null, state: 'calling', stream, muted: false, peers: new Map(), invited: new Map([[username, { username, displayName: displayName || username }]]) };
+    render(); ring('out'); startMeter();
+    RT.send({ t: 'call-invite', to: [username] });
+  }
+  function invite(names) { if (!cur?.id) return; RT.send({ t: 'call-invite', id: cur.id, to: names }); }
+  // 「＋ 呼ぶ」: 最近 DM した人の中から選ぶ
+  async function pickInvite() {
+    let r; try { r = await api('/call/candidates'); } catch (e) { return toast(e.message, 'error'); }
+    const inCall = new Set([...cur.peers.keys(), ...cur.invited.keys()]);
+    const list = r.users.filter((u) => !inCall.has(u.username));
+    const dlg = document.createElement('dialog'); dlg.className = 'modal call-pick';
+    dlg.innerHTML = `<form method="dialog" class="modal-body"><h2 style="margin:0 0 4px">📞 通話に呼ぶ</h2><p class="text-sm muted">最近 DM した人のうち、呼べる人 (6 人まで)</p>
+      <div class="call-pick-list">${list.length ? list.map((u) => `<label class="call-pick-row"><input type="checkbox" value="${esc(u.username)}" ${u.busy ? 'disabled' : ''}><span class="call-face">${ini(u)}</span><span><b>${esc(u.displayName)}</b><small>@${esc(u.username)}${u.busy ? ' · 通話中' : u.online ? ' · オンライン' : ''}</small></span></label>`).join('') : '<p class="muted">呼べる人がいません</p>'}</div>
+      <div class="modal-actions"><button class="btn btn-ghost" value="cancel">やめる</button><button class="btn btn-primary" value="ok">呼ぶ</button></div></form>`;
+    document.body.append(dlg); dlg.showModal();
+    dlg.addEventListener('close', () => { const names = dlg.returnValue === 'ok' ? $$('input:checked', dlg).map((x) => x.value) : []; dlg.remove(); if (names.length && cur) { names.forEach((n) => { const u = list.find((x) => x.username === n); if (u) cur.invited.set(n, u); }); render(); invite(names); } });
   }
   async function accept() {
     if (!cur || cur.state !== 'incoming') return;
-    stopRing();
+    stopRing(); enablePush();
     try { cur.stream = await mic(); } catch (e) { toast(e.message, 'error'); return decline(); }
-    cur.state = 'connecting'; render();
-    await makePc();
+    cur.state = 'active'; cur.startedAt = Date.now(); render(); startMeter();
     RT.send({ t: 'call-accept', id: cur.id });
   }
   function decline() { if (!cur) return; RT.send({ t: 'call-decline', id: cur.id }); cleanup(); }
   function hangup() { if (!cur) return; if (cur.id) RT.send({ t: 'call-hangup', id: cur.id }); cleanup(); }
-  function mute() { if (!cur?.stream) return; cur.muted = !cur.muted; cur.stream.getAudioTracks().forEach((t) => { t.enabled = !cur.muted; }); render(); }
-  async function onSignal(data) {
-    const c = cur, pc = c?.pc; if (!pc) return;
+  function mute() {
+    if (!cur?.stream) return; cur.muted = !cur.muted; cur.stream.getAudioTracks().forEach((t) => { t.enabled = !cur.muted; });
+    for (const p of cur.peers.values()) RT.send({ t: 'call-signal', id: cur.id, to: p.user.username, data: { muted: cur.muted } });
+    render();
+  }
+  async function onSignal(from, data) {
+    if (!cur) return;
+    const user = cur.peers.get(from)?.user || cur.invited.get(from) || { username: from, displayName: from };
+    if (data.muted !== undefined) { const p = cur.peers.get(from); if (p) { p.muted = data.muted; render(); } }
+    if (!data.sdp && !data.candidate) return;
+    const p = await peerOf(user), pc = p.pc;
     try {
       if (data.sdp) {
         await pc.setRemoteDescription(data.sdp);
-        for (const cand of c.pending.splice(0)) await pc.addIceCandidate(cand).catch(() => {});
-        if (data.sdp.type === 'offer') { const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); RT.send({ t: 'call-signal', id: c.id, data: { sdp: { type: ans.type, sdp: ans.sdp } } }); }
+        for (const cand of p.pending.splice(0)) await pc.addIceCandidate(cand).catch(() => {});
+        if (data.sdp.type === 'offer') { const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); RT.send({ t: 'call-signal', id: cur.id, to: from, data: { sdp: { type: ans.type, sdp: ans.sdp } } }); }
       } else if (data.candidate) {
-        if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {}); else c.pending.push(data.candidate);
+        if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {}); else p.pending.push(data.candidate);
       }
     } catch (e) { console.warn('[call]', e); }
   }
   RT.on(async (m) => {
-    if (!m.t?.startsWith?.('call-') && m.t !== 'close') return;
-    if (m.t === 'close') { if (cur) cleanup('接続が切れたため、通話を終了しました'); return; }
+    if (m.t === 'close') { if (cur?.id && cur.state !== 'incoming') { cur.resuming = true; render(); } else if (cur) cleanup(); return; } // 接続が切れても、音声は直接つながっているので続ける
+    if (m.t === 'open') { if (cur?.id && cur.state !== 'incoming') RT.send({ t: 'call-resume', id: cur.id }); return; }
+    if (!m.t?.startsWith?.('call-')) return;
     if (m.t === 'call-incoming') {
-      if (cur) return; // 通話中はほかの着信を受けない (サーバーでも止めている)
-      cur = { id: m.id, peer: m.from, role: 'callee', state: 'incoming', pending: [], muted: false };
+      if (cur) { if (cur.id === m.id) return; return; } // 通話中はほかの着信を受けない
+      cur = { id: m.id, state: 'incoming', from: m.from, others: (m.members || []).filter((u) => u.username !== m.from.username), peers: new Map(), invited: new Map(), muted: false };
       render(); ring('in');
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') try { new Notification('IppO 着信', { body: `${m.from.displayName} さんから音声通話` }); } catch {}
-    } else if (m.t === 'call-ringing') { if (cur?.role === 'caller' && !cur.id) cur.id = m.id; }
-    else if (m.t === 'call-fail') { if (cur?.role === 'caller' && !cur.id) cleanup(FAIL[m.reason] || '通話をかけられませんでした'); }
-    else if (m.t === 'call-accepted') {
-      if (!cur || cur.id !== m.id) return;
-      stopRing(); cur.state = 'connecting'; render();
-      const pc = await makePc();
-      const off = await pc.createOffer({ offerToReceiveAudio: true }); await pc.setLocalDescription(off);
-      RT.send({ t: 'call-signal', id: cur.id, data: { sdp: { type: off.type, sdp: off.sdp } } });
-    } else if (m.t === 'call-signal') { if (cur && cur.id === m.id) onSignal(m.data); }
-    else if (m.t === 'call-end') { if (cur && cur.id === m.id) cleanup(END[m.reason] || '通話が終わりました'); }
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker?.controller == null) try { new Notification('📞 IppO 着信', { body: `${m.from.displayName} さんから音声通話`, tag: 'call-' + m.id }); } catch {}
+      return;
+    }
+    if (!cur) return;
+    if (m.t === 'call-room') { if (!cur.id) cur.id = m.id; }
+    else if (m.t === 'call-fail') {
+      if (m.user) { cur.invited.delete(m.user.username); toast(`${m.user.displayName}: ${FAIL[m.reason] || 'かけられませんでした'}`, 'error'); render(); }
+      else if (!cur.id || m.id === cur.id) toast(FAIL[m.reason] || '通話をかけられませんでした', 'error');
+    }
+    else if (m.id !== cur.id) return;
+    else if (m.t === 'call-joined') { for (const u of m.members) { cur.peers.size; await offerTo(u); } for (const u of m.invited || []) cur.invited.set(u.username, u); render(); } // 入った人が、いる人みんなにつなぐ
+    else if (m.t === 'call-peer-join') { cur.invited.delete(m.user.username); stopRing(); if (cur.state === 'calling') { cur.state = 'active'; cur.startedAt = Date.now(); } await peerOf(m.user); render(); }
+    else if (m.t === 'call-peer-leave') { dropPeer(m.user.username); toast(`${m.user.displayName} さんが通話から抜けました`); }
+    else if (m.t === 'call-invited') { cur.invited.set(m.user.username, m.user); render(); }
+    else if (m.t === 'call-invite-end') { cur.invited.delete(m.user.username); if (cur.peers.size) toast(`${m.user.displayName}: ${m.reason === 'declined' ? '出られませんでした' : '応答がありませんでした'}`); render(); }
+    else if (m.t === 'call-resumed') { cur.resuming = false; render(); }
+    else if (m.t === 'call-signal') onSignal(m.from, m.data);
+    else if (m.t === 'call-end') cleanup(END[m.reason] ?? '通話が終わりました');
   });
-  window.addEventListener('beforeunload', () => { if (cur?.id) RT.send({ t: 'call-hangup', id: cur.id }); });
-  return { start, get busy() { return !!cur; } };
+  window.addEventListener('pagehide', (e) => { if (!e.persisted && cur?.id) RT.send({ t: 'call-hangup', id: cur.id }); });
+  return { start, enablePush, get busy() { return !!cur; } };
 })();
 
 // ---------- トースト ----------

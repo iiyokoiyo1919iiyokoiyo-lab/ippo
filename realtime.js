@@ -87,6 +87,7 @@ module.exports = function install(app, ctx) {
       if (set) { set.delete(ws); if (!set.size) { sockets.delete(user.id); lastSeen.set(user.id, Date.now()); announcePresence(user.id); } }
     });
     ws.send(JSON.stringify({ t: 'hello' }));
+    ctx.callOnConnect?.(ws, user); // 呼ばれている途中の通話があれば知らせる (プッシュ通知から開いたとき)
   });
   setInterval(() => {
     for (const set of sockets.values()) for (const ws of set) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch {} }

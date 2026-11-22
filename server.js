@@ -344,7 +344,8 @@ const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, befor
 require('./features')(app, ctx);
 require('./pixel')(app, ctx); // PIXEL WORLD
 require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
-require('./call')(app, ctx); // 1 対 1 の音声通話 (WebRTC。合図は /rt で中継)
+require('./push')(app, ctx); // Web プッシュ通知 (通話の着信)
+require('./call')(app, ctx); // 音声通話 (1 対 1・グループ。WebRTC。合図は /rt で中継)
 require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真

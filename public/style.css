@@ -2211,3 +2211,21 @@ body.arena-open { overflow: hidden; }
 @keyframes call-pulse { from { transform: scale(1); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
 @keyframes call-shake { 0%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-12deg); } 20%, 40% { transform: rotate(12deg); } 50% { transform: rotate(0); } }
 @media (prefers-reduced-motion: reduce) { .call-ui, .call-ava i, .call-btn.yes { animation: none; } }
+
+/* グループ通話: 参加している人の顔 (話している人は光る・ミュートは 🔇・呼び出し中は点滅) */
+.call-ava { border: 0; color: #fff; cursor: pointer; }
+.call-faces { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .15); }
+.call-face { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; font-weight: 900; font-size: 16px; color: #fff; background: linear-gradient(135deg, #4dabf7, #9775fa); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); transition: box-shadow .15s; }
+.call-face b { position: absolute; top: 100%; margin-top: 2px; font-size: 9px; font-weight: 700; white-space: nowrap; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+.call-faces .call-face { margin-bottom: 14px; }
+.call-face.talk { box-shadow: 0 0 0 3px #69db7c, 0 0 14px #69db7c; }
+.call-face.wait { opacity: .55; } .call-face.ring { animation: call-blink 1s ease-in-out infinite; }
+.call-face em { position: absolute; right: -4px; bottom: -4px; font-style: normal; font-size: 12px; }
+.call-ui.group .call-card, .call-ui.open .call-card { border-radius: 20px; }
+.call-who small { font-size: 11px; opacity: .8; font-weight: 600; }
+@keyframes call-blink { 50% { opacity: .25; } }
+.call-pick-list { display: grid; gap: 4px; max-height: 50dvh; overflow: auto; margin: 10px 0; }
+.call-pick-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; cursor: pointer; }
+.call-pick-row:hover { background: var(--surface-2, rgba(0, 0, 0, .04)); }
+.call-pick-row span:last-child { display: grid; } .call-pick-row small { color: var(--text-2); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .call-face.ring { animation: none; } }
