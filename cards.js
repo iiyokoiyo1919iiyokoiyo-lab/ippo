@@ -594,8 +594,9 @@ CREATE INDEX card_monsters_user ON card_monsters(user_id, created_at);
 `;
 // モンスターの評価 → カードのレア度。能力はモンスターの能力に比例 (上限なし。育てるほど強い)。はじめのモンスター (HP280・攻55・防55・速50) が R の平均くらい
 // 突然変異 R 以上のモンスターは「限定級」: 能力は恒常の SSR (ガチャにずっと出る SSR) の平均くらいにそろえる (平均の 95%〜100%。上限あり)。倍率は SSR と同じ 1.12
-const MONCARD_FORMULA = 5; // 3: 限定級の下限を STAT_SCALE に合わせた・4: 限定級を弱く (下限 90%・倍率 1.2 → 1.12)・5: 限定級を恒常 SSR の平均くらいに (上限 100%・倍率は評価 Z でも 1.12) // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
+const MONCARD_FORMULA = 6; // 6: 変異なし (限定級でない) を +5% (MONCARD_PLAIN_BONUS) // 3: 限定級の下限を STAT_SCALE に合わせた・4: 限定級を弱く (下限 90%・倍率 1.2 → 1.12)・5: 限定級を恒常 SSR の平均くらいに (上限 100%・倍率は評価 Z でも 1.12) // 能力の計算のしかたの版 (上げると、起動時に連れてきたカードを計算し直す)
 const MONCARD_SCALE = { hp: 66.6 / 280, atk: 16.2 / 55, def: 11.1 / 55, spd: 10.8 / 50 };
+const MONCARD_PLAIN_BONUS = 1.05; // 2026-11-22: 変異なしのモンスターのカードは HP・攻撃・防御・速さ +5%
 const MONCARD_LIMITED = ['tadokoro', 'scissors', 'star', 'raijin', 'watermid'], MONCARD_LIMITED_MULT = 1.12, MONCARD_LIMITED_FLOOR = 0.95, MONCARD_LIMITED_CAP = 1.0;
 const MUT_ORDER = ['N', 'R', 'SR', 'SSR', 'UR', 'MR'];
 const MONCARD_RARITY = { C: 'N', B: 'R', A: 'SR', S: 'SSR', SS: 'SSR', Z: 'MR' }; // Z だけ MR (強さは SSR の平均 × MR の倍率 1.2)
@@ -609,7 +610,7 @@ function monCardBase(m) {
   // 恒常の SSR = ガチャに出る SSR のうち、排出が終わる限定キャラ (GACHA_ENDS) と限定キャラ (MONCARD_LIMITED) をのぞいたもの
   const std = CARD_LIST.filter((c) => c[3] === 'SSR' && !GACHA_ENDS[c[0]] && !MONCARD_LIMITED.includes(c[0]) && !PICKUPS.some((p) => p.id === c[0] && /祭/.test(p.name))), savg = (i) => std.reduce((a, c) => a + c[i], 0) / std.length;
   const base = { hp: savg(5) * STAT_SCALE, atk: savg(6) * STAT_SCALE, def: savg(7) * STAT_SCALE, spd: savg(8) };
-  const st = (k) => Math.max(1, Math.round(limited ? Math.min(base[k] * MONCARD_LIMITED_CAP, Math.max(own[k], base[k] * MONCARD_LIMITED_FLOOR)) : own[k]));
+  const st = (k) => Math.max(1, Math.round(limited ? Math.min(base[k] * MONCARD_LIMITED_CAP, Math.max(own[k], base[k] * MONCARD_LIMITED_FLOOR)) : own[k] * MONCARD_PLAIN_BONUS));
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー

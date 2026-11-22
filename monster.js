@@ -65,7 +65,8 @@ const MAX_SKILLS = 8;
 // ---------- ルール ----------
 const MAX_CHILDREN = 5, TRAIN_TURNS = 10, INHERIT_RATE = 0.7, STUD_SCORE = 600, MAX_MONSTERS = 40;
 // 売却: 強さの 8% + 市場価値の 2% (10〜500 コイン)。ショップのメス (B で約 200) を買って産ませて全部売っても得をしない値段
-const SELL = { power: 0.08, score: 0.02, min: 10, max: 500 };
+const SELL = { power: 0.16, score: 0.04, min: 20, max: 1000 }; // 2026-11-22: 買取金額を倍に (8%・2%・10〜500 → 16%・4%・20〜1000)
+const EXTRACT_COST = 1000; // 変異抽出装置: 自分のモンスターの変異を、別の自分のモンスターに写す (元はそのまま)
 const sellPrice = (m) => clamp(Math.round(powerOf(m) * SELL.power + Math.max(0, m.score || 0) * SELL.score), SELL.min, SELL.max);
 const SCORE = { pvp: { win: 120, lose: 20 }, cpuMult: 0.6 };      // 市場価値 (戦績スコア)。CPU 戦は 0.6 倍
 const COINS = { pvp: { win: 50, lose: 10 }, cpu: { win: 15, lose: 3 } }; // 対戦でもらえるコイン (ぶんばとと共用)
@@ -365,7 +366,7 @@ module.exports = function install(app, ctx) {
   app.get('/api/mon/catalog', (req, res) => res.json({
     types: TYPES, typeTable: Object.fromEntries(TYPE_IDS.map((a) => [a, Object.fromEntries(TYPE_IDS.map((d) => [d, typeMult(a, d)]))])),
     skills: Object.values(SKILLS).filter((s) => skillOk(s.id)).map((s) => skillView(s.id)), ranks: RANKS,
-    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS }, guard: GUARD,
+    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS, extractCost: EXTRACT_COST, maxMutations: MUT.MAX_MUTATIONS }, guard: GUARD,
   }));
   app.get('/api/mon/me', requireAuth, (req, res) => {
     const uid = req.user.id, started = !!db.prepare('SELECT 1 FROM mon_players WHERE user_id = ?').get(uid);
@@ -481,6 +482,28 @@ module.exports = function install(app, ctx) {
     } catch (e) { db.exec('ROLLBACK'); throw e; }
     console.log(`[mon] @${req.user.username} が ${m.name} を ${price} コインで売却`);
     res.json({ price, coins: coins.get(uid) });
+  });
+  // 変異抽出装置 (1000 コイン): 自分のほかのモンスター (from) の変異 (mutation) を、このモンスターに写す。元のモンスターの変異はそのまま (コピー)。
+  // 写した変異は元と同じレアリティ・同じ出方 (表 / 潜在)。1 体 4 つまで・同じ変異は 1 つだけ
+  app.post('/api/mon/monster/:id/extract', requireAuth, writeLimit, (req, res) => {
+    const uid = req.user.id, to = owned(uid, req.params.id), from = owned(uid, String(req.body?.from || '')), mid = String(req.body?.mutation || '');
+    if (!to || !from) return res.status(404).json({ error: 'そのモンスターは持っていません' });
+    if (to.id === from.id) return res.status(400).json({ error: '同じモンスターには写せません' });
+    if (['listed', 'auction'].includes(to.status)) return res.status(400).json({ error: 'セリに出しているモンスターには写せません' });
+    const src = (from.mutations || []).find((x) => x.id === mid);
+    if (!src || !MUT.BY_ID[mid]) return res.status(400).json({ error: 'その変異は持っていません' });
+    if ((to.mutations || []).some((x) => x.id === mid)) return res.status(400).json({ error: 'もうその変異を持っています' });
+    if ((to.mutations || []).length >= MUT.MAX_MUTATIONS) return res.status(400).json({ error: `変異は 1 体 ${MUT.MAX_MUTATIONS} つまでです` });
+    db.exec('BEGIN');
+    try {
+      if (!coins.spend(uid, EXTRACT_COST)) { db.exec('ROLLBACK'); return res.status(400).json({ error: `コインが足りません (${EXTRACT_COST} コイン)` }); }
+      const now = Date.now();
+      db.prepare('INSERT INTO mon_mutations (monster_id, mutation_id, rarity, mode, origin, param, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(to.id, mid, src.rarity, src.mode, 'extract', src.param || null, now);
+      db.prepare('INSERT INTO mon_mutation_log (monster_id, event, mutation_id, rarity, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(to.id, 'extract', mid, src.rarity, JSON.stringify({ from: from.id, cost: EXTRACT_COST }), now);
+      db.exec('COMMIT');
+    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    console.log(`[mon] @${req.user.username} 変異抽出: ${from.id} の ${mid} → ${to.id}`);
+    res.json({ monster: monView(getMon(to.id)), coins: coins.get(uid) });
   });
   app.post('/api/mon/monster/:id/retire', requireAuth, writeLimit, (req, res) => {
     const m = owned(req.user.id, req.params.id); if (!m) return res.status(404).json({ error: 'そのモンスターは持っていません' });

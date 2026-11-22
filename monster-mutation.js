@@ -43,6 +43,19 @@ const MUTATIONS = [
   { id: 'ancient', cat: 'species', name: '古代種', desc: '太古の生き物。重く、しぶとく、大技が重い', stat: { hp: 0.1, def: 0.1, spd: -0.1 }, fx: { ult: 1.1 }, viz: { pattern: 'runes' } },
   { id: 'celestial', cat: 'species', name: '天上種', desc: '天の加護。魔法が冴えわたる', stat: { mag: 0.15 }, fx: { magic: 1.08 }, viz: { halo: true } },
   { id: 'abyssal', cat: 'species', name: '深淵種', desc: '深淵の力。攻めは鋭いが、自分も傷つきやすい', stat: { atk: 0.15 }, fx: { punch: 1.08, taken: 1.05 }, viz: { aura: '#3b1f6e' } },
+  // 2026-11-22 追加 (12 種)
+  { id: 'melanism', cat: 'look', name: '黒化', desc: '夜に溶ける漆黒の体。身のこなしが軽い', stat: { atk: 0.06, spd: 0.05 }, viz: { tint: 'black' } },
+  { id: 'gilded', cat: 'look', name: '金色化', desc: '全身が黄金にかがやく', stat: { def: 0.07, mag: 0.04 }, viz: { tint: 'gold' } },
+  { id: 'tiger', cat: 'look', name: '虎縞', desc: '虎のような縞模様。狩りの本能が目覚める', stat: { atk: 0.08 }, viz: { pattern: 'stripes' } },
+  { id: 'leopard', cat: 'look', name: '斑紋', desc: 'ひょうのような斑点。すばしこい', stat: { spd: 0.09 }, viz: { pattern: 'spots' } },
+  { id: 'glass_cannon', cat: 'stat', name: '硝子の大砲', desc: 'とてつもない攻撃力。ただし体はガラスのようにもろい', stat: { atk: 0.3, hp: -0.15, def: -0.1 }, fx: { punch: 1.05 }, viz: { glowEyes: '#ff922b' } },
+  { id: 'sage', cat: 'stat', name: '賢者の脳', desc: '深い知恵が魔法と大技を研ぎすます。動きはのろい', stat: { mag: 0.2, spd: -0.1 }, fx: { ult: 1.06 }, viz: { glowEyes: '#74c0fc', halo: true } },
+  { id: 'unyielding', cat: 'stat', name: '不屈', desc: 'たおれても立ち上がる。足は重い', stat: { hp: 0.16, def: 0.08, spd: -0.12 }, viz: { aura: '#ffa94d' } },
+  { id: 'flame_body', cat: 'body', name: '炎の体', desc: '体から炎がふき出す。殴ると焼ける', stat: { atk: 0.1 }, fx: { punch: 1.06 }, viz: { flames: true } },
+  { id: 'frost_body', cat: 'body', name: '氷の体', desc: '氷のよろい。攻撃を受け流すが冷えて遅い', stat: { def: 0.1, spd: -0.06 }, fx: { taken: 0.94 }, viz: { frost: true } },
+  { id: 'royal', cat: 'species', name: '王族', desc: '王の血すじ。攻撃も魔法も高いが、気位が高く動きが遅い', stat: { atk: 0.1, mag: 0.1, spd: -0.1 }, viz: { crown: true } },
+  { id: 'void', cat: 'species', name: '虚無種', desc: '存在がうすい。攻撃が当たりにくいが、体力がない', stat: { hp: -0.12, mag: 0.06 }, fx: { taken: 0.9 }, viz: { aura: '#212529', ghost: true } },
+  { id: 'beastking', cat: 'species', name: '獣王種', desc: '獣の王のたてがみ。腕力は強いが魔法は苦手', stat: { atk: 0.18, mag: -0.12 }, fx: { punch: 1.05 }, viz: { mane: true } },
 ];
 // 相乗効果: needs の変異をすべて (直接に) 持っていると発動。1 体につき 2 つまで (上から順に)
 // needs には変異の id か { cat: 分類 } か { cats: 何種類の分類 } を書ける
@@ -53,6 +66,9 @@ const SYNERGIES = [
   { id: 'gale', name: '疾風迅雷', needs: ['swift', 'hollow'], desc: '素早さ +10%', stat: { spd: 0.1 } },
   { id: 'divine_dragon', name: '神竜', needs: ['dragonkin', 'celestial'], desc: '大技のダメージ 1.15 倍', fx: { ult: 1.15 } },
   { id: 'star_child', name: '星の申し子', needs: ['starry', 'aurora'], desc: '魔力 +10%', stat: { mag: 0.1 } },
+  { id: 'frostfire', name: '氷炎', needs: ['flame_body', 'frost_body'], desc: '大技のダメージ 1.12 倍', fx: { ult: 1.12 } },
+  { id: 'dark_lord', name: '闇の王', needs: ['melanism', 'royal'], desc: '攻撃 +8%', stat: { atk: 0.08 } },
+  { id: 'wild_hunt', name: '狩りの王', needs: ['tiger', 'beastking'], desc: '直殴りのダメージ 1.1 倍', fx: { punch: 1.1 } },
   { id: 'tri_resonance', name: '三相共鳴', needs: [{ cats: 3 }], desc: '3 つの分類の変異が共鳴: 全能力 +4%', stat: { hp: 0.04, atk: 0.04, mag: 0.04, def: 0.04, spd: 0.04 } },
 ];
 const MAX_MUTATIONS = 4, MAX_SYNERGIES = 2;

@@ -46,7 +46,7 @@
     ${art(m)}<b>${esc(m.name)}</b><span class="meta">${typeTag(m.type)} · 市場価値 <span class="val">${Number(m.score).toLocaleString()}</span></span>
     <div><span class="st ${esc(m.status)}">${m.status === 'training' ? `育成中 あと${m.trainLeft}` : m.isStud ? '種モン' : esc(STATUS[m.status] || m.status)}</span></div>${extra}</a>`;
   // 変異の表示 (持っている変異・レアリティ・説明・能力への影響・相乗効果・遺伝の情報)
-  const ORIGIN = { new: '突然変異で発現', father: '父から受けついだ', mother: '母から受けついだ' };
+  const ORIGIN = { new: '突然変異で発現', father: '父から受けついだ', mother: '母から受けついだ', extract: '変異抽出装置で写した' };
   const mutRow = (x) => `<div class="mut ${x.mode === 'latent' ? 'latent' : ''}"><div class="mut-h"><span class="mutb mr-${esc(x.rarity)}">変異${esc(x.rarity)}</span><b>${esc(x.name)}</b><span class="mut-cat">${esc(x.catName)}</span></div>
     <p class="small" style="margin:2px 0">${esc(x.desc)}</p>${x.mode === 'latent' ? '<p class="small muted" style="margin:0">潜在形質: 表には出ていない (効果なし)。子に受けつがれることがある</p>' : `<p class="mut-fx">${x.effects.map(esc).join(' · ')}</p>`}
     <p class="small muted" style="margin:0">遺伝: ${esc(ORIGIN[x.origin] || '')}${x.mode === 'latent' ? ' (潜在)' : ''}</p></div>`;
@@ -216,6 +216,7 @@
     if (m.sex === 'f' && m.status === 'breeding') b.push(`<a class="btn gold block" href="#breed?mother=${m.id}">💞 配合する (あと ${catalog.rules.maxChildren - m.children} 体産める)</a>`);
     if (m.mother && ['training', 'active'].includes(m.status)) b.push(`<button class="btn block" id="list">🔨 セリに出す (次は ${esc(fmtTime(me.next))})</button>`);
     if (m.status === 'listed') b.push(`<button class="btn block" id="unlist">セリの出品をやめる (出品価格 ${m.listPrice} コイン)</button>`);
+    if (!['listed', 'auction'].includes(m.status)) b.push(`<button class="btn gold block" id="extract" ${(m.mutations || []).length >= (catalog.rules.maxMutations || 4) ? 'disabled' : ''}>🧪 変異抽出装置 (🪙 ${Number(catalog.rules.extractCost || 1000).toLocaleString()})${(m.mutations || []).length >= (catalog.rules.maxMutations || 4) ? ' — 変異は 4 つまで' : ' — ほかのモンスターの変異を写す'}</button>`);
     b.push(`<a class="btn block" href="#pedigree/${m.id}">📜 血統書を作ってシェア</a>`);
     if (!['listed', 'auction'].includes(m.status)) b.push(`<button class="btn block" id="sell" ${me.monsters.length <= 1 ? 'disabled' : ''}>💰 売却する (🪙 ${Number(m.sellPrice || 0).toLocaleString()})${me.monsters.length <= 1 ? ' — 最後の 1 体は売れません' : ''}</button>`);
     b.push(`<label class="small" style="display:flex;gap:6px;align-items:center">📁 フォルダ <select class="in" id="mfold" style="flex:1">${folderOpts(me.monsters.find((x) => x.id === m.id)?.folderId || 0)}</select></label>`);
@@ -226,6 +227,7 @@
     $('#stud', acts)?.addEventListener('click', () => { const fee = prompt('種付け料 (コイン) を決めてください', '100'); if (fee !== null) act('stud', { fee: Number(fee) }, '種モンになりました'); });
     $('#list', acts)?.addEventListener('click', () => { const price = prompt('スタート価格 (コイン)', '50'); if (price !== null) act('list', { price: Number(price) }, `次のセリ (${fmtTime(me.next)}) に出品しました`); });
     $('#unlist', acts)?.addEventListener('click', () => act('unlist', {}, '出品をやめました'));
+    $('#extract', acts)?.addEventListener('click', () => openExtract(m));
     $('#sell', acts)?.addEventListener('click', async (e) => {
       if (!confirm(`${m.name} を ${Number(m.sellPrice).toLocaleString()} コインで売却しますか？\n売ったモンスターはもどってきません。`)) return;
       e.target.disabled = true;
@@ -237,6 +239,31 @@
       try { const r = await api('/mon/folders/move', { method: 'POST', body: { ids: [m.id], folder: Number(e.target.value) } }); applyFolders(r); toast(`「${label}」に移しました`); } catch (err) { toast(err.message, true); }
     });
     $('#rename', acts)?.addEventListener('click', () => { openName(); $('#nmwrap').scrollIntoView({ block: 'center', behavior: 'smooth' }); });
+  }
+
+  // ---------- 変異抽出装置: 自分のほかのモンスターの変異をえらんで、このモンスターに写す (元はそのまま) ----------
+  function openExtract(m) {
+    const have = new Set((m.mutations || []).map((x) => x.id)), cost = catalog.rules.extractCost || 1000;
+    const srcs = me.monsters.filter((x) => x.id !== m.id && (x.mutations || []).some((y) => !have.has(y.id)));
+    const wrap = document.createElement('div'); wrap.className = 'xt-wrap';
+    wrap.innerHTML = `<div class="card xt" role="dialog" aria-label="変異抽出装置"><h2>🧪 変異抽出装置</h2>
+      <p class="small">ほかのモンスターの変異を 1 つえらんで、<b>${esc(m.name)}</b> に写します。元のモンスターの変異はそのまま。レアリティと出方 (表・潜在) も同じ。<br>1 回 <b>🪙 ${cost.toLocaleString()}</b> (いま 🪙 ${Number(me.coins).toLocaleString()})</p>
+      <div class="xt-list">${srcs.length ? srcs.map((x) => `<div class="xt-src"><div class="row" style="gap:8px;align-items:center">${MonArt.svg(x.look, x.type, { rank: x.rank, cls: '' }).replace('class="ma-svg', 'style="width:48px;height:48px" class="ma-svg')}<b>${esc(x.name)}</b></div>
+        ${x.mutations.filter((y) => !have.has(y.id)).map((y) => `<button class="btn sm xt-pick" data-from="${esc(x.id)}" data-mut="${esc(y.id)}"><span class="mutb mr-${esc(y.rarity)}">変異${esc(y.rarity)}</span> ${esc(y.name)}${y.mode === 'latent' ? ' (潜在)' : ''} <span class="small muted">${esc((y.effects || []).join(' · '))}</span></button>`).join('')}</div>`).join('') : '<p class="muted">写せる変異を持ったモンスターがいません</p>'}</div>
+      <button class="btn block" id="xt-close">とじる</button></div>`;
+    document.body.append(wrap);
+    const close = () => wrap.remove();
+    wrap.addEventListener('click', async (e) => {
+      if (e.target === wrap || e.target.id === 'xt-close') return close();
+      const b = e.target.closest('.xt-pick'); if (!b) return;
+      const src = me.monsters.find((x) => x.id === b.dataset.from), mu = src?.mutations.find((y) => y.id === b.dataset.mut);
+      if (!mu || !confirm(`${src.name} の「${mu.name}」(変異${mu.rarity}) を ${m.name} に写しますか？\n🪙 ${cost.toLocaleString()} コインかかります。`)) return;
+      wrap.querySelectorAll('.xt-pick').forEach((x) => { x.disabled = true; });
+      try {
+        await api(`/mon/monster/${encodeURIComponent(m.id)}/extract`, { method: 'POST', body: { from: src.id, mutation: mu.id } });
+        await refresh(); close(); toast(`🧪 ${m.name} に「${mu.name}」を写しました！`); route();
+      } catch (err) { toast(err.message, true); wrap.querySelectorAll('.xt-pick').forEach((x) => { x.disabled = false; }); }
+    });
   }
 
   // ---------- 育成 (10 ターン) ----------
