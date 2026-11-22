@@ -200,7 +200,7 @@ function viewPlay() {
 // ---------- 試合の画面と操作 ----------
 let ws = null, M = null;
 async function startMatch(mode) {
-  if (!Stadium) { try { Stadium = await import('./stadium.js?v=5'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
+  if (!Stadium) { try { Stadium = await import('./stadium.js?v=6'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
   ws?.close(); ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bb`);
   ws.onopen = () => { ws.send(JSON.stringify({ t: mode })); const qs = $('#qs'); if (qs) qs.textContent = mode === 'queue' ? '相手を探しています… (見つからなければ CPU と練習もできます)' : ''; };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
@@ -246,9 +246,9 @@ function onTurn(m) {
   if (m.role === 'pitch') {
     const ps = st.pitcher.pitches || ['straight']; if (!ps.includes(M.pitch)) M.pitch = ps[0];
     ctl.innerHTML = `<div id="hint">球種をえらんで、ゾーンをなぞって場所を決める → 投げる</div><div class="pitches">${ps.map((k) => `<button data-pt="${k}" class="${k === M.pitch ? 'on' : ''}">${esc(C.PITCHES[k]?.name || k)}</button>`).join('')}</div><div id="meter"><span class="g"></span><span class="p"></span><span class="k"></span></div><button class="bigbtn" id="throw">投げる</button>`;
-    $$('[data-pt]', ctl).forEach((b) => b.onclick = () => { M.pitch = b.dataset.pt; $$('[data-pt]', ctl).forEach((x) => x.classList.toggle('on', x === b)); });
+    $$('[data-pt]', ctl).forEach((b) => b.onclick = () => { M.pitch = b.dataset.pt; $$('[data-pt]', ctl).forEach((x) => x.classList.toggle('on', x === b)); preview(); });
     $('#throw', ctl).onclick = startMeter;
-    M.S.setAim(M.aim.x, M.aim.y, true); M.S.setMeet(0, 0, 0, false);
+    M.S.setAim(M.aim.x, M.aim.y, true); M.S.setMeet(0, 0, 0, false); preview();
     $m('#pinfo').textContent = `${st.pitcher.name}: 球速 ${st.pitcher.velo} · 変化 ${st.pitcher.brk} · 球威 ${st.pitcher.stuff}`;
   } else {
     ctl.innerHTML = `<div id="hint">画面を長押ししてミートカーソルを動かす → ボールが来たら離してスイング (さわらなければ見送り)</div>`;
@@ -265,8 +265,18 @@ function startMeter() {
   step();
   btn.onclick = () => { M.meterOn = false; meter.classList.remove('on'); btn.disabled = true; ws.send(JSON.stringify({ t: 'pitch', pitch: M.pitch, x: M.aim.x, y: M.aim.y, release: pos })); const g = Math.abs(pos - 0.5); show(g <= 0.07 ? '✨ ナイスリリース' : g <= 0.16 ? 'いいね' : g > 0.24 ? '😱 失投…' : 'まあまあ', '', 900); };
 }
+// 変化の予測: えらんだ球種が、ぴったりのリリースで狙いに来るときの軌道 (黄色い点の線)
+function preview() {
+  if (!M || M.role !== 'pitch' || M.inFlight) return M?.S.setPath(null);
+  const p = M.state.pitcher, pc = C.makePitch({ velo: p.velo, brk: p.brk, stuff: p.stuff }, M.pitch, M.aim, 0.5, 1);
+  pc.end = { x: M.aim.x, y: M.aim.y }; pc.wob = 0; // 予測なので、ずれとナックルのゆれは入れない
+  M.S.setPath(pc);
+  const P = C.PITCHES[M.pitch] || {}, bk = (p.brk || 50) / 50, dx = P.bx * bk, dy = P.by * bk;
+  const dir = `${Math.abs(dy) > 0.06 ? (dy < 0 ? '↓' : '↑') : ''}${Math.abs(dx) > 0.06 ? (dx < 0 ? '←' : '→') : ''}` || '→まっすぐ';
+  const h = $m('#hint'); if (h) h.textContent = `${P.name || ''} ${Math.round(pc.km)}km 変化 ${dir} ${Math.round(Math.hypot(dx, dy) * 100)}cm · 画面のどこをなぞっても狙いが動く → 投げる`;
+}
 function onPitched(m) {
-  M.inFlight = true; M.S.setAim(0, 0, false);
+  M.inFlight = true; M.S.setAim(0, 0, false); M.S.setPath(null);
   if (M.role === 'pitch') $m('#ctl').innerHTML = '';
   M.S.throwPitch(m.pc, m.windup, (at) => { M.releaseAt = at; });
   M.pc = m.pc;
@@ -308,25 +318,25 @@ function bindMatchInput() {
   el.addEventListener('pointerdown', (e) => {
     if (!M || M.over || e.target.closest('button')) return;
     const p = M.S.screenToPlate(e.clientX, e.clientY); if (!p) return;
-    if (M.role === 'pitch' && !M.inFlight) { M.aim = { x: C.clamp(p.x, -0.45, 0.45), y: C.clamp(p.y, 0.2, 1.4) }; M.S.setAim(M.aim.x, M.aim.y); M.dragAim = true; }
+    if (M.role === 'pitch' && !M.inFlight) { M.dragAim = true; last = p; el.setPointerCapture?.(e.pointerId); } // 指の位置にとばさず、なぞった分だけ動かす
     if (M.role === 'bat') { M.holding = true; last = p; el.setPointerCapture?.(e.pointerId); }
   });
   el.addEventListener('pointermove', (e) => {
     if (!M) return; const p = M.S.screenToPlate(e.clientX, e.clientY); if (!p) return;
-    if (M.dragAim && M.role === 'pitch' && !M.inFlight) { M.aim = { x: C.clamp(p.x, -0.45, 0.45), y: C.clamp(p.y, 0.2, 1.4) }; M.S.setAim(M.aim.x, M.aim.y); }
+    if (M.dragAim && M.role === 'pitch' && !M.inFlight && last) { const k = 1.0; M.aim = { x: C.clamp(M.aim.x + (p.x - last.x) * k, -0.45, 0.45), y: C.clamp(M.aim.y + (p.y - last.y) * k, 0.2, 1.4) }; last = p; M.S.setAim(M.aim.x, M.aim.y); preview(); }
     if (M.holding && M.role === 'bat' && last) { // 長押しのあいだ、指の動きの分だけカーソルが動く (指でカーソルが隠れない)
       M.cursor.x = C.clamp(M.cursor.x + (p.x - last.x) * 1.15, -0.5, 0.5); M.cursor.y = C.clamp(M.cursor.y + (p.y - last.y) * 1.15, 0.2, 1.4); last = p;
       M.S.setMeet(M.cursor.x, M.cursor.y, C.meetR(M.state.batter.meet), true);
     }
   });
-  const up = () => { if (!M) return; M.dragAim = false; if (M.holding) { M.holding = false; last = null; swing(); } };
+  const up = () => { if (!M) return; if (M.dragAim) last = null; M.dragAim = false; if (M.holding) { M.holding = false; last = null; swing(); } };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', () => { if (M) { M.holding = false; M.dragAim = false; } });
   // キーボード: 矢印でカーソル・スペースでスイング / リリース
   addEventListener('keydown', (e) => {
     if (!M || M.over) return; const d = 0.03;
     const mv = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] }[e.key];
     if (mv && M.role === 'bat') { M.cursor.x = C.clamp(M.cursor.x + mv[0], -0.5, 0.5); M.cursor.y = C.clamp(M.cursor.y + mv[1], 0.2, 1.4); M.S.setMeet(M.cursor.x, M.cursor.y, C.meetR(M.state.batter.meet)); e.preventDefault(); }
-    if (mv && M.role === 'pitch' && !M.inFlight) { M.aim.x = C.clamp(M.aim.x + mv[0], -0.45, 0.45); M.aim.y = C.clamp(M.aim.y + mv[1], 0.2, 1.4); M.S.setAim(M.aim.x, M.aim.y); e.preventDefault(); }
+    if (mv && M.role === 'pitch' && !M.inFlight) { M.aim.x = C.clamp(M.aim.x + mv[0], -0.45, 0.45); M.aim.y = C.clamp(M.aim.y + mv[1], 0.2, 1.4); M.S.setAim(M.aim.x, M.aim.y); preview(); e.preventDefault(); }
     if (e.key === ' ') { e.preventDefault(); if (M.role === 'bat') swing(); else if (M.role === 'pitch') { const b = $m('#throw'); if (b && !b.disabled) b.click(); } }
   });
   $('#mx').onclick = () => { if (M && !M.over && confirm('降参しますか？ (負けになります)')) ws?.send(JSON.stringify({ t: 'resign' })); };

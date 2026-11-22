@@ -255,6 +255,15 @@ export function createStadium(canvas) {
   const markDot = mk(new THREE.CircleGeometry(0.037, 24), '#ffffff', 0.95, 14);   // ボールの大きさ
   const markRing = mk(new THREE.RingGeometry(0.05, 0.062, 32), '#ff6b6b', 0.95, 14); // 近づくほど小さくなる輪
   let markHold = 0;
+  const PATH_N = 26, pathDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.03, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffe066', transparent: true, opacity: 0.85, depthTest: false }), PATH_N);
+  pathDots.renderOrder = 15; pathDots.visible = false; pathDots.frustumCulled = false; scene.add(pathDots);
+  const pathTmp = new THREE.Object3D();
+  // pc: makePitch の形 (end = 狙い)。null で消す。点はリリースから本塁まで (手前ほど大きく)
+  function setPath(pc) {
+    if (!pc) { pathDots.visible = false; return; }
+    for (let i = 0; i < PATH_N; i++) { const u = 0.35 + 0.65 * (i + 1) / PATH_N, q = C.pitchPos(pc, pc.T * u); pathTmp.position.set(W(q.x), q.y, q.z); pathTmp.scale.setScalar(0.25 + u * u * 0.8); /* 曲がりが見える後半だけ・手前 (カメラに近い) ほど小さく */ pathTmp.updateMatrix(); pathDots.setMatrixAt(i, pathTmp.matrix); }
+    pathDots.instanceMatrix.needsUpdate = true; pathDots.visible = true;
+  }
 
   // ---------- 選手 ----------
   const TEAM_COLORS = [{ main: '#f8f9fa', accent: '#1c3f94', cap: '#1c3f94' }, { main: '#2b2f3a', accent: '#f08c00', cap: '#f08c00' }];
@@ -295,6 +304,7 @@ export function createStadium(canvas) {
   let pitchAnim = null, hitAnim = null;
   // 投げる: windup 秒の動きのあと、ボールが pc の軌道で飛ぶ。onRelease はボールが手をはなれた時刻 (performance.now) を返す
   function throwPitch(pc, windup, onRelease) {
+    pathDots.visible = false;
     people.pitcher.play([['p_kick', windup * 0.45], ['p_stride', windup * 0.4], ['p_release', windup * 0.15], ['p_follow', 0.4]]);
     people.batter.play([['b_load', windup + pc.T * 0.4]]);
     pitchAnim = { pc, t: -windup, onRelease, released: false };
@@ -313,7 +323,7 @@ export function createStadium(canvas) {
     if (best && !res.hr) { hitAnim.fielder = best; hitAnim.fFrom = best.position.clone(); best.play([['run', 0.18], ['run2', 0.18]], true); }
     people.batter.play([['run', 0.2], ['run2', 0.2]], true); hitAnim.runner = people.batter;
   }
-  function resetView(view = 'bat') { setCam(view); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; mark.visible = false; markHold = 0; }
+  function resetView(view = 'bat') { pathDots.visible = false; setCam(view); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; mark.visible = false; markHold = 0; }
 
   // ---------- 描画 ----------
   let composer = null;
@@ -329,7 +339,7 @@ export function createStadium(canvas) {
       pitchAnim.t += dt; const t = pitchAnim.t;
       if (t >= 0) {
         if (!pitchAnim.released) { pitchAnim.released = true; pitchAnim.onRelease?.(now - t * 1000); }
-        const p = C.pitchPos(pitchAnim.pc, t); p.x = W(p.x); ball.visible = true; ball.position.set(p.x, p.y, p.z); ball.rotation.x += dt * 40;
+        const p = C.pitchPos(pitchAnim.pc, Math.min(t, pitchAnim.pc.T)); p.x = W(p.x); ball.visible = true; ball.position.set(p.x, p.y, p.z); if (t < pitchAnim.pc.T) ball.rotation.x += dt * 40; // ゾーンを通るところ (着弾点) で止める
         const q = C.pitchPos(pitchAnim.pc, Math.max(0, t - 0.06)); q.x = W(q.x); trail.visible = true; trail.position.set((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2); trail.lookAt(q.x, q.y, q.z); trail.rotateX(Math.PI / 2); trail.scale.set(1, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z), 1);
         // 着弾予想地点: いまの飛び方のまま まっすぐ来たら、本塁 (ゾーンの面) のどこに来るか。変化球はこのあと曲がるので、予想は動いていく
         // (輪は遠いと大きく、近づくほど小さくなって、本塁で 1 つになる)
@@ -340,7 +350,8 @@ export function createStadium(canvas) {
         mark.visible = true; mark.position.set(px, py, -0.04); markRing.scale.setScalar(1 + (1 - u) * 3);
         markRing.material.opacity = 0.5 + u * 0.5; markDot.material.opacity = 0.45 + u * 0.5;
         if (t >= pitchAnim.pc.T) markHold = 1.4; // 通った場所を少し残す
-        if (t > pitchAnim.pc.T + 0.25) { ball.visible = false; trail.visible = false; pitchAnim = null; }
+        if (t >= pitchAnim.pc.T) trail.visible = false;
+        if (t > pitchAnim.pc.T + 0.45) { ball.visible = false; pitchAnim = null; }
       }
     }
     if (!pitchAnim && markHold > 0) { markHold -= dt; if (markHold <= 0) mark.visible = false; }
@@ -374,5 +385,5 @@ export function createStadium(canvas) {
   function plateToScreen(x, y) { const v = new THREE.Vector3(W(x), y, 0).project(camera), r = canvas.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; }
   // 確認用: 打席のカメラを [x, y, z, 見る x, 見る y, 見る z] で変える
   const camBat = (c) => { CAM_BAT.pos.set(c[0], c[1], c[2]); CAM_BAT.look.set(c[3], c[4], c[5]); };
-  return { camBat, scene, camera, setupPlayers, setRunners, throwPitch, swingBat, hitBall, resetView, setCam, setMeet, setAim, scoreboard, screenToPlate, plateToScreen, people, dispose() { cancelAnimationFrame(raf); renderer.dispose(); } };
+  return { setPath, camBat, scene, camera, setupPlayers, setRunners, throwPitch, swingBat, hitBall, resetView, setCam, setMeet, setAim, scoreboard, screenToPlate, plateToScreen, people, dispose() { cancelAnimationFrame(raf); renderer.dispose(); } };
 }
