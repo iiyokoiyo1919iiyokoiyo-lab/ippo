@@ -110,6 +110,18 @@
 - 前のシルエットの画像 (予備) は `public/games/baseball/bb-art.js` (`BBArt.svg(選手, { size })`): 選手のデータからいつも同じ絵。2D の骨組みを角度で決めたポーズ (打撃: 構え・足上げ・フォロー / 投手: 足上げ・リリース・投げ終わり / 野手: 送球・ダイビング) の黒いシルエット + レア度の色のふち光・背景 (N 青灰・R 青・SR 紫・SSR 金と虹)・大きな背番号。左打ち・左投げは反転。名前は中でエスケープ
 - 3D は `stadium.js` (three.js はシティバトルの `vendor/`): ナイターの球場・人の形の選手 (関節のポーズを補間して投球・打撃・走る)・ボールの軌道・打球をカメラで追う
 - 確かめるとき: 招待制なので `INVITE_ONLY=0` で起動してテスト用のユーザーを作る
+- 選手の一生とリーグの出来事は `baseball-career.js` (baseball.js から呼ぶ)。数値は `baseball-config.js` (環境変数 `BB_CONFIG` の JSON で上書き)。表・列の追加はマイグレーション `2026-11-23-bb-career`
+  - 年齢 (`bb_players.age`)・キャリア年数 (`seasons`)・成長性 (`hidden.pot`。画面には出さない)。シーズンの終わり (= 1 年) に年齢 +1、若手は伸び・ベテランは衰える (`growth`。得意な能力ほど伸びる)
+  - 覚醒: 試合のあとに稀に (`awaken`。最近の活躍 `hidden.form`・シーズン成績・成長性・年齢)。能力アップ・新しい変化球・特殊能力。1 人 3 回まで・上限あり。表 `bb_awaken` (前後の能力)。画面で前後の比較の演出 → `POST /api/bb/awaken/seen`
+  - 引退: シーズンの終わりに年齢と成績で判定 (`retire`。若手はしない・最低の人数 (野手 9・投手 5) は残す)。`retired_at` を入れて一覧から外し、表 `bb_retired` に通算成績・タイトル・キャリアを永久保存。殿堂入りは `hof` の基準 (どれか 1 つ)。図鑑 `GET /api/bb/zukan`
+  - 新人王: その季にドラフトで入った選手 (`rookie_season`)。野手・投手の部門ごとに総合点で 1 人 (`bb_awards` の `rookie_b` / `rookie_p`)。特殊能力 `t_rookie`
+  - 盗塁を自動試合に追加 (`bb_stats.sb`)。記録達成 (通算の節目・1 試合の大記録) は `bb_milestones` で 1 回だけ
+  - ニュース: 表 `bb_news` (ドラフト速報・試合結果・覚醒・引退・殿堂入り・新人王・トレード・記録・昇格・KING・シーズン・特殊能力)。出来事のときに実際の成績から文章を作る。`GET /api/bb/news`・ホーム `GET /api/bb/home`
+  - トレード: `POST /api/bb/trades` (相手の選手と自分の選手を 1〜3 人ずつ)・`/trades/:id/accept|reject|cancel`。出した選手は `bb_trade_locks` (主キー) で 1 つのトレードにだけ。承認はトランザクションで、持ち主・人数 (40 人まで・野手 9 投手 5) を確かめ、状態を `pending` から変えられたときだけ移籍。24 時間で期限切れ。市場価値は参考 (`value`)
+  - スカウト: ドラフト候補の能力は見せず、スカウトで幅つきの推定 (`scout.width`。レベル 1〜5 で精度が上がる・1 日 3 回無料)。隠し逸材 (`hidden.gem`。目玉とは別枠・毎回は出ない・成長がとても大きい) と大化けはスカウトで見つかることがある
+  - テスト用 (`BB_TEST=1` の管理者だけ): `POST /api/bb/test/round`・`/test/close-season`・`/test/draft`・`/test/player`。本番では設定しない
+- 画面 (bb.js・index.html): ダークネイビー × 白の情報面 × ゴールド。下のナビ (ホーム・マイチーム・ドラフト・対戦・その他)。選手プロフィール `#player/<id>`・ニュース `#news`・記事 `#article/<id>`・トレード `#trade`・図鑑 `#zukan`・アプリとして使う `#install`。球団エンブレムはチーム名から作る SVG
+- アプリとして開く (PWA): `public/games/baseball/manifest.webmanifest` (範囲 `/games/baseball/`)・サービスワーカー `sw.js` (画面はネットワーク優先・つながらなければ `offline.html`。API・ログインはキャッシュしない)・アイコンとスプラッシュは `node tools/make_bb_icons.js`。IppO の iframe の外で開いたときはゲームの中でログインできる。オフラインのときは操作を止めて帯を出す
 
 ## 音声通話 (call.js・push.js・public/sw.js)
 - 1 対 1 とグループ (最大 6 人。全員がおたがいに直接つなぐメッシュ) の音声通話 (WebRTC)。通話は「ルーム」(`rooms`)。合図 (かける・出る・切る・SDP・ICE・ミュート) は DM のリアルタイム接続 `/rt` で中継 (`realtime.js` が `call-` で始まるメッセージを `ctx.callMessage` に渡す。`/rt` の maxPayload は 16KB)。音声はサーバーを通らない

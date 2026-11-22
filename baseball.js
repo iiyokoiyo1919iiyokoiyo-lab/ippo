@@ -11,6 +11,7 @@
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const C = require('./public/games/baseball/bb-core.js');
+const CAREER = require('./baseball-career.js'); // 年齢・覚醒・引退・殿堂・新人王・ニュース・トレード・スカウト
 
 const H = 3600_000, D = 24 * H;
 const EPOCH = Date.parse('2026-11-22T00:00:00+09:00'), SEASON_MS = 3 * D;
@@ -39,6 +40,7 @@ const SPECIALS = {
   t_win: { name: '最多勝', kind: 'P', desc: '表彰: 球威が上がる', award: true },
   t_sv: { name: 'セーブ王', kind: 'P', desc: '表彰: 9 回に強くなる', award: true },
   t_hld: { name: 'ホールド王', kind: 'P', desc: '表彰: 7・8 回に強くなる', award: true },
+  t_rookie: { name: '新人王', kind: '*', desc: '表彰: 新人王 (能力が少し上がる)', award: true },
 };
 const AWARDS = [
   { id: 't_avg', name: '首位打者', stat: 'avg', unit: '打率', fmt: (v) => v.toFixed(3).replace(/^0/, '') },
@@ -120,6 +122,7 @@ function eff(p) {
   if (has('kaibutsu')) for (const k of Object.keys(s)) if (k !== 'velo' && k !== 'stamina') up(k, 5);
   if (has('kaibutsu') && p.kind === 'P') s.velo += 3;
   if (has('t_avg')) up('meet', 6); if (has('t_hr')) up('power', 6); if (has('t_def') || has('meishu')) up('tech', has('t_def') ? 8 : 6);
+  if (has('t_rookie')) for (const k of Object.keys(s)) if (k !== 'velo' && k !== 'stamina') up(k, 2);
   if (has('idaten')) up('speed', 10); if (has('t_win')) up('stuff', 6); if (has('tetsuwan')) up('stamina', 15);
   return s;
 }
@@ -127,7 +130,9 @@ function eff(p) {
 module.exports = function install(app, ctx) {
   const { db, requireAuth, rateLimit } = ctx;
   db.migrate('2026-11-22-baseball', MIGRATION);
+  db.migrate('2026-11-23-bb-career', CAREER.MIGRATION); // 列と表の追加 (年齢・キャリア・引退・盗塁・スカウト・ニュース・トレードなど)
   const sr = () => crypto.randomInt(0, 2 ** 31) / 2 ** 31; // サーバーの乱数
+  let career = null; // baseball-career.js (下で用意する)
   const limit = rateLimit({ windowMs: 60_000, max: 60, key: (req) => 'bb' + req.user.id });
   // しばらくはテスターだけ (環境変数 BB_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413。* で全員)。ほかの人には API も対戦も開かない
   const TESTERS = new Set(String(process.env.BB_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
@@ -136,13 +141,14 @@ module.exports = function install(app, ctx) {
   app.get('/api/bb-access', (req, res) => res.json({ ok: isTester(req.user) }));
   app.use('/api/bb', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'IppO ベースボールはまだ準備中です' })));
 
-  const rowToPlayer = (r) => r && { id: r.id, ownerId: r.owner_id, name: r.name, kind: r.kind, pos: r.pos, number: r.number, stats: JSON.parse(r.stats), pitches: JSON.parse(r.pitches), specials: JSON.parse(r.specials), rarity: r.rarity, origin: r.origin, hidden: JSON.parse(r.hidden), games: r.games, look: JSON.parse(r.look), ...(JSON.parse(r.hidden).real ? { real: JSON.parse(r.hidden).real } : {}) };
-  const qIns = db.prepare('INSERT INTO bb_players (id, owner_id, name, kind, pos, number, stats, pitches, specials, rarity, origin, hidden, games, look, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)');
-  const savePlayer = (p, owner) => qIns.run(p.id, owner, p.name, p.kind, p.pos, p.number, JSON.stringify(p.stats), JSON.stringify(p.pitches || []), JSON.stringify(p.specials || []), p.rarity, p.origin, JSON.stringify(p.hidden || {}), JSON.stringify(p.look || {}), Date.now());
-  const playersOf = (uid) => db.prepare('SELECT * FROM bb_players WHERE owner_id = ? ORDER BY created_at').all(uid).map(rowToPlayer);
+  const rowToPlayer = (r) => r && { id: r.id, ownerId: r.owner_id, name: r.name, kind: r.kind, pos: r.pos, number: r.number, stats: JSON.parse(r.stats), pitches: JSON.parse(r.pitches), specials: JSON.parse(r.specials), rarity: r.rarity, origin: r.origin, hidden: JSON.parse(r.hidden), games: r.games, look: JSON.parse(r.look), age: r.age || 0, seasons: r.seasons || 0, rookieSeason: r.rookie_season ?? null, retiredAt: r.retired_at ?? null, ...(JSON.parse(r.hidden).real ? { real: JSON.parse(r.hidden).real } : {}) };
+  const qIns = db.prepare('INSERT INTO bb_players (id, owner_id, name, kind, pos, number, stats, pitches, specials, rarity, origin, hidden, games, look, created_at, age, rookie_season) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)');
+  const savePlayer = (p, owner) => { career.ensure(p); return qIns.run(p.id, owner, p.name, p.kind, p.pos, p.number, JSON.stringify(p.stats), JSON.stringify(p.pitches || []), JSON.stringify(p.specials || []), p.rarity, p.origin, JSON.stringify(p.hidden || {}), JSON.stringify(p.look || {}), Date.now(), p.age, p.rookieSeason ?? null); };
+  const playersOf = (uid) => db.prepare('SELECT * FROM bb_players WHERE owner_id = ? AND retired_at IS NULL ORDER BY created_at').all(uid).map(rowToPlayer); // 引退した選手は図鑑へ (一覧には出さない)
   const teamRow = (uid) => db.prepare('SELECT * FROM bb_teams WHERE user_id = ?').get(uid);
   // 公開する選手の形 (隠している「大化け」は見せない)
-  const pubPlayer = (p) => ({ ...(p.real ? { real: { team: p.real.team || '', note: p.real.note || '' } } : {}), id: p.id, name: p.name, kind: p.kind, pos: p.pos, number: p.number, stats: p.stats, pitches: (p.pitches || []).map((x) => ({ id: x, name: C.PITCHES[x]?.name })), specials: (p.specials || []).map((k) => ({ id: k, ...SPECIALS[k] })), rarity: p.rarity, origin: p.origin, games: p.games, look: p.look, awakened: !!p.hidden?.awakened });
+  const pubPlayer = (p) => ({ ...(p.real ? { real: { team: p.real.team || '', note: p.real.note || '' } } : {}), id: p.id, name: p.name, kind: p.kind, pos: p.pos, number: p.number, stats: p.stats, pitches: (p.pitches || []).map((x) => ({ id: x, name: C.PITCHES[x]?.name })), specials: (p.specials || []).map((k) => ({ id: k, ...SPECIALS[k] })), rarity: p.rarity, origin: p.origin, games: p.games, look: p.look, awakened: !!p.hidden?.awakened,
+    age: p.age || 0, seasons: p.seasons || 0, ovr: CAREER.ovr(p), grade: CAREER.grade(CAREER.ovr(p)), rookie: p.rookieSeason != null && p.rookieSeason === seasonOf(), retired: !!p.retiredAt, awakenN: p.hidden?.awakenN || 0 });
 
   // ---------- チーム ----------
   function autoLineup(uid) {
@@ -178,7 +184,7 @@ module.exports = function install(app, ctx) {
 
   // ---------- 自動試合 (9 回) ----------
   function simGame(home, away, r) {
-    const box = new Map(); const B = (p, tm) => { if (!box.has(p.id)) box.set(p.id, { p, team: tm, g: 1, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, bb: 0, so: 0, def: 0, w: 0, l: 0, sv: 0, hld: 0, outs: 0, er: 0, k: 0 }); return box.get(p.id); };
+    const box = new Map(); const B = (p, tm) => { if (!box.has(p.id)) box.set(p.id, { p, team: tm, g: 1, pa: 0, ab: 0, h: 0, hr: 0, rbi: 0, bb: 0, so: 0, sb: 0, def: 0, w: 0, l: 0, sv: 0, hld: 0, outs: 0, er: 0, k: 0 }); return box.get(p.id); };
     const sides = [away, home].map((t, i) => ({ t, i, idx: 0, pitcher: t.starter, used: [t.starter], runs: 0, line: [], defAvg: t.lineup.reduce((a, p) => a + eff(p).tech, 0) / t.lineup.length, hitsByPlayer: new Map() }));
     const spd = (side) => (id) => eff(side.t.lineup.find((p) => p.id === id) || { stats: { speed: 50 }, specials: [] }).speed || 50;
     let inning = 1, lead = null;
@@ -200,6 +206,9 @@ module.exports = function install(app, ctx) {
         changePitcher(def, off);
         const g = { outs: 0, bases: [null, null, null] }; let runs = 0;
         while (g.outs < 3) {
+          // 盗塁: 一塁に走者・二塁が空いているとき、足の速い走者がときどき走る (成功率は走力しだい)
+          if (g.bases[0] && !g.bases[1]) { const rid = g.bases[0], rp = off.t.lineup.find((p) => p.id === rid), rsp = rp ? eff(rp).speed : 50;
+            if (rsp >= 58 && r() < (rsp - 48) / 260) { if (r() < 0.5 + rsp / 250) { g.bases[1] = rid; g.bases[0] = null; if (rp) B(rp, off.t).sb++; } else { g.bases[0] = null; g.outs++; B(def.pitcher, def.t).outs++; if (g.outs >= 3) break; } } }
           const b = off.t.lineup[off.idx % 9]; off.idx++;
           const be = eff(b), pe = eff(def.pitcher), bs = B(b, off.t), ps = B(def.pitcher, def.t);
           const risp = !!(g.bases[1] || g.bases[2]), late = inning >= 7 && Math.abs(off.runs - def.runs) <= 2;
@@ -243,27 +252,29 @@ module.exports = function install(app, ctx) {
   }
 
   // 試合の結果を保存 (自分のチームの選手の成績・たましい・リーグ・レート)
-  const qStat = db.prepare(`INSERT INTO bb_stats (season, player_id, user_id, g, pa, ab, h, hr, rbi, bb, so, def, w, l, sv, hld, outs, er, k) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(season, player_id) DO UPDATE SET g = g + 1, pa = pa + excluded.pa, ab = ab + excluded.ab, h = h + excluded.h, hr = hr + excluded.hr, rbi = rbi + excluded.rbi, bb = bb + excluded.bb, so = so + excluded.so,
+  const qStat = db.prepare(`INSERT INTO bb_stats (season, player_id, user_id, g, pa, ab, h, hr, rbi, bb, so, def, w, l, sv, hld, outs, er, k, sb) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(season, player_id) DO UPDATE SET g = g + 1, pa = pa + excluded.pa, ab = ab + excluded.ab, h = h + excluded.h, hr = hr + excluded.hr, rbi = rbi + excluded.rbi, bb = bb + excluded.bb, so = so + excluded.so, sb = sb + excluded.sb,
     def = def + excluded.def, w = w + excluded.w, l = l + excluded.l, sv = sv + excluded.sv, hld = hld + excluded.hld, outs = outs + excluded.outs, er = er + excluded.er, k = k + excluded.k`);
   function recordGame(home, away, res, league, season, now) {
-    const boxOut = res.box.map((x) => ({ id: x.p.id, name: x.p.name, team: x.team === home ? 'home' : 'away', kind: x.p.kind, pos: x.p.pos, pa: x.pa, ab: x.ab, h: x.h, hr: x.hr, rbi: x.rbi, bb: x.bb, so: x.so, def: x.def, outs: x.outs, er: x.er, k: x.k, w: x.w, l: x.l, sv: x.sv, hld: x.hld }));
+    const boxOut = res.box.map((x) => ({ id: x.p.id, name: x.p.name, team: x.team === home ? 'home' : 'away', kind: x.p.kind, pos: x.p.pos, pa: x.pa, ab: x.ab, h: x.h, hr: x.hr, rbi: x.rbi, bb: x.bb, so: x.so, sb: x.sb || 0, def: x.def, outs: x.outs, er: x.er, k: x.k, w: x.w, l: x.l, sv: x.sv, hld: x.hld }));
     const gid = Number(db.prepare('INSERT INTO bb_games (season, at, league, home_uid, away_uid, home_name, away_name, hs, as_, box) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(season, now, league, home.uid, away.uid, home.name, away.name, res.hs, res.as, JSON.stringify({ lineHome: res.lineHome, lineAway: res.lineAway, box: boxOut })).lastInsertRowid);
     for (const x of res.box) {
       if (x.team.uid) {
-        qStat.run(season, x.p.id, x.team.uid, x.pa, x.ab, x.h, x.hr, x.rbi, x.bb, x.so, x.def, x.w, x.l, x.sv, x.hld, x.outs, x.er, x.k);
+        qStat.run(season, x.p.id, x.team.uid, x.pa, x.ab, x.h, x.hr, x.rbi, x.bb, x.so, x.def, x.w, x.l, x.sv, x.hld, x.outs, x.er, x.k, x.sb || 0);
         // 試合数・燻し銀のための記録・大化け (隠していた能力が目覚める)
         const row = db.prepare('SELECT hidden, stats, games FROM bb_players WHERE id = ?').get(x.p.id); if (!row) continue;
         const hid = JSON.parse(row.hidden); hid.lastHitless = x.p.kind === 'B' ? x.ab > 0 && x.h === 0 : false;
         let stats = JSON.parse(row.stats);
         if (hid.bloom && !hid.awakened && row.games + 1 >= hid.bloom) { hid.awakened = true; for (const k of Object.keys(stats)) stats[k] = k === 'velo' ? stats[k] + 10 : k === 'stamina' ? stats[k] : Math.min(99, stats[k] + 22); }
         db.prepare('UPDATE bb_players SET games = games + 1, hidden = ?, stats = ? WHERE id = ?').run(JSON.stringify(hid), JSON.stringify(stats), x.p.id);
+        try { career.afterGame(x.p.id, x.team.uid, x); } catch (e) { console.error('[bb] 覚醒・記録', e.message); } // 覚醒・記録達成
       }
       // 前日の活躍選手 (ガチャに入る): 打者は安打・本塁打・打点、投手は勝ち・セーブ・三振
       const sc = x.p.kind === 'B' ? x.h * 1 + x.hr * 3 + x.rbi * 0.8 : x.w * 3 + x.sv * 2 + x.k * 0.5 - x.er * 0.6;
       if (sc >= 4.5) db.prepare('INSERT INTO bb_hot (day, player, score) VALUES (?, ?, ?)').run(dayKey(now), JSON.stringify({ ...x.p, hidden: {}, ownerId: undefined }), sc);
     }
+    try { career.gameNews(home, away, res, gid); } catch (e) { console.error('[bb] 試合のニュース', e.message); }
     return gid;
   }
   function rateChange(a, b, aWon) { const ea = 1 / (1 + 10 ** ((b - a) / 400)); return Math.round(24 * ((aWon ? 1 : 0) - ea)); }
@@ -273,6 +284,7 @@ module.exports = function install(app, ctx) {
     lwins += won ? 1 : 0;
     if ((league === 'champion' || league === 'king') && oppRate) rate += rateChange(rate, oppRate, won);
     else if (won && lwins >= PROMOTE_WINS && LEAGUES.indexOf(league) < LEAGUES.indexOf('champion')) { league = LEAGUES[LEAGUES.indexOf(league) + 1]; lwins = 0; }
+    if (league !== row.league && t.uid) setTimeout(() => { try { career.onPromote(t.uid, league); } catch {} }, 0); // 昇格のニュース
     db.prepare('UPDATE bb_teams SET wins = wins + ?, losses = losses + ?, lwins = ?, league = ?, rate = ?, souls = souls + ?, rot_idx = rot_idx + 1, season = ? WHERE user_id = ?')
       .run(won ? 1 : 0, won ? 0 : 1, lwins, league, rate, won ? WIN_SOULS : LOSE_SOULS, season, t.uid);
   }
@@ -331,6 +343,7 @@ module.exports = function install(app, ctx) {
         db.prepare("UPDATE bb_teams SET league = 'king' WHERE user_id = ?").run(king.user_id);
         try { db.prepare('INSERT OR IGNORE INTO user_titles (user_id, title, source, granted_at) VALUES (?, ?, ?, ?)').run(king.user_id, `King of season ${s}`, 'bb:king:' + s, now); } catch {}
       }
+      career.onSeasonClose(s, king); // 新人王・年齢と成長・引退・殿堂入り・ニュース
       db.prepare('UPDATE bb_teams SET wins = 0, losses = 0, lwins = 0').run();
       db.prepare('INSERT INTO bb_seasons (season, king_uid, done_at) VALUES (?, ?, ?)').run(s, king?.user_id || null, now);
       db.exec('COMMIT');
@@ -355,14 +368,16 @@ module.exports = function install(app, ctx) {
       const nStar = r() < 0.5 ? 1 : 2;
       for (let i = 0; i < nStar; i++) { const p = makePlayer(r, { rarity: 'SSR', origin: 'draft', special: i === 0 ? 'kaibutsu' : 'none' }); if (p.specials[0] === 'none') p.specials = []; if (!p.specials.length) p.specials.push(pick(r, Object.keys(SPECIALS).filter((k) => !SPECIALS[k].award && (SPECIALS[k].kind === p.kind || SPECIALS[k].kind === '*') && k !== 'kaibutsu'))); p.star = true; pool.push(p); }
       const bloomer = makePlayer(r, { rarity: 'N', origin: 'draft' }); bloomer.hidden = { bloom: 8 + rint(r, 0, 6) }; pool.push(bloomer); // 大化けする選手 (見せない)
+      career.addGems(pool, r, makePlayer); // 隠し逸材 (目玉とは別枠・毎回は出ない)
       while (pool.length < 24) pool.push(makePlayer(r, { rarity: pick(r, ['N', 'N', 'R', 'R', 'R', 'SR']), origin: 'draft' }));
+      for (const p of pool) career.ensure(p);
       pool.sort(() => r() - 0.5); pool.sort((a, b) => (b.star ? 1 : 0) - (a.star ? 1 : 0));
       db.prepare('INSERT OR IGNORE INTO bb_draft_pool (day, pool) VALUES (?, ?)').run(day, JSON.stringify(pool));
       row = db.prepare('SELECT * FROM bb_draft_pool WHERE day = ?').get(day);
     }
     return { ...row, pool: JSON.parse(row.pool), lots: JSON.parse(row.lots) };
   }
-  function giveDraftPlayer(uid, p) { const np = { ...p, id: crypto.randomBytes(6).toString('hex'), origin: 'draft' }; delete np.star; savePlayer(np, uid); return np; }
+  function giveDraftPlayer(uid, p) { const np = { ...p, hidden: { ...(p.hidden || {}) }, id: crypto.randomBytes(6).toString('hex'), origin: 'draft', rookieSeason: seasonOf() }; delete np.star; savePlayer(np, uid); return np; }
   function resolveDraft(now = Date.now()) {
     const day = dayKey(now), t = draftTimes(day), dp = draftPool(day);
     if (!dp.r1 && now >= t.reveal) {
@@ -379,12 +394,13 @@ module.exports = function install(app, ctx) {
         }
         db.prepare('UPDATE bb_draft_pool SET r1 = 1, lots = ? WHERE day = ?').run(JSON.stringify(lots), day);
         db.exec('COMMIT');
+        try { career.onDraftR1(day, lots, dp.pool); } catch (e) { console.error('[bb] ドラフトのニュース', e.message); }
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     }
     if (!dp.r2 && now >= t.r2End) {
       // 2 巡目: 参加券を早く買った人から。ほしい選手がもういなければ、残りからランダム。えらばなかった人にも残りから 1 人
       const taken = new Set(dp.lots.map((l) => l.player));
-      const entries = db.prepare('SELECT * FROM bb_draft WHERE day = ? ORDER BY bought_at').all(day);
+      const entries = db.prepare('SELECT * FROM bb_draft WHERE day = ? ORDER BY bought_at').all(day), picks = [];
       db.exec('BEGIN');
       try {
         for (const e of entries) {
@@ -392,12 +408,27 @@ module.exports = function install(app, ctx) {
           if (!p) { const rest = dp.pool.filter((x) => !taken.has(x.id) && !x.star); p = rest[Math.floor(sr() * rest.length)]; }
           if (!p) continue;
           taken.add(p.id); const np = giveDraftPlayer(e.user_id, p);
-          db.prepare('UPDATE bb_draft SET got2 = ? WHERE day = ? AND user_id = ?').run(np.id, day, e.user_id);
+          db.prepare('UPDATE bb_draft SET got2 = ? WHERE day = ? AND user_id = ?').run(np.id, day, e.user_id); picks.push({ uid: e.user_id, name: p.name });
         }
         db.prepare('UPDATE bb_draft_pool SET r2 = 1 WHERE day = ?').run(day);
         db.exec('COMMIT');
+        try { career.onDraftR2(day, picks); } catch (e) { console.error('[bb] ドラフトのニュース', e.message); }
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     }
+  }
+
+  // ---------- 選手の一生とリーグの出来事 (baseball-career.js) ----------
+  career = CAREER(app, ctx, { sr, limit, C, SPECIALS, AWARDS, LEAGUE_NAME, POS, rowToPlayer, pubPlayer, playersOf, teamRow, autoLineup, seasonOf, dayKey, ROSTER_MAX, TICKET,
+    draftPool: (d) => draftPool(d), draftPhase: (n) => draftPhase(n), draftTimes: (d) => draftTimes(d), meView: (u) => meView(u) });
+
+  // テスト用 (環境変数 BB_TEST=1 のときの管理者だけ。本番では設定しない): 自動試合・シーズンの締め・ドラフトの締め・年齢を進める
+  if (process.env.BB_TEST === '1') {
+    const T = (fn) => (req, res) => { if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけ' }); try { res.json(fn(req.body || {}) || { ok: true }); } catch (e) { res.status(500).json({ error: e.message }); } };
+    app.post('/api/bb/test/round', requireAuth, T((b) => { let n = 0; for (let i = 0; i < Math.min(50, Number(b.n) || 1); i++) n += runRound(Date.now()); return { games: n }; }));
+    app.post('/api/bb/test/close-season', requireAuth, T((b) => { const s = Number(b.s) || seasonOf(); db.prepare('DELETE FROM bb_seasons WHERE season = ?').run(s); closeSeason(s); return { ok: true }; }));
+    app.post('/api/bb/test/draft', requireAuth, T((b) => { const t = draftTimes(dayKey()); resolveDraft(b.at === 'r2' ? t.r2End + 1000 : t.reveal + 1000); return { ok: true }; }));
+    app.post('/api/bb/test/player', requireAuth, T((b) => { const row = db.prepare('SELECT * FROM bb_players WHERE id = ?').get(String(b.id)); if (!row) throw new Error('none'); const hid = { ...JSON.parse(row.hidden), ...(b.hidden || {}) };
+      db.prepare('UPDATE bb_players SET age = COALESCE(?, age), games = COALESCE(?, games), hidden = ?, rookie_season = COALESCE(?, rookie_season) WHERE id = ?').run(b.age ?? null, b.games ?? null, JSON.stringify(hid), b.rookieSeason ?? null, row.id); return { ok: true }; }));
   }
 
   // ---------- 時計 (毎時 5 分の試合・ドラフトの締め・シーズンの締め) ----------
@@ -405,6 +436,7 @@ module.exports = function install(app, ctx) {
   function tick() {
     const now = Date.now(), j = jst(now);
     try { resolveDraft(now); } catch (e) { console.error('[bb] ドラフト', e.message); }
+    try { career.expireTrades(now); } catch (e) { console.error('[bb] トレードの期限', e.message); }
     const prev = seasonOf(now) - 1; if (prev >= 1) closeSeason(prev);
     const key = j.toISOString().slice(0, 13);
     if (j.getUTCMinutes() >= 5 && j.getUTCMinutes() < 30 && lastRound !== key) {
@@ -458,7 +490,8 @@ module.exports = function install(app, ctx) {
   });
   app.post('/api/bb/release/:id', requireAuth, limit, (req, res) => {
     const uid = req.user.id, t = teamRow(uid); if (!t) return res.status(400).json({ error: 'まだ始めていません' });
-    const p = rowToPlayer(db.prepare('SELECT * FROM bb_players WHERE id = ? AND owner_id = ?').get(req.params.id, uid)); if (!p) return res.status(404).json({ error: 'その選手はいません' });
+    const p = rowToPlayer(db.prepare('SELECT * FROM bb_players WHERE id = ? AND owner_id = ? AND retired_at IS NULL').get(req.params.id, uid)); if (!p) return res.status(404).json({ error: 'その選手はいません' });
+    if (career.isLocked(p.id)) return res.status(400).json({ error: 'その選手はトレードに出しています (トレードを取り消してから手放してください)' });
     const ps = playersOf(uid); if (ps.filter((x) => x.kind === p.kind).length <= (p.kind === 'B' ? 9 : 5)) return res.status(400).json({ error: p.kind === 'B' ? '野手は 9 人より少なくできません' : '投手は 5 人より少なくできません' });
     const back = { N: 20, R: 50, SR: 120, SSR: 300 }[p.rarity] || 20;
     db.prepare('UPDATE bb_players SET owner_id = NULL WHERE id = ?').run(p.id);
@@ -477,7 +510,7 @@ module.exports = function install(app, ctx) {
     const lg = t.league === 'king' ? ['champion', 'king'] : [t.league];
     const teams = db.prepare(`SELECT b.user_id, b.name, b.wins, b.losses, b.lwins, b.rate, b.league, u.username FROM bb_teams b JOIN users u ON u.id = b.user_id WHERE b.league IN (${lg.map(() => '?').join(',')}) ORDER BY ${t.league === 'champion' || t.league === 'king' ? 'b.rate DESC' : 'b.lwins DESC, b.wins DESC'} LIMIT 50`).all(...lg)
       .map((x) => ({ name: x.name, username: x.username, wins: x.wins, losses: x.losses, lwins: x.lwins, rate: x.rate, king: x.league === 'king', me: x.user_id === req.user.id }));
-    const awards = db.prepare('SELECT a.*, u.username FROM bb_awards a LEFT JOIN users u ON u.id = a.user_id ORDER BY season DESC LIMIT 18').all().map((a) => { const A = AWARDS.find((x) => x.id === a.award); return { season: a.season, title: A?.name || a.award, player: a.name, owner: a.username, value: A?.fmt ? A.fmt(a.value) : a.value, unit: A?.unit }; });
+    const awards = db.prepare('SELECT a.*, u.username FROM bb_awards a LEFT JOIN users u ON u.id = a.user_id ORDER BY season DESC LIMIT 18').all().map((a) => { const A = AWARDS.find((x) => x.id === a.award); return { season: a.season, title: A?.name || ({ rookie_b: '新人王 (野手)', rookie_p: '新人王 (投手)' })[a.award] || a.award, player: a.name, owner: a.username, value: A?.fmt ? A.fmt(a.value) : a.value, unit: A?.unit }; });
     const kings = db.prepare('SELECT s.season, u.username, b.name FROM bb_seasons s LEFT JOIN users u ON u.id = s.king_uid LEFT JOIN bb_teams b ON b.user_id = s.king_uid ORDER BY s.season DESC LIMIT 5').all();
     res.json({ league: t.league, leagueName: LEAGUE_NAME[t.league], teams, awards, kings, season: { id: seasonOf(), end: seasonEnd(seasonOf()) } });
   });
@@ -487,9 +520,9 @@ module.exports = function install(app, ctx) {
     const mine = db.prepare('SELECT * FROM bb_draft WHERE day = ? AND user_id = ?').get(day, req.user.id);
     const teams = db.prepare('SELECT b.name, u.username, d.bought_at FROM bb_draft d JOIN bb_teams b ON b.user_id = d.user_id JOIN users u ON u.id = d.user_id WHERE d.day = ? ORDER BY d.bought_at').all(day);
     const taken1 = new Set(dp.lots.map((l) => l.player));
-    const pool = dp.pool.map((p) => ({ ...pubPlayer(p), star: !!p.star, taken: taken1.has(p.id) }));
+    const pool = dp.pool.map((p) => ({ ...career.poolView(p, req.user.id, day), taken: taken1.has(p.id) })); // 能力はスカウトで調べる (幅つきの推定)
     const got = mine ? [mine.got1, mine.got2].filter(Boolean).map((id) => rowToPlayer(db.prepare('SELECT * FROM bb_players WHERE id = ?').get(id))).filter(Boolean).map(pubPlayer) : [];
-    res.json({ day, phase, times: t, ticket: TICKET, pool, teams, mine: mine ? { boughtAt: mine.bought_at, pick1: mine.pick1, pick2: mine.pick2, got } : null,
+    res.json({ day, phase, times: t, ticket: TICKET, pool, teams, scout: career.scoutInfo(req.user.id), mine: mine ? { boughtAt: mine.bought_at, pick1: mine.pick1, pick2: mine.pick2, got } : null,
       lots: phase === 'r1' || phase === 'r1wait' || phase === 'closed' || phase === 'entry' ? [] : dp.lots.map((l) => ({ name: l.name, entrants: l.entrants, winner: db.prepare('SELECT name FROM bb_teams WHERE user_id = ?').get(l.winner)?.name || '', me: l.winner === req.user.id })) });
   });
   app.post('/api/bb/draft/ticket', requireAuth, limit, (req, res) => {
