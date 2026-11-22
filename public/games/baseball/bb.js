@@ -219,6 +219,7 @@ async function viewGacha() {
   bindCommon();
   $$('[data-n]').forEach((b) => b.onclick = async () => {
     try { const r = await api('/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); me = r; $('.souls').textContent = `🔥 ${Number(r.team.souls).toLocaleString()}`;
+      try { const G = await import('./gacha3d.js?v=1'); $$('[data-n]').forEach((x) => { x.disabled = true; }); await new Promise((ok) => G.playGacha(r.results, ok)); } catch (e) { console.warn('gacha3d', e); } finally { $$('[data-n]').forEach((x) => { x.disabled = false; }); } // 3D の演出 (読みこめなければ結果だけ)
       $('#res').innerHTML = `<div class="card"><h2>🎉 結果</h2><div class="cards">${r.results.map((p) => `<button class="cardbtn" data-pid="${esc(p.id)}">${art(p, 120)}</button>`).join('')}</div>${r.results.map((p) => plRow(p, p.origin === 'hot' ? '<span class="chip star">🔥活躍</span>' : '')).join('')}</div>`;
       $$('#res [data-pid]').forEach((el) => el.onclick = () => playerModal(r.results.find((p) => p.id === el.dataset.pid)));
       $('#res').scrollIntoView({ behavior: 'smooth' });
