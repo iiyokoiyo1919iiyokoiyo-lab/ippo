@@ -234,11 +234,23 @@ export function createStadium(canvas) {
   zone.position.set(0, (C.ZONE.yHi + C.ZONE.yLo) / 2, 0); scene.add(zone);
   const gridLines = new THREE.Group(); zone.add(gridLines);
   for (const k of [-1, 1]) { const v = new THREE.Mesh(new THREE.PlaneGeometry(0.004, C.ZONE.yHi - C.ZONE.yLo), new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0.35, depthTest: false })); v.renderOrder = 8; v.position.x = k * C.ZONE.x / 3; gridLines.add(v); const h = new THREE.Mesh(new THREE.PlaneGeometry(C.ZONE.x * 2, 0.004), v.material); h.position.y = k * (C.ZONE.yHi - C.ZONE.yLo) / 6; gridLines.add(h); }
-  const ring = (r, color) => { const m = new THREE.Mesh(new THREE.RingGeometry(r * 0.86, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthTest: false })); m.renderOrder = 10; m.visible = false; scene.add(m); return m; };
-  const meetCur = ring(1, '#ffd43b'), meetFill = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: '#ffd43b', transparent: true, opacity: 0.18, depthTest: false })); meetFill.renderOrder = 9; meetFill.visible = false; scene.add(meetFill);
+  const ring = (r, color) => { const m = new THREE.Mesh(new THREE.RingGeometry(r * 0.86, r, 40), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide })); m.renderOrder = 10; m.visible = false; scene.add(m); return m; };
+  // ミートカーソル: 太い黄色の輪 + 黒いふち (どんな背景でも見える) + 十字 + 明るい塗り
+  const meet = new THREE.Group(); meet.visible = false; meet.renderOrder = 12; scene.add(meet);
+  const mb = (geo, color, opacity, order) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide })); m.renderOrder = order; meet.add(m); return m; };
+  mb(new THREE.CircleGeometry(1, 48), '#ffe066', 0.3, 11);                       // 塗り
+  mb(new THREE.RingGeometry(1.0, 1.16, 64), '#111827', 0.85, 12);                // 外の黒いふち
+  mb(new THREE.RingGeometry(0.8, 1.0, 64), '#ffd43b', 1, 13);                    // 太い輪
+  mb(new THREE.RingGeometry(0.72, 0.8, 64), '#111827', 0.6, 12);                 // 内の黒いふち
+  mb(new THREE.PlaneGeometry(0.7, 0.06), '#ffffff', 0.95, 13); mb(new THREE.PlaneGeometry(0.06, 0.7), '#ffffff', 0.95, 13); // 十字
   const aimCur = ring(0.05, '#ff6b6b');
-  const setMeet = (x, y, r, on = true) => { for (const o of [meetCur, meetFill]) { o.visible = on; o.position.set(W(x), y, -0.02); o.scale.setScalar(r); } };
+  const setMeet = (x, y, r, on = true) => { meet.visible = on; meet.position.set(W(x), y, -0.03); meet.scale.setScalar(r); };
   const setAim = (x, y, on = true) => { aimCur.visible = on; aimCur.position.set(W(x), y, -0.02); };
+  const mark = new THREE.Group(); mark.visible = false; scene.add(mark);
+  const mk = (geo, color, opacity, order) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide })); m.renderOrder = order; mark.add(m); return m; };
+  const markDot = mk(new THREE.CircleGeometry(0.037, 24), '#ffffff', 0.95, 14);   // ボールの大きさ
+  const markRing = mk(new THREE.RingGeometry(0.05, 0.062, 32), '#ff6b6b', 0.95, 14); // 近づくほど小さくなる輪
+  let markHold = 0;
 
   // ---------- 選手 ----------
   const TEAM_COLORS = [{ main: '#f8f9fa', accent: '#1c3f94', cap: '#1c3f94' }, { main: '#2b2f3a', accent: '#f08c00', cap: '#f08c00' }];
@@ -290,13 +302,13 @@ export function createStadium(canvas) {
     const peak = ang < 6 ? 0.4 : Math.min(45, Math.tan(ang * Math.PI / 180) * dist / 4 + 1);
     const dur = ang < 6 ? 1.1 + dist / 60 : 1.2 + dist / 45;
     hitAnim = { from: new THREE.Vector3(res.hr ? 0 : 0, 1.0, 0.3), end, peak, dur, t: 0, ground: ang < 6 };
-    ball.visible = true; trail.visible = false; setCam('hit');
+    ball.visible = true; trail.visible = false; mark.visible = false; setCam('hit');
     // 近い野手がボールへ走る
     let best = null, bd = 1e9; for (const f of people.field) { const d = f.position.distanceTo(end); if (d < bd) { bd = d; best = f; } }
     if (best && !res.hr) { hitAnim.fielder = best; hitAnim.fFrom = best.position.clone(); best.play([['run', 0.18], ['run2', 0.18]], true); }
     people.batter.play([['run', 0.2], ['run2', 0.2]], true); hitAnim.runner = people.batter;
   }
-  function resetView() { setCam('bat'); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; }
+  function resetView() { setCam('bat'); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; mark.visible = false; markHold = 0; }
 
   // ---------- 描画 ----------
   let composer = null;
@@ -313,9 +325,14 @@ export function createStadium(canvas) {
         if (!pitchAnim.released) { pitchAnim.released = true; pitchAnim.onRelease?.(now - t * 1000); }
         const p = C.pitchPos(pitchAnim.pc, t); p.x = W(p.x); ball.visible = true; ball.position.set(p.x, p.y, p.z); ball.rotation.x += dt * 40;
         const q = C.pitchPos(pitchAnim.pc, Math.max(0, t - 0.06)); q.x = W(q.x); trail.visible = true; trail.position.set((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2); trail.lookAt(q.x, q.y, q.z); trail.rotateX(Math.PI / 2); trail.scale.set(1, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z), 1);
+        // ボールの目印: ゾーンの面に、いまのボールの左右と高さを出す (輪は遠いと大きく、本塁で 1 つになる)
+        const u = Math.min(1, t / pitchAnim.pc.T); mark.visible = true; mark.position.set(p.x, p.y, -0.04); markRing.scale.setScalar(1 + (1 - u) * 3);
+        markRing.material.opacity = 0.5 + u * 0.5; markDot.material.opacity = 0.45 + u * 0.5;
+        if (t >= pitchAnim.pc.T) markHold = 1.4; // 通った場所を少し残す
         if (t > pitchAnim.pc.T + 0.25) { ball.visible = false; trail.visible = false; pitchAnim = null; }
       }
     }
+    if (!pitchAnim && markHold > 0) { markHold -= dt; if (markHold <= 0) mark.visible = false; }
     if (hitAnim) {
       const h = hitAnim; h.t += dt; const u = Math.min(1, h.t / h.dur);
       ball.position.lerpVectors(h.from, h.end, u); ball.position.y = h.ground ? 0.1 + Math.abs(Math.sin(u * Math.PI * 3)) * 0.5 * (1 - u) : lerp(h.from.y, 0.1, u) + Math.sin(u * Math.PI) * h.peak;
@@ -330,7 +347,7 @@ export function createStadium(canvas) {
     else if (camMode === 'wide') { camPos.lerp(new THREE.Vector3(0, 32, -38), 0.05); camLook.lerp(new THREE.Vector3(0, 0, 40), 0.05); }
     camera.position.copy(camPos); camera.lookAt(camLook);
     zone.visible = camMode === 'bat'; if (people.ump) people.ump.visible = camMode !== 'bat'; // 打席のカメラでは審判は見せない (視界をふさぐ)
-    if (people.catcher && people.catcher.userData.ghost !== (camMode === 'bat')) { people.catcher.userData.ghost = camMode === 'bat'; people.catcher.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = camMode === 'bat' ? 0.4 : 1; o.material.depthWrite = camMode !== 'bat'; } }); } // 打席のカメラでは捕手を半透明に (ボールとゾーンが見える)
+    if (people.catcher) people.catcher.visible = camMode !== 'bat'; // 打席のカメラでは捕手を見せない (ゾーンとボールが見やすい)
     if (composer) composer.render(); else renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
   };
