@@ -25,6 +25,10 @@ button{font:inherit;cursor:pointer;color:inherit}
 .lg.bronze{background:#8c5a2b}.lg.silver{background:#7d8597;color:#fff}.lg.gold{background:#d4a017;color:#2b1d00}.lg.elite{background:#7048e8;color:#fff}.lg.champion{background:linear-gradient(90deg,#e03131,#f08c00);color:#fff}.lg.king{background:linear-gradient(90deg,#ffd43b,#fab005,#ffe066);color:#3b1d00}
 .bar{height:10px;border-radius:999px;background:var(--surface2);overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#4dabf7,#69db7c)}
 .pl{display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;background:var(--surface2);margin-bottom:6px;cursor:pointer}
+.pl .pic{flex:none;width:40px;height:52px;border-radius:8px;overflow:hidden;display:block}.pl .pic svg{display:block}
+.pcard{display:flex;justify-content:center;margin:0 0 10px}.pcard svg{filter:drop-shadow(0 8px 18px rgba(0,0,0,.5))}
+.cards{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px}.cardbtn{border:0;padding:0;background:none;border-radius:14px;animation:flip .5s cubic-bezier(.2,1.4,.4,1) both}.cardbtn svg{display:block}
+@keyframes flip{from{transform:rotateY(90deg) scale(.8);opacity:0}}
 .pl .no{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:#2b3762;font-size:14px}
 .pl b{display:block;font-size:14px}.pl small{color:var(--muted)}
 .r-N{color:#ced4da}.r-R{color:#74c0fc}.r-SR{color:#da77f2}.r-SSR{background:linear-gradient(90deg,#ffd43b,#ff922b,#f783ac);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -68,6 +72,7 @@ select.in{padding:6px}
   <button id="mx" type="button">🏳️ 降参</button>
 </div>
 <script src="bb-core.js?v=1"></script>
-<script type="module" src="bb.js?v=2"></script>
+<script src="bb-art.js?v=1"></script>
+<script type="module" src="bb.js?v=3"></script>
 </body>
 </html>

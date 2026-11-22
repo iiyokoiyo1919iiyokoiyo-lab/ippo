@@ -26,12 +26,14 @@ const tabs = (on) => `<nav class="tabs">${[['home', '🏟️', 'ホーム'], ['t
 function bindCommon() { $('#exit')?.addEventListener('click', () => parent.postMessage({ source: 'ippo-baseball', type: 'exit' }, location.origin)); }
 const statBar = (label, v, max = 100, suf = '') => `<span>${label}</span><span class="bar"><i style="width:${Math.min(100, v / max * 100)}%"></i></span><b>${v}${suf}</b>`;
 const spChips = (p) => (p.specials || []).map((s) => `<span class="chip ${s.award ? 'aw' : 'sp'}" title="${esc(s.desc)}">${esc(s.name)}</span>`).join('');
-const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="no">${p.kind === 'P' ? esc(p.pos) : esc(p.pos)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.real ? ` <span class="chip">${esc(p.real.team || '実名')}</span>` : ''}${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>${p.real?.note ? `<small>🔥 ${esc(p.real.note)}</small> ` : ''}
+// 選手画像 (自動で作るシルエット。bb-art.js)。文字は bb-art.js の中でエスケープしている
+const art = (p, size, name = true) => (window.BBArt ? window.BBArt.svg(p, { size, name }) : '');
+const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="pic">${art(p, 40, false)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.real ? ` <span class="chip">${esc(p.real.team || '実名')}</span>` : ''}${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>${p.real?.note ? `<small>🔥 ${esc(p.real.note)}</small> ` : ''}
   <small>${p.kind === 'P' ? `${p.stats.velo}km 変${p.stats.brk} 威${p.stats.stuff} · ${p.pitches.length}球種` : `ミ${p.stats.meet} パ${p.stats.power} 速${p.stats.speed} 守${p.stats.tech}`}</small> ${spChips(p)}</span>${extra}</div>`;
 function playerModal(p, { release = false } = {}) {
   const s = p.season;
   const m = document.createElement('div'); m.className = 'modal';
-  m.innerHTML = `<div class="card"><div class="row"><h2 class="grow"><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small class="muted">#${p.number} · ${p.kind === 'P' ? '投手' : '野手'} (${esc(p.pos)})</small></h2><button class="x" data-close>✕</button></div>
+  m.innerHTML = `<div class="card"><div class="pcard">${art(p, 190)}</div><div class="row"><h2 class="grow"><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small class="muted">#${p.number} · ${p.kind === 'P' ? '投手' : '野手'} (${esc(p.pos)})</small></h2><button class="x" data-close>✕</button></div>
     <div class="st">${p.kind === 'P' ? statBar('球速', p.stats.velo, 165, 'km') + statBar('変化力', p.stats.brk) + statBar('球威', p.stats.stuff) + statBar('スタミナ', p.stats.stamina) : statBar('ミート', p.stats.meet) + statBar('パワー', p.stats.power) + statBar('走力', p.stats.speed) + statBar('守備', p.stats.tech)}</div>
     ${p.kind === 'P' ? `<p class="small" style="margin:8px 0 4px"><b>球種 (${p.pitches.length})</b></p><div>${p.pitches.map((x) => `<span class="chip">${esc(x.name)}</span>`).join('')}</div>` : ''}
     ${p.specials?.length ? `<p class="small" style="margin:8px 0 4px"><b>特殊能力</b></p>${p.specials.map((x) => `<div class="small"><span class="chip ${x.award ? 'aw' : 'sp'}">${esc(x.name)}</span> ${esc(x.desc)}</div>`).join('')}` : ''}
@@ -165,7 +167,7 @@ async function viewGacha() {
   bindCommon();
   $$('[data-n]').forEach((b) => b.onclick = async () => {
     try { const r = await api('/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); me = r; $('.souls').textContent = `🔥 ${Number(r.team.souls).toLocaleString()}`;
-      $('#res').innerHTML = `<div class="card"><h2>🎉 結果</h2>${r.results.map((p) => plRow(p, p.origin === 'hot' ? '<span class="chip star">🔥活躍</span>' : '')).join('')}</div>`;
+      $('#res').innerHTML = `<div class="card"><h2>🎉 結果</h2><div class="cards">${r.results.map((p) => `<button class="cardbtn" data-pid="${esc(p.id)}">${art(p, 120)}</button>`).join('')}</div>${r.results.map((p) => plRow(p, p.origin === 'hot' ? '<span class="chip star">🔥活躍</span>' : '')).join('')}</div>`;
       $$('#res [data-pid]').forEach((el) => el.onclick = () => playerModal(r.results.find((p) => p.id === el.dataset.pid)));
       $('#res').scrollIntoView({ behavior: 'smooth' });
     } catch (e) { toast(e.message, true); }
