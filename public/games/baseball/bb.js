@@ -200,7 +200,7 @@ function viewPlay() {
 // ---------- 試合の画面と操作 ----------
 let ws = null, M = null;
 async function startMatch(mode) {
-  if (!Stadium) { try { Stadium = await import('./stadium.js?v=4'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
+  if (!Stadium) { try { Stadium = await import('./stadium.js?v=5'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
   ws?.close(); ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bb`);
   ws.onopen = () => { ws.send(JSON.stringify({ t: mode })); const qs = $('#qs'); if (qs) qs.textContent = mode === 'queue' ? '相手を探しています… (見つからなければ CPU と練習もできます)' : ''; };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };

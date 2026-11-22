@@ -331,8 +331,13 @@ export function createStadium(canvas) {
         if (!pitchAnim.released) { pitchAnim.released = true; pitchAnim.onRelease?.(now - t * 1000); }
         const p = C.pitchPos(pitchAnim.pc, t); p.x = W(p.x); ball.visible = true; ball.position.set(p.x, p.y, p.z); ball.rotation.x += dt * 40;
         const q = C.pitchPos(pitchAnim.pc, Math.max(0, t - 0.06)); q.x = W(q.x); trail.visible = true; trail.position.set((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2); trail.lookAt(q.x, q.y, q.z); trail.rotateX(Math.PI / 2); trail.scale.set(1, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z), 1);
-        // ボールの目印: ゾーンの面に、いまのボールの左右と高さを出す (輪は遠いと大きく、本塁で 1 つになる)
-        const u = Math.min(1, t / pitchAnim.pc.T); mark.visible = true; mark.position.set(p.x, p.y, -0.04); markRing.scale.setScalar(1 + (1 - u) * 3);
+        // 着弾予想地点: いまの飛び方のまま まっすぐ来たら、本塁 (ゾーンの面) のどこに来るか。変化球はこのあと曲がるので、予想は動いていく
+        // (輪は遠いと大きく、近づくほど小さくなって、本塁で 1 つになる)
+        const u = Math.min(1, t / pitchAnim.pc.T); let px = p.x, py = p.y;
+        if (t < pitchAnim.pc.T) { const a0 = C.pitchPos(pitchAnim.pc, Math.max(0, t - 0.03)); a0.x = W(a0.x); const vz = p.z - a0.z; if (vz < -1e-4) { const k = -p.z / vz; px = p.x + (p.x - a0.x) * k; py = p.y + (p.y - a0.y) * k; } }
+        else { const e = pitchAnim.pc.end; px = W(e.x); py = e.y; }
+        px = Math.max(-0.9, Math.min(0.9, px)); py = Math.max(0, Math.min(1.8, py));
+        mark.visible = true; mark.position.set(px, py, -0.04); markRing.scale.setScalar(1 + (1 - u) * 3);
         markRing.material.opacity = 0.5 + u * 0.5; markDot.material.opacity = 0.45 + u * 0.5;
         if (t >= pitchAnim.pc.T) markHold = 1.4; // 通った場所を少し残す
         if (t > pitchAnim.pc.T + 0.25) { ball.visible = false; trail.visible = false; pitchAnim = null; }
