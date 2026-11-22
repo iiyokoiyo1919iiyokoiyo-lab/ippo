@@ -17,12 +17,18 @@
   const BG = { N: ['#33415c', '#111827', '#9fb0d0'], R: ['#1c5fd6', '#081736', '#8cc8ff'], SR: ['#7b2fd0', '#1a0838', '#e599f7'], SSR: ['#f08c00', '#2b1200', '#ffe066'] };
   const LINE = '#1d1b2c';
 
+  // look で指定できる見た目 (イラストの編集): seed (絵の元にする id)・skin 0-3・hairStyle 0-4・hairHex・eyes 0-2・eyeHex・mouth 0-2・pose 0-1・beard・build・h・team [メイン, 地, アクセント] (#rrggbb)
+  const HEX = /^#[0-9a-f]{6}$/i, pickN = (v, n, d) => (Number.isInteger(v) && v >= 0 && v < n ? v : d);
   function svg(p, { size = 200, name = true, crop = null } = {}) {
-    const r = rng(hash(p.id || p.name)), look = p.look || {}, rar = BG[p.rarity] ? p.rarity : 'N', [b1, b2, rim] = BG[rar];
-    const [sk, skD] = SKIN[(look.skin ?? 0) % 4], hairC = HAIR[(look.hair ?? Math.floor(r() * 7)) % HAIR.length], [tc, tc2, tc3] = TEAMS[hash((p.id || '') + 't') % TEAMS.length];
+    const look = p.look || {}, sid = look.seed || p.id || p.name;
+    p = { ...p, id: sid };
+    const r = rng(hash(p.id || p.name)), rar = BG[p.rarity] ? p.rarity : 'N', [b1, b2, rim] = BG[rar];
+    const [sk, skD] = SKIN[(look.skin ?? 0) % 4], hairC = HEX.test(look.hairHex || '') ? look.hairHex : HAIR[(look.hair ?? Math.floor(r() * 7)) % HAIR.length];
+    const [tc, tc2, tc3] = Array.isArray(look.team) && look.team.length === 3 && look.team.every((c) => HEX.test(c)) ? look.team : TEAMS[hash((p.id || '') + 't') % TEAMS.length];
     const lefty = p.kind === 'P' ? hash((p.id || '') + 'L') % 4 === 0 : look.bat === 'L';
     const bw = Math.max(0.9, Math.min(1.18, look.build || 1)), ht = Math.max(0.94, Math.min(1.06, look.h || 1));
-    const hairStyle = hash((p.id || '') + 'h') % 5, eyeStyle = hash((p.id || '') + 'e') % 3, poseN = hash((p.id || '') + 'p') % 2;
+    const hairStyle = pickN(look.hairStyle, 5, hash((p.id || '') + 'h') % 5), eyeStyle = pickN(look.eyes, 3, hash((p.id || '') + 'e') % 3), poseN = pickN(look.pose, 2, hash((p.id || '') + 'p') % 2);
+    const eyeC = HEX.test(look.eyeHex || '') ? look.eyeHex : null;
     const u = 'i' + (hash((p.id || '') + size + (crop || '')) % 1e9).toString(36);
     const g = (id, stops, x2 = 0, y2 = 1) => `<linearGradient id="${u}${id}" x1="0" y1="0" x2="${x2}" y2="${y2}">${stops.map(([o, c, a = 1]) => `<stop offset="${o}" stop-color="${c}" stop-opacity="${a}"/>`).join('')}</linearGradient>`;
     const st = `stroke="${LINE}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"`;
@@ -81,7 +87,7 @@
       return `<path d="${shape}" fill="#fff" stroke="${LINE}" stroke-width="1.1"/><circle cx="${f(ex + sx * 0.4)}" cy="${f(ey - 0.6)}" r="2.7" fill="url(#${u}iris)"/><circle cx="${f(ex + sx * 0.4)}" cy="${f(ey - 0.6)}" r="0.9" fill="#0b0b12"/><circle cx="${f(ex - 0.8)}" cy="${f(ey - 1.8)}" r=".9" fill="#fff"/>`
         + `<path d="M${f(ex - 5.6 * sx)},${f(ey - 0.5)} Q${f(ex)},${f(ey - (eyeStyle === 1 ? 5.4 : 6))} ${f(ex + 5.4 * sx)},${f(ey - 1.4)}" fill="none" stroke="${LINE}" stroke-width="1.5"/>` // 上まぶた (まつげ)
         + `<path d="M${f(ex - 5 * sx)},${f(ey - 8.2)} L${f(ex + 5 * sx)},${f(ey - (eyeStyle === 0 ? 10.2 : 9.2))}" stroke="${hairC}" stroke-width="1.8"/>`; }; // 眉
-    const mouthStyle = hash((p.id || '') + 'm') % 3;
+    const mouthStyle = pickN(look.mouth, 3, hash((p.id || '') + 'm') % 3);
     const mouth = mouthStyle === 0 ? `<path d="M${f(CX - 3.5)},${f(hc[1] + 13.5)} Q${CX},${f(hc[1] + 16)} ${f(CX + 3.5)},${f(hc[1] + 13)}" fill="none" stroke="${LINE}" stroke-width="1.3"/>` // ほほえみ
       : mouthStyle === 1 ? `<path d="M${f(CX - 3)},${f(hc[1] + 13.5)} L${f(CX + 3)},${f(hc[1] + 13.5)}" stroke="${LINE}" stroke-width="1.3"/>` // きりっと
         : `<path d="M${f(CX - 4)},${f(hc[1] + 12.5)} Q${CX},${f(hc[1] + 17)} ${f(CX + 4)},${f(hc[1] + 12.5)}Z" fill="#7a1f2b" stroke="${LINE}" stroke-width="1"/><path d="M${f(CX - 3)},${f(hc[1] + 12.8)} h6" stroke="#fff" stroke-width="1.2"/>`; // にっ
@@ -112,7 +118,7 @@ ${g('cap', [[0, tc], [1, '#0d0d16']])}
 ${g('skin', [[0, sk], [1, skD]])}
 ${g('bat', [[0, '#f0d29a'], [1, '#b07a3c']], 1, 0)}
 ${g('glove', [[0, '#c27a3c'], [1, '#6b3a16']])}
-<radialGradient id="${u}iris" cx="50%" cy="65%" r="70%"><stop offset="0" stop-color="${rim}"/><stop offset=".6" stop-color="${rim}"/><stop offset="1" stop-color="#3b3560"/></radialGradient>
+<radialGradient id="${u}iris" cx="50%" cy="65%" r="70%"><stop offset="0" stop-color="${eyeC || rim}"/><stop offset=".6" stop-color="${eyeC || rim}"/><stop offset="1" stop-color="#3b3560"/></radialGradient>
 ${g('rb', [[0, '#ff6b6b'], [0.25, '#ffd43b'], [0.5, '#69db7c'], [0.75, '#4dabf7'], [1, '#da77f2']], 1, 1)}
 ${g('fl', [[0, '#000', 0], [1, '#000', 0.78]])}
 <filter id="${u}gl" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.5"/></filter>

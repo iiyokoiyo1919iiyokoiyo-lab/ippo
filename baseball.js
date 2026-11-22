@@ -542,6 +542,34 @@ module.exports = function install(app, ctx) {
     console.log(`[bb] @${req.user.username} が実名の活躍選手を登録: ${name}`);
     res.json({ ok: true });
   });
+  // ガチャに入れた選手のイラストを編集する (管理者)。ガチャの「活躍選手」と、すでに引かれた写しにも反映する
+  const HEXC = /^#[0-9a-f]{6}$/i;
+  function cleanLook(old, L = {}) {
+    const n = (v, a, b) => (Number.isInteger(Number(v)) && Number(v) >= a && Number(v) <= b ? Number(v) : undefined);
+    const o = { ...old };
+    for (const [k, a, b] of [['skin', 0, 3], ['hairStyle', 0, 4], ['eyes', 0, 2], ['mouth', 0, 2], ['pose', 0, 1]]) { if (L[k] === null) { delete o[k]; continue; } const v = n(L[k], a, b); if (v !== undefined) o[k] = v; } // null = おまかせにもどす
+    for (const k of ['hairHex', 'eyeHex']) if (L[k] === null || L[k] === '') delete o[k]; else if (HEXC.test(String(L[k] || ''))) o[k] = String(L[k]);
+    if (L.team === null) delete o.team; else if (Array.isArray(L.team) && L.team.length === 3 && L.team.every((c) => HEXC.test(String(c)))) o.team = L.team.map(String);
+    if (typeof L.beard === 'boolean') o.beard = L.beard;
+    if (L.bat === 'L' || L.bat === 'R') o.bat = L.bat;
+    const bw = Number(L.build), h = Number(L.h);
+    if (Number.isFinite(bw)) o.build = Math.max(0.9, Math.min(1.18, bw)); if (Number.isFinite(h)) o.h = Math.max(0.94, Math.min(1.06, h));
+    return o;
+  }
+  app.post('/api/bb/admin/hot/look', requireAuth, limit, (req, res) => {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけができます' });
+    const id = String(req.body?.id || ''), y = dayKey(Date.now() - D);
+    const rows = db.prepare('SELECT rowid, player FROM bb_hot WHERE day >= ?').all(dayKey(Date.now() - 7 * D)), hit = rows.find((r) => JSON.parse(r.player).id === id);
+    if (!hit) return res.status(404).json({ error: 'その選手が見つかりません' });
+    const hp = JSON.parse(hit.player); hp.look = cleanLook({ ...(hp.look || {}), seed: hp.look?.seed || hp.id }, req.body?.look || {});
+    if (typeof req.body?.number !== 'undefined') hp.number = num(req.body.number, 0, 99, hp.number);
+    db.prepare('UPDATE bb_hot SET player = ? WHERE rowid = ?').run(JSON.stringify(hp), hit.rowid);
+    // 写し: 元の id (hidden.src) が同じもの。前に引かれた写し (src なし) は、実名・名前・球団が同じもの
+    const copies = db.prepare("SELECT id, look, hidden, name FROM bb_players WHERE origin IN ('hot', 'real')").all().filter((c) => { const hd = JSON.parse(c.hidden); return hd.src === hp.id || (!hd.src && hp.real && c.name === hp.name && hd.real?.team === hp.real.team); });
+    for (const c of copies) db.prepare('UPDATE bb_players SET look = ?, number = ? WHERE id = ?').run(JSON.stringify(hp.look), hp.number, c.id);
+    console.log(`[bb] @${req.user.username} がイラストを編集: ${hp.name} (写し ${copies.length} 人にも反映)`);
+    res.json({ ok: true, player: pubPlayer(hp), copies: copies.length });
+  });
   app.post('/api/bb/admin/hot/delete', requireAuth, limit, (req, res) => {
     if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけができます' });
     const id = String(req.body?.id || ''), y = dayKey(Date.now() - D);
@@ -561,7 +589,7 @@ module.exports = function install(app, ctx) {
       if (!u.changes) { db.exec('ROLLBACK'); return res.status(400).json({ error: `たましいが足りません (${cost})` }); }
       for (let i = 0; i < n; i++) {
         const x = hot.length ? sr() : 0.3 + sr() * 0.7; let p; // 活躍選手がいない日は、その 30% をふつうの排出に
-        if (hot.length && x < 0.3) { const h = hot[Math.floor(sr() * hot.length)]; p = { ...h, id: crypto.randomBytes(6).toString('hex'), origin: h.origin === 'real' ? 'real' : 'hot', hidden: h.real ? { real: h.real } : {} }; }
+        if (hot.length && x < 0.3) { const h = hot[Math.floor(sr() * hot.length)]; p = { ...h, id: crypto.randomBytes(6).toString('hex'), origin: h.origin === 'real' ? 'real' : 'hot', hidden: { ...(h.real ? { real: h.real } : {}), src: h.id }, look: { ...(h.look || {}), seed: h.look?.seed || h.id } }; } // 写しも元と同じ絵 (seed)。src: 元の id (イラストの編集を反映する)
         else p = makePlayer(sr, { rarity: x < 0.33 ? 'SSR' : x < 0.45 ? 'SR' : x < 0.75 ? 'R' : 'N', origin: 'gacha' });
         savePlayer(p, uid); out.push(pubPlayer(p));
       }

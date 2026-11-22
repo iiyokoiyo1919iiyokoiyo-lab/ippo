@@ -148,6 +148,57 @@ async function viewDraft() {
   $$('[data-pid]').forEach((el) => el.onclick = () => playerModal(d.pool.find((p) => p.id === el.dataset.pid) || mine?.got.find((p) => p.id === el.dataset.pid)));
 }
 
+// ---------- イラストの編集 (管理者・ガチャに入れた選手) ----------
+function illustEditor(p) {
+  if (!p) return;
+  const L = { ...(p.look || {}) }; let num = p.number;
+  const PAL = [['#1c3f94', '#f8f9fa', '#e03131'], ['#c92a2a', '#f8f9fa', '#1b1b2a'], ['#1b1b2a', '#ffd43b', '#f08c00'], ['#2b8a3e', '#f8f9fa', '#ffd43b'], ['#5f3dc4', '#f8f9fa', '#f783ac'], ['#0b7285', '#f8f9fa', '#ff922b'], ['#e8590c', '#1b1b2a', '#ffffff'], ['#364fc7', '#ffd43b', '#e03131']];
+  const sel = (k, label, opts) => `<label class="small">${label}<select class="in" data-k="${k}">${opts.map(([v, n]) => `<option value="${v}" ${String(L[k] ?? '') === String(v) ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="card"><div class="row"><h2 class="grow">✏️ ${esc(p.name)} のイラスト</h2><button class="x" data-close>✕</button></div>
+    <div class="row" style="align-items:flex-start;gap:10px;flex-wrap:wrap"><div id="ipv" style="flex:none"></div><div id="ipf" style="flex:none"></div>
+    <div class="grow" style="min-width:200px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      ${sel('pose', 'ポーズ', p.kind === 'P' ? [['', 'おまかせ'], [0, 'ボールを見せる'], [1, 'グラブを胸に']] : [['', 'おまかせ'], [0, 'バットを肩に'], [1, 'バットを掲げる']])}
+      ${sel('bat', p.kind === 'P' ? '投げる手' : '打つ手', [['R', '右'], ['L', '左']])}
+      ${sel('skin', '肌', [[0, 'とても明るい'], [1, '明るい'], [2, '小麦色'], [3, '濃い']])}
+      ${sel('hairStyle', '髪型', [['', 'おまかせ'], [0, '短い'], [1, 'もみあげ長め'], [2, 'うしろが長い'], [3, '外はね'], [4, 'ぼうず']])}
+      ${sel('eyes', '目', [['', 'おまかせ'], [0, 'するどい'], [1, 'まるい'], [2, '切れ長']])}
+      ${sel('mouth', '口', [['', 'おまかせ'], [0, 'ほほえみ'], [1, 'きりっと'], [2, 'にっ']])}
+      <label class="small">髪の色<input class="in" style="height:34px;padding:2px" type="color" data-c="hairHex" value="${esc(L.hairHex || '#1b1a22')}"></label>
+      <label class="small">目の色<input class="in" style="height:34px;padding:2px" type="color" data-c="eyeHex" value="${esc(L.eyeHex || '#4dabf7')}"></label>
+      <label class="small"><input type="checkbox" id="ibd" ${L.beard ? 'checked' : ''}> ひげ</label>
+      <label class="small">背番号<input class="in" id="inum" inputmode="numeric" value="${esc(String(num ?? ''))}"></label>
+      <label class="small">体格<input type="range" min="0.9" max="1.18" step="0.02" data-r="build" value="${L.build || 1}"></label>
+      <label class="small">身長<input type="range" min="0.94" max="1.06" step="0.01" data-r="h" value="${L.h || 1}"></label>
+      <div class="small" style="grid-column:1/-1">チームの色 <span class="muted">(メイン・地・アクセント)</span><div class="row" style="gap:4px;flex-wrap:wrap;margin:4px 0">${PAL.map((c, i) => `<button class="btn sm" data-pal="${i}" title="パレット ${i + 1}" style="padding:3px"><span style="display:inline-flex;width:30px;height:14px;border-radius:4px;overflow:hidden">${c.map((x) => `<i style="flex:1;background:${x}"></i>`).join('')}</span></button>`).join('')}</div>
+        <div class="row" style="gap:4px">${[0, 1, 2].map((i) => `<input type="color" class="in" data-t="${i}" value="${esc((L.team || PAL[0])[i])}" style="height:34px;padding:2px">`).join('')}</div></div>
+    </div></div>
+    <div class="row" style="margin-top:10px"><button class="btn sm" id="ireset">おまかせにもどす</button><span class="grow"></span><button class="btn p" id="isave">保存</button></div>
+    <p class="small muted">保存すると、ガチャの「活躍選手」と、すでに引いた人の選手の絵もかわります</p></div>`;
+  document.body.append(m);
+  const draw = () => { const q = { ...p, number: num, look: L }; $('#ipv', m).innerHTML = window.BBIllust ? window.BBIllust.svg(q, { size: 170 }) : ''; $('#ipf', m).innerHTML = window.BBIllust ? window.BBIllust.svg(q, { size: 64, crop: 'face', name: false }) : ''; };
+  draw();
+  m.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.dataset.k) { if (t.value === '') L[t.dataset.k] = null; else L[t.dataset.k] = t.dataset.k === 'bat' ? t.value : Number(t.value); } // null = おまかせ
+    if (t.dataset.c) L[t.dataset.c] = t.value;
+    if (t.dataset.r) L[t.dataset.r] = Number(t.value);
+    if (t.dataset.t) { L.team = [...(L.team || PAL[0])]; L.team[Number(t.dataset.t)] = t.value; }
+    if (t.id === 'ibd') L.beard = t.checked;
+    if (t.id === 'inum') num = Math.max(0, Math.min(99, parseInt(t.value, 10) || 0));
+    draw();
+  });
+  m.addEventListener('click', async (e) => {
+    if (e.target === m || e.target.closest('[data-close]')) return m.remove();
+    const pb = e.target.closest('[data-pal]'); if (pb) { L.team = [...PAL[Number(pb.dataset.pal)]]; $$('[data-t]', m).forEach((x, i) => { x.value = L.team[i]; }); return draw(); }
+    if (e.target.id === 'ireset') { for (const k of ['pose', 'hairStyle', 'eyes', 'mouth', 'team']) L[k] = null; L.hairHex = ''; L.eyeHex = ''; $$('select[data-k]', m).forEach((s) => { if (s.dataset.k !== 'bat' && s.dataset.k !== 'skin') s.value = ''; }); return draw(); }
+    if (e.target.id === 'isave') {
+      const look = { ...L };
+      try { const r = await api('/admin/hot/look', { method: 'POST', body: { id: p.id, look, number: num } }); toast(`保存しました (引いた人の選手 ${r.copies} 人にも反映)`); m.remove(); viewGacha(); } catch (err) { toast(err.message, true); }
+    }
+  });
+}
+
 // ---------- ガチャ ----------
 async function viewGacha() {
   app.innerHTML = head('ガチャ') + '<div class="card muted">読みこみ中…</div>' + tabs('gacha'); bindCommon();
@@ -155,7 +206,7 @@ async function viewGacha() {
   app.innerHTML = head('ガチャ', `1 回 🔥${g.price}`) + `
     <div class="card"><h2>🎰 選手ガチャ</h2><p class="small">前日の試合で活躍した選手が入っています (🔥 30%)。そのほか SSR 3%・SR 12%・R 30%・N 25%</p>
       <div class="row"><button class="btn p grow" data-n="1">1 回 (🔥${g.price})</button><button class="btn b grow" data-n="10">10 回 (🔥${g.price * 10})</button></div></div>
-    <div class="card"><h2>🔥 前日の活躍選手</h2>${g.hot.length ? g.hot.map((p) => plRow(p)).join('') : '<p class="small muted">まだいません (前の日の試合の活躍で決まります)</p>'}</div>
+    <div class="card"><h2>🔥 前日の活躍選手</h2>${g.hot.length ? g.hot.map((p) => plRow(p, me.admin ? `<button class="btn sm" data-edit="${esc(p.id)}">✏️ イラスト</button>` : '')).join('') : '<p class="small muted">まだいません (前の日の試合の活躍で決まります)</p>'}</div>
     ${me.admin ? `<div class="card"><h2>🛠️ 前日の活躍選手 (実名) を登録 <small class="muted">管理者だけ</small></h2>
       <p class="small muted" style="margin-top:0">登録した選手は今日のガチャの「前日の活躍選手」に入ります (30% の枠)。成績のメモは画面に出ます</p>
       <div class="row" style="flex-wrap:wrap;gap:6px"><input class="in" id="hn" placeholder="選手名" maxlength="24" style="flex:2;min-width:140px"><input class="in" id="ht" placeholder="球団" maxlength="20" style="flex:1;min-width:90px"><input class="in" id="hno" placeholder="背番号" inputmode="numeric" style="width:70px"></div>
@@ -174,6 +225,7 @@ async function viewGacha() {
     } catch (e) { toast(e.message, true); }
   });
   $$('.card [data-pid]').forEach((el) => el.onclick = () => playerModal(g.hot.find((p) => p.id === el.dataset.pid)));
+  if (me.admin) $$('[data-edit]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); illustEditor(g.hot.find((p) => p.id === b.dataset.edit)); });
   if (me.admin) {
     const stats = () => { const P = $('#hk').value === 'P'; $('#hstats').innerHTML = (P ? [['velo', '球速', 148], ['brk', '変化力', 65], ['stuff', '球威', 65], ['stamina', 'スタミナ', 65]] : [['meet', 'ミート', 70], ['power', 'パワー', 70], ['speed', '走力', 55], ['tech', '守備', 60]]).map(([k, n, v]) => `<label class="small" style="flex:1;min-width:70px">${n}<input class="in hs" data-k="${k}" type="number" value="${v}"></label>`).join('');
       $('#hpit').innerHTML = P ? `球種: ${Object.entries(me.pitches).map(([k, n]) => `<label style="white-space:nowrap;margin-right:6px"><input type="checkbox" class="hp" value="${k}" ${['straight', 'slider', 'fork'].includes(k) ? 'checked' : ''}>${esc(n)}</label>`).join('')}` : ''; };
