@@ -6,13 +6,14 @@
 //   ・通話は「ルーム」。かけた人がルームを作り、相手を呼ぶ。通話中に「＋」でほかの人も呼べる
 //   ・呼べる相手: 呼ぶ人に DM を送ったことがある人か、呼ぶ人をフォローしている人だけ (知らない人からいきなりかかってこないように)
 //   ・バックグラウンド: アプリが閉じていたり裏にいたりしても、Web プッシュ (push.js) で着信を知らせる。
-//     画面が裏に回って /rt が切れても、音声は直接つながっているので通話は続く (45 秒いないに /rt がつながり直せばそのまま)
+//     画面が裏に回って /rt が切れても、音声は直接つながっているので通話は続く (時間の制限なし。/rt がつながり直したらそのまま)。
+//     アプリを開き直して通話がなくなっていたら、そのとき抜けたことにする
 //   ・呼び出しは 30 秒で「不在着信」。1 対 1 の通話の記録 (通話時間・不在着信) は DM の会話に残る
 //   ・つながりにくい回線のための中継サーバー (TURN) は環境変数 TURN_URL・TURN_USER・TURN_PASS (なければ STUN だけ)
 // =====================================================================
 const crypto = require('crypto');
 
-const RING_MS = 30_000, MAX_SIGNAL = 12 * 1024, MAX_CALL_MS = 3 * 3600_000, MAX_MEMBERS = 6, GRACE_MS = 45_000;
+const RING_MS = 30_000, MAX_SIGNAL = 12 * 1024, MAX_CALL_MS = 3 * 3600_000, MAX_MEMBERS = 6;
 
 module.exports = function install(app, ctx) {
   const { db, requireAuth } = ctx;
@@ -120,6 +121,13 @@ module.exports = function install(app, ctx) {
       settle(r, 'declined');
     } else if (m.t === 'call-hangup') {
       if (r.members.get(user.id)?.ws === ws) leave(r, user.id, 'hangup');
+    } else if (m.t === 'call-leave') {
+      // 開き直したら通話が残っていなかった (切れていた接続のまま抜ける)
+      const mem = r.members.get(user.id); if (mem && mem.ws?.readyState !== 1) leave(r, user.id, 'dropped');
+    } else if (m.t === 'call-gone') {
+      // 相手との直接のつながりが切れた (相手の端末が閉じた・電波がなくなった) と、残っている人から知らせが来た。相手の /rt もつながっていなければ抜けたことにする
+      const peer = qByName.get(String(m.user || '')), pm = peer && r.members.get(peer.id);
+      if (pm && r.members.get(user.id)?.ws === ws && pm.ws?.readyState !== 1) leave(r, peer.id, 'dropped');
     } else if (m.t === 'call-resume') {
       // /rt がつながり直した: 新しい接続をルームの自分につけ直す (音声は直接つながっているので、そのまま続く)
       const mem = r.members.get(user.id); if (!mem) return sendWs(ws, { t: 'call-end', id: r.id, reason: 'gone' });
@@ -140,14 +148,14 @@ module.exports = function install(app, ctx) {
   };
   // /rt がつながったとき: 呼ばれている途中のルームがあれば、もう一度知らせる (プッシュ通知から開いたとき)
   ctx.callOnConnect = (ws, user) => {
+    // 切れていた通話がある: 画面に通話が残っていれば call-resume、なければ call-leave が返ってくる
+    const rid = roomOf.get(user.id), room = rid && rooms.get(rid), mem = room?.members.get(user.id);
+    if (mem && mem.ws?.readyState !== 1) sendWs(ws, { t: 'call-active', id: room.id });
     for (const r of rooms.values()) if (r.invites.has(user.id)) sendWs(ws, { t: 'call-incoming', id: r.id, from: view(r.invites.get(user.id).by), members: membersView(r) });
   };
-  // 接続が切れた: その接続でルームに入っていたら、45 秒だけ待つ (裏に回った・電波が切れた。音声は直接つながっている)
-  ctx.callClosed = (ws) => {
-    const id = roomOf.get(ws.userId), r = id && rooms.get(id), mem = r?.members.get(ws.userId);
-    if (!mem || mem.ws !== ws) return;
-    mem.grace = setTimeout(() => leave(r, ws.userId, 'dropped'), GRACE_MS);
-  };
+  // 接続が切れた: 裏に回った・電波が切れただけなら、音声は直接つながっているので通話はそのまま (時間の制限なし)。
+  // ほんとうに抜けたときは、相手との直接のつながりが切れて相手の画面が call-gone を送ってくるか、開き直したときに call-leave が来る
+  ctx.callClosed = () => {};
 
   // 通話の設定 (STUN / TURN)。ログインが必要
   app.get('/api/call/config', requireAuth, (req, res) => {

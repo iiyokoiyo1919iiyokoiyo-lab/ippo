@@ -191,7 +191,7 @@ const CALL = (() => {
     pc.onconnectionstatechange = () => {
       if (cur !== c) return;
       if (pc.connectionState === 'connected') { p.ok = true; if (c.state !== 'active') { c.state = 'active'; c.startedAt = Date.now(); stopRing(); } render(); }
-      if (pc.connectionState === 'failed') { toast(`${user.displayName} さんとつなげませんでした (回線の都合かもしれません)`, 'error'); dropPeer(user.username); }
+      if (pc.connectionState === 'failed') { toast(`${user.displayName} さんとつなげませんでした (回線の都合かもしれません)`, 'error'); dropPeer(user.username); RT.send({ t: 'call-gone', id: c.id, user: user.username }); }
     };
     return p;
   }
@@ -284,7 +284,7 @@ const CALL = (() => {
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker?.controller == null) try { new Notification('📞 IppO 着信', { body: `${m.from.displayName} さんから音声通話`, tag: 'call-' + m.id }); } catch {}
       return;
     }
-    if (!cur) return;
+    if (!cur) { if (m.t === 'call-active') RT.send({ t: 'call-leave', id: m.id }); return; } // 開き直したら通話は残っていない → 抜ける
     if (m.t === 'call-room') { if (!cur.id) cur.id = m.id; }
     else if (m.t === 'call-fail') {
       if (m.user) { cur.invited.delete(m.user.username); toast(`${m.user.displayName}: ${FAIL[m.reason] || 'かけられませんでした'}`, 'error'); render(); }
@@ -297,6 +297,7 @@ const CALL = (() => {
     else if (m.t === 'call-invited') { cur.invited.set(m.user.username, m.user); render(); }
     else if (m.t === 'call-invite-end') { cur.invited.delete(m.user.username); if (cur.peers.size) toast(`${m.user.displayName}: ${m.reason === 'declined' ? '出られませんでした' : '応答がありませんでした'}`); render(); }
     else if (m.t === 'call-resumed') { cur.resuming = false; render(); }
+    else if (m.t === 'call-active') { if (cur.state !== 'incoming') RT.send({ t: 'call-resume', id: cur.id }); }
     else if (m.t === 'call-signal') onSignal(m.from, m.data);
     else if (m.t === 'call-end') cleanup(END[m.reason] ?? '通話が終わりました');
   });

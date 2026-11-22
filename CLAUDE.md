@@ -95,7 +95,7 @@
 ## 音声通話 (call.js・push.js・public/sw.js)
 - 1 対 1 とグループ (最大 6 人。全員がおたがいに直接つなぐメッシュ) の音声通話 (WebRTC)。通話は「ルーム」(`rooms`)。合図 (かける・出る・切る・SDP・ICE・ミュート) は DM のリアルタイム接続 `/rt` で中継 (`realtime.js` が `call-` で始まるメッセージを `ctx.callMessage` に渡す。`/rt` の maxPayload は 16KB)。音声はサーバーを通らない
 - 呼べるのは、呼ぶ人に DM を送ったことがあるか、呼ぶ人をフォローしている人だけ (`canCall`)。DM の画面の右上に「📞 通話」、通話中の「＋ 呼ぶ」で最近 DM した人を足せる (`GET /api/call/candidates`)。呼び出しは 30 秒・最長 3 時間。1 対 1 の記録 (通話時間・不在着信・出られなかった) は DM の会話に残る
-- バックグラウンド: 着信は Web プッシュ (`push.js`・表 `push_subs`・鍵は環境変数 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` か表 `push_vapid`) でアプリを閉じていても届く (サービスワーカー `public/sw.js`)。通話ボタン・応答ボタンを押したときに通知の許可を聞く。iPhone は「ホーム画面に追加」した IppO だけ。/rt が切れても 45 秒は通話を残し (`GRACE_MS`)、つながり直したら `call-resume`。ロック画面に通話中を出す (Media Session)
+- バックグラウンド: 着信は Web プッシュ (`push.js`・表 `push_subs`・鍵は環境変数 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` か表 `push_vapid`) でアプリを閉じていても届く (サービスワーカー `public/sw.js`)。通話ボタン・応答ボタンを押したときに通知の許可を聞く。iPhone は「ホーム画面に追加」した IppO だけ。/rt が切れても通話はずっと残し (時間の制限なし)、つながり直したら `call-resume`。開き直して通話がなければ `call-leave`、相手との直接のつながりが切れたら残った人が `call-gone` を送って抜けたことにする。ロック画面に通話中を出す (Media Session)
 - 中継サーバー (TURN) は環境変数 `TURN_URL`・`TURN_USER`・`TURN_PASS` (なければ STUN だけ。回線によってはつながらない)。マイクは Permissions-Policy で IppO 自身にだけ許可 (`microphone=(self)`)
 
 ## そのほか
