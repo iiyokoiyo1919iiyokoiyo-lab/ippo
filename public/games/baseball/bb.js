@@ -200,7 +200,7 @@ function viewPlay() {
 // ---------- 試合の画面と操作 ----------
 let ws = null, M = null;
 async function startMatch(mode) {
-  if (!Stadium) { try { Stadium = await import('./stadium.js?v=2'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
+  if (!Stadium) { try { Stadium = await import('./stadium.js?v=4'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
   ws?.close(); ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bb`);
   ws.onopen = () => { ws.send(JSON.stringify({ t: mode })); const qs = $('#qs'); if (qs) qs.textContent = mode === 'queue' ? '相手を探しています… (見つからなければ CPU と練習もできます)' : ''; };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
@@ -222,7 +222,7 @@ function onMsg(m) {
   if (m.t === 'turn') return onTurn(m);
   if (m.t === 'pitched') return onPitched(m);
   if (m.t === 'result') return onResult(m);
-  if (m.t === 'half') { M.S.resetView(); show(`${m.state.inning}回${m.state.half ? '裏' : '表'}`, m.tiebreak ? 'タイブレーク: 無死一・二塁から' : '', 1800); hud(m.state); return; }
+  if (m.t === 'half') { M.S.resetView(M.role === 'pitch' ? 'pitch' : 'bat'); show(`${m.state.inning}回${m.state.half ? '裏' : '表'}`, m.tiebreak ? 'タイブレーク: 無死一・二塁から' : '', 1800); hud(m.state); return; }
   if (m.t === 'end') return endScreen(m);
 }
 function hud(st) {
@@ -241,7 +241,7 @@ function onTurn(m) {
   const st = m.state, defTeam = 1 - st.half, offTeam = st.half;
   if (M.lastBatter !== st.batter.id + ':' + st.half) { M.lastBatter = st.batter.id + ':' + st.half; M.S.setupPlayers({ defTeam, offTeam, batter: st.batter, pitcher: st.pitcher, lineupDef: M.teams[defTeam].lineup, bases: st.bases }); }
   else M.S.setRunners(st.bases);
-  M.S.resetView();
+  M.S.resetView(m.role === 'pitch' ? 'pitch' : 'bat'); // 投げるときは投手のうしろから、打つときは捕手のうしろから
   const ctl = $m('#ctl');
   if (m.role === 'pitch') {
     const ps = st.pitcher.pitches || ['straight']; if (!ps.includes(M.pitch)) M.pitch = ps[0];

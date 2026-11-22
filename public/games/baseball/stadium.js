@@ -243,7 +243,11 @@ export function createStadium(canvas) {
   mb(new THREE.RingGeometry(0.8, 1.0, 64), '#ffd43b', 1, 13);                    // 太い輪
   mb(new THREE.RingGeometry(0.72, 0.8, 64), '#111827', 0.6, 12);                 // 内の黒いふち
   mb(new THREE.PlaneGeometry(0.7, 0.06), '#ffffff', 0.95, 13); mb(new THREE.PlaneGeometry(0.06, 0.7), '#ffffff', 0.95, 13); // 十字
-  const aimCur = ring(0.05, '#ff6b6b');
+  // 投手の狙い (どこに投げるか): 赤い太い輪 + 黒いふち + 十字 (ボール 2 個ぶんくらい)
+  const aimCur = new THREE.Group(); aimCur.visible = false; scene.add(aimCur);
+  const ab = (geo, color, opacity, order) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide })); m.renderOrder = order; aimCur.add(m); return m; };
+  ab(new THREE.CircleGeometry(0.06, 32), '#ff8787', 0.28, 11); ab(new THREE.RingGeometry(0.06, 0.07, 40), '#111827', 0.85, 12); ab(new THREE.RingGeometry(0.047, 0.06, 40), '#ff4d4d', 1, 13);
+  ab(new THREE.PlaneGeometry(0.05, 0.006), '#ffffff', 0.95, 13); ab(new THREE.PlaneGeometry(0.006, 0.05), '#ffffff', 0.95, 13);
   const setMeet = (x, y, r, on = true) => { meet.visible = on; meet.position.set(W(x), y, -0.03); meet.scale.setScalar(r); };
   const setAim = (x, y, on = true) => { aimCur.visible = on; aimCur.position.set(W(x), y, -0.02); };
   const mark = new THREE.Group(); mark.visible = false; scene.add(mark);
@@ -282,9 +286,10 @@ export function createStadium(canvas) {
 
   // ---------- カメラ ----------
   const CAM_BAT = { pos: new THREE.Vector3(0, 2.0, -5.2), look: new THREE.Vector3(0, 0.85, 14) }; // 捕手のうしろの少し高いところから
+  const CAM_PITCH = { pos: new THREE.Vector3(0.55, 3.0, 24.5), look: new THREE.Vector3(0, 0.78, 0) }; // 投手のうしろ (少し右の高いところ) から望遠で本塁を見る (テレビのセンターカメラのように)
   let camMode = 'bat', camT = 0, follow = null;
   const camPos = CAM_BAT.pos.clone(), camLook = CAM_BAT.look.clone();
-  function setCam(mode, target = null) { camMode = mode; follow = target; camT = 0; }
+  function setCam(mode, target = null) { const jump = (mode === 'pitch') !== (camMode === 'pitch') && (mode === 'pitch' || mode === 'bat'); camMode = mode; follow = target; camT = 0; if (jump) { const c = mode === 'pitch' ? CAM_PITCH : CAM_BAT; camPos.copy(c.pos); camLook.copy(c.look); } }
 
   // ---------- 投球と打球のアニメーション ----------
   let pitchAnim = null, hitAnim = null;
@@ -308,12 +313,13 @@ export function createStadium(canvas) {
     if (best && !res.hr) { hitAnim.fielder = best; hitAnim.fFrom = best.position.clone(); best.play([['run', 0.18], ['run2', 0.18]], true); }
     people.batter.play([['run', 0.2], ['run2', 0.2]], true); hitAnim.runner = people.batter;
   }
-  function resetView() { setCam('bat'); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; mark.visible = false; markHold = 0; }
+  function resetView(view = 'bat') { setCam(view); hitAnim = null; pitchAnim = null; ball.visible = false; trail.visible = false; mark.visible = false; markHold = 0; }
 
   // ---------- 描画 ----------
   let composer = null;
   try { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(512, 512), 0.55, 0.6, 0.85)); composer.addPass(new OutputPass()); } catch { composer = null; }
-  function resize() { const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false); composer?.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 44 : 34; camera.updateProjectionMatrix(); }
+  const fovFor = () => { const portrait = camera.aspect < 0.8; return camMode === 'pitch' ? (portrait ? 10.5 : 7.5) : portrait ? 44 : 34; }; // 投手の視点は望遠
+  function resize() { const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false); composer?.setSize(w, h); camera.aspect = w / h; camera.fov = fovFor(); camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
   let last = performance.now();
   const loop = () => {
@@ -343,10 +349,12 @@ export function createStadium(canvas) {
     // カメラ: 打席は捕手のうしろ、打球は高いところから追う
     camT += dt;
     if (camMode === 'bat') { camPos.lerp(CAM_BAT.pos, 0.2); camLook.lerp(CAM_BAT.look, 0.2); }
+    else if (camMode === 'pitch') { camPos.lerp(CAM_PITCH.pos, 0.2); camLook.lerp(CAM_PITCH.look, 0.2); }
     else if (camMode === 'hit') { const b = ball.position; camPos.lerp(new THREE.Vector3(b.x * 0.35, 14 + b.y * 0.5, -16 + b.z * 0.45), 0.06); camLook.lerp(b, 0.15); }
     else if (camMode === 'wide') { camPos.lerp(new THREE.Vector3(0, 32, -38), 0.05); camLook.lerp(new THREE.Vector3(0, 0, 40), 0.05); }
+    { const f = fovFor(); if (Math.abs(camera.fov - f) > 0.01) { camera.fov = (camMode === 'pitch') !== (camera.fov < 20) ? f : camera.fov + (f - camera.fov) * 0.2; camera.updateProjectionMatrix(); } }
     camera.position.copy(camPos); camera.lookAt(camLook);
-    zone.visible = camMode === 'bat'; if (people.ump) people.ump.visible = camMode !== 'bat'; // 打席のカメラでは審判は見せない (視界をふさぐ)
+    zone.visible = camMode === 'bat' || camMode === 'pitch'; if (people.ump) people.ump.visible = camMode !== 'bat'; // 打席のカメラでは審判は見せない (視界をふさぐ)
     if (people.catcher) people.catcher.visible = camMode !== 'bat'; // 打席のカメラでは捕手を見せない (ゾーンとボールが見やすい)
     if (composer) composer.render(); else renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
