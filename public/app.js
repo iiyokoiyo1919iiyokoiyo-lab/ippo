@@ -3752,6 +3752,8 @@ async function viewBattle(params) {
     : e.k === 'dogma' ? `🧬 ${name(e.p, e.card)}のセントラルドグマ！ ${e.healed.map((x) => `${x.card} +${x.amount}`).join('・')} 回復`
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
+    : e.k === 'immune' ? `👔 ${e.p === you ? '' : '相手の'}${e.card}の絶対権力！ ダメージを受けない`
+    : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
     : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
@@ -3769,7 +3771,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.sealed > 0 ? ` · <span class="cb-sealed">🧬わざ封じ</span>` : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.sealed > 0 ? ` · <span class="cb-sealed">🧬わざ封じ</span>` : ''}${c.tyrant && !(c.sealed > 0) ? ' · <span class="cb-tyrant">👔絶対権力 (ダメージ無効)</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">☠️毒 あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -3867,6 +3869,8 @@ async function viewBattle(params) {
         }, t);
         t += 900;
       }
+      else if (e.k === 'immune') { setTimeout(() => { replay(el(e.p), 'shake'); pop(e.p, '👔 無効！', 'tag'); }, t); t += 300; }
+      else if (e.k === 'tyrantdown') { setTimeout(() => { overlayFx('cb-dna' + (e.p === you ? '' : ' on-me'), `<b>権力崩壊</b><i>👔💥 絶対権力が消えた！</i><em>ダメージが通るようになった</em>`, 1700, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 900; }
       else if (e.k === 'deathsong') { // 死の歌声: 黒とピンクの音符があふれる
         setTimeout(() => {
           overlayFx('cb-dsong' + (e.p === you ? ' on-foe' : ' on-me'), `<b>死の歌声</b><i>─一方的な愛─</i><em>💀 このターンに倒すと道連れ</em>${Array.from({ length: 12 }, (_, i) => `<s style="--x:${(i * 41) % 100}%;--d:${(i % 6) * 0.12}s">${i % 3 ? '♪' : '💀'}</s>`).join('')}`, 1800, e.p === you ? 'top' : 'bottom');

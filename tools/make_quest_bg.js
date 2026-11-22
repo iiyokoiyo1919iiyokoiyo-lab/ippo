@@ -160,8 +160,31 @@ ${lights}
 </svg>`;
 }
 
+// 社長室の決戦: 夜の高層ビルの最上階。大きな窓の外に金色の夜景、赤いじゅうたん、社長の机
+function shachou() {
+  const r = rng(8008);
+  const towers = Array.from({ length: 12 }, (_, i) => { const x = i * 52 - 10, h = 120 + r() * 220, w = 44;
+    const wins = Array.from({ length: Math.floor(h / 18) * 3 }, (_, k) => r() < 0.55 ? `<rect x="${f(x + 6 + (k % 3) * 12)}" y="${f(560 - h + 8 + Math.floor(k / 3) * 18)}" width="7" height="9" fill="#ffd43b" opacity="${f(0.4 + r() * 0.6)}"/>` : '').join('');
+    return `<rect x="${f(x)}" y="${f(560 - h)}" width="${w}" height="${f(h)}" fill="#0b0b12"/>${wins}`; }).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05050c"/><stop offset=".6" stop-color="#1c1430"/><stop offset="1" stop-color="#4a2c00"/></linearGradient>
+<linearGradient id="rug" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7a1414"/><stop offset="1" stop-color="#3b0a0a"/></linearGradient>
+<linearGradient id="desk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c3a1a"/><stop offset="1" stop-color="#2b1a0a"/></linearGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#sky)"/>
+${towers}
+<circle cx="470" cy="120" r="38" fill="#fff3bf" opacity=".9"/>
+${Array.from({ length: 5 }, (_, i) => `<rect x="${f(i * 120 - 4)}" y="0" width="12" height="600" fill="#1a1a1a"/>`).join('')}
+<rect x="0" y="0" width="${W}" height="20" fill="#1a1a1a"/><rect x="0" y="560" width="${W}" height="40" fill="#1a1a1a"/><path d="M0,580 H${W}" stroke="#fab005" stroke-width="3"/>
+<rect x="0" y="600" width="${W}" height="${H - 600}" fill="#2b1a0a"/>
+<path d="M120,900 L220,600 H380 L480,900Z" fill="url(#rug)"/><path d="M220,600 L120,900 M380,600 L480,900" stroke="#fab005" stroke-width="3"/>
+<rect x="190" y="640" width="220" height="70" rx="6" fill="url(#desk)" stroke="#fab005" stroke-width="2"/><rect x="270" y="628" width="60" height="12" rx="3" fill="#fab005"/>
+</svg>`;
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika, ystage })) {
+for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika, ystage, shachou })) {
   const svg = fn(); fs.writeFileSync(path.join(OUT, name + '.svg'), svg);
   console.log('作った:', `public/bg/${name}.svg`, svg.length, 'bytes');
 }

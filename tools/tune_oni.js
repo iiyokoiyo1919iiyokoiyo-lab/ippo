@@ -9,13 +9,14 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const C = require('../cards');
+const NO_MUST = !!process.env.TUNE_NO_MUST; // 1 にすると must のカードなしで測る (クリアできないことの確かめ)
 const TARGET = 0.25, PLAYER_POOL = ['gold', 'chalk', 'case', 'scissors', 'tadokoro', 'star', 'raijin'], PLAYER_LV = 18;
 
 function winRate(deck, boost, games) {
   let w = 0;
   for (let g = 0; g < games; g++) {
-    const ids = [...PLAYER_POOL].sort(() => Math.random() - 0.5).slice(0, 3);
-    const s = { turn: 0, winner: null, sides: [C.newSide(ids.map((id) => C.questBonus(deck.enemy ? deck : null, C.statsOf(id, PLAYER_LV)))), C.newSide(deck.enemy ? C.questEnemyStats(deck, boost) : C.oniDeckStats(deck, boost))] };
+    const ids = deck.must && !NO_MUST ? [deck.must, ...PLAYER_POOL.filter((x) => x !== deck.must).sort(() => Math.random() - 0.5).slice(0, 2)] : [...PLAYER_POOL].sort(() => Math.random() - 0.5).slice(0, 3); // must: そのクエストに必ず入れるカード
+    const s = { turn: 0, winner: null, ...(deck.timeupLose ? { timeupWinner: 1 } : {}), sides: [C.newSide(ids.map((id) => C.questBonus(deck.enemy ? deck : null, C.statsOf(id, PLAYER_LV)))), C.newSide(deck.enemy ? C.questEnemyStats(deck, boost) : C.oniDeckStats(deck, boost))] };
     while (s.winner === null) C.resolveTurn(s, [C.smartAct(s, 0, Math.random), C.smartAct(s, 1, Math.random)], Math.random);
     w += s.winner === 0 ? 1 : s.winner === -1 ? 0.5 : 0;
   }

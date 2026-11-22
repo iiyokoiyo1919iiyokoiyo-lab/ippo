@@ -25,6 +25,7 @@ const SKILLS = {
   sermon: { name: '説教', desc: '相手の場のカードの攻撃力を 0.6 倍にする (1 枚につき 1 回まで・交代しても戻らない) + 味方全員の毒を治す' },
   taika: { name: '大化の改新', desc: '1.2 倍のこうげき + 味方全員の状態異常とデバフをすべて取りのぞく (毒・怯み・眠り・説教の攻撃ダウン・流星)' },
   dna: { name: 'DNAを取り出す', desc: '1.8 倍のこうげき + 相手の場のカードの DNA を取り出して、そのバトル中ずっとわざを使えなくする (交代しても・大化の改新でも戻らない)' },
+  order: { name: '社長命令', desc: '相手の場のカードに 1.5 倍、控えのカードに 0.7 倍の無属性こうげき' },
   deathsong: { name: '死の歌声─一方的な愛─', desc: '1.2 倍のこうげき。このターンにこのわざを受けた相手が、そのターンのうちに使い手を倒すと、相手の場と控えのカードからランダムで 1 枚を道連れにする' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
@@ -128,7 +129,8 @@ const CARD_LIST = [
   ['watermid', 'ウォーターミッドナイト', '🌊', 'MR', 'wrap', 108, 13, 21, 9, 'sermon'], // MR: 高難易度クエスト「水深夜」のクリア報酬 (2026-11-20 8:00 から)。体力と防御が高く、攻撃が低い
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
   ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'],
-  ['yhime', 'Y', '🎤', 'MR', 'wrap', 84, 17, 12, 14, 'deathsong'], // MR: 高難易度クエスト「Y降臨」のクリア報酬 (2026-11-22 8:00 から)。歌姫にあこがれる歌のへたなマイク。わざ「死の歌声─一方的な愛─」 // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
+  ['yhime', 'Y', '🎤', 'MR', 'wrap', 84, 17, 12, 14, 'deathsong'],
+  ['ando', 'プレジデントあんどう', '👔', 'MR', 'heavy', 96, 18, 15, 9, 'order'], // MR: 高難易度クエスト「社長室の決戦」のクリア報酬 (2026-11-22 12:00 から)。社長の万年筆。クエストのボスのときだけ「絶対権力」 // MR: 高難易度クエスト「Y降臨」のクリア報酬 (2026-11-22 8:00 から)。歌姫にあこがれる歌のへたなマイク。わざ「死の歌声─一方的な愛─」 // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
 const EXTRA_RARITY = { MR: { mult: 1.2 } };
@@ -137,7 +139,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), ando: Date.parse('2026-11-22T12:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -265,6 +267,9 @@ const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最�
 const THUNDER_POWER = 2.3; // 落雷: 2.3 倍の無属性こうげき
 const SERMON_ATK = 0.6;   // 説教: 相手の攻撃力を 0.6 倍
 const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の状態異常・デバフをすべて取りのぞく
+const ORDER_ACTIVE = 1.5, ORDER_BENCH = 0.7; // 社長命令: 場のカードに 1.5 倍・控えに 0.7 倍の無属性こうげき
+// 絶対権力 (クエスト「社長室の決戦」のボスだけ): わざを封じられる (DNAを取り出す) までは、どんなダメージも受けない
+const immune = (c) => !!c.tyrant && !(c.sealed > 0);
 const DEATHSONG_POWER = 1.2; // 死の歌声─一方的な愛─: 1.2 倍のこうげき + このターンに受けた相手が使い手を倒すと、相手のカードをランダムで 1 枚道連れ
 const DNA_POWER = 1.8; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは、そのバトル中ずっとわざを使えない (わざ封じ。交代しても・大化の改新でも戻らない)
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
@@ -321,6 +326,7 @@ function resolveTurn(state, acts, rnd) {
   const hit = (p, power, opt = {}) => {
     const me = sides[p].cards[sides[p].active], o = 1 - p;
     const ti = opt.target ?? sides[o].active, foe = sides[o].cards[ti], bench = ti !== sides[o].active;
+    if (immune(foe)) { ev.push({ k: 'immune', p: o, card: foe.name, bench }); return 0; } // 絶対権力: ダメージなし
     const tm = opt.typeless ? 1 : typeMult(me.type, foe.type);
     const base = opt.pierce ? me.atk * power * 2 : me.atk * power * 2 - foe.def * 0.6; // 1 枚あたり 3〜4 回の攻撃で倒れるくらい
     let dmg = Math.max(1, Math.round(base * tm * (0.9 + rnd() * 0.2)));
@@ -333,7 +339,7 @@ function resolveTurn(state, acts, rnd) {
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
-      const live = sides[p].cards.map((c, i) => [c, i]).filter(([c]) => c.hp > 0);
+      const live = sides[p].cards.map((c, i) => [c, i]).filter(([c]) => c.hp > 0 && !immune(c));
       if (live.length) { const [v, vi] = live[Math.floor(rnd() * live.length)]; v.hp = 0; v.poison = 0;
         ev.push({ k: 'curse', p, by: foe.name, card: v.name, bench: vi !== sides[p].active }); ev.push({ k: 'ko', p, card: v.name, bench: vi !== sides[p].active }); }
     }
@@ -383,6 +389,10 @@ function resolveTurn(state, acts, rnd) {
         const meteor = !!sides[p].meteor; if (meteor) { sides[p].meteor = null; }
         ev.push({ k: 'taika', p, card: me.name, fixed, meteor });
       }
+      else if (me.skill === 'order') { // 社長命令: 場のカードに 1.5 倍・控えに 0.7 倍の無属性こうげき
+        const o = 1 - p, act0 = sides[o].active;
+        sides[o].cards.forEach((c, i) => { if (c.hp > 0) hit(p, i === act0 ? ORDER_ACTIVE : ORDER_BENCH, { target: i, typeless: true }); });
+      }
       else if (me.skill === 'deathsong') { // 死の歌声─一方的な愛─: 1.2 倍のこうげき → 受けた相手に「一方的な愛」の印 (このターンだけ)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         hit(p, DEATHSONG_POWER);
@@ -391,7 +401,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを、そのバトル中ずっと封じる
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         hit(p, DNA_POWER);
-        if (foe.hp > 0) { const again = foe.sealed > 0; foe.sealed = 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, again }); }
+        if (foe.hp > 0) { const again = foe.sealed > 0; foe.sealed = 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, again }); if (foe.tyrant && !again) ev.push({ k: 'tyrantdown', p: o, card: foe.name }); }
       }
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして怯ませる (ダメージはなし)。相手より先なら、そのターンの相手の行動を止める・後なら次のターン
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -414,6 +424,7 @@ function resolveTurn(state, acts, rnd) {
     m.left--;
     if (i >= 0) {
       const c = sides[p].cards[i];
+      if (immune(c)) { ev.push({ k: 'immune', p, card: c.name }); if (m.left <= 0) sides[p].meteor = null; return; }
       const dmg = Math.min(c.hp, Math.max(1, Math.round(c.maxHp * METEOR_RATE)));
       c.hp -= dmg;
       ev.push({ k: 'meteor', p, card: c.name, dmg, left: m.left });
@@ -425,6 +436,7 @@ function resolveTurn(state, acts, rnd) {
   [0, 1].forEach((p) => {
     sides[p].cards.forEach((c, i) => {
       if (!(c.poison > 0) || c.hp <= 0) return;
+      if (immune(c)) { c.poison--; return; } // 絶対権力: 毒も効かない
       const dmg = Math.min(c.hp, Math.max(1, Math.round(c.maxHp * POISON_RATE)));
       c.hp -= dmg; c.poison--;
       ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active });
@@ -461,7 +473,7 @@ function resolveTurn(state, acts, rnd) {
   if (!left[0] || !left[1]) state.winner = !left[0] && !left[1] ? -1 : left[0] ? 0 : 1;
   else if (state.turn >= TURN_LIMIT) {
     const pct = sides.map((s) => s.cards.reduce((a, c) => a + c.hp / c.maxHp, 0));
-    state.winner = Math.abs(pct[0] - pct[1]) < 1e-9 ? -1 : pct[0] > pct[1] ? 0 : 1;
+    state.winner = Number.isInteger(state.timeupWinner) ? state.timeupWinner : Math.abs(pct[0] - pct[1]) < 1e-9 ? -1 : pct[0] > pct[1] ? 0 : 1; // timeupWinner: 時間切れなら負け のクエスト
     ev.push({ k: 'timeup' });
   }
   return ev;
@@ -598,7 +610,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -688,6 +700,17 @@ const QUESTS = [
     enemy: [['yhime', 20], ['star', 20], ['phoenix', 20]],
     titles: { 1: 'Y降臨最速クリア🎤', 2: 'Y降臨準最速クリア🎤' },
     start: Date.parse('2026-11-22T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
+  // すえつぐがいないと絶対にクリアできないクエスト: ボスは「絶対権力」(わざを封じられるまでダメージを受けない)・時間切れは負け (timeupLose)
+  { id: 'ando-2026', name: '社長室の決戦', boss: 'プレジデントあんどう', emoji: '👔', reward: 'ando', bg: 'shachou', hard: true, boost: 1.0,
+    must: 'suetsugu', timeupLose: true, bossPassive: { ando: 'tyrant' },
+    award: '社長の椅子が空いた…伝説の始まりだ👔👔👔',
+    hint: '🩷 すえつぐ必須！ いないと絶対にクリアできない (時間切れも負け)',
+    pr: 'ボスのプレジデントあんどうは「絶対権力」で、どんなこうげきも毒も効かない…！ 魔法使いすえつぐの「DNAを取り出す」でわざを封じたときだけ、権力を失ってダメージが通る。時間切れは負け。\n敵は おもい 2 体 (あんどう・皇帝の玉璽) と きる 1 体 (七色ボールペン覇王)。📄つつむ のすえつぐが有利！',
+    text: '巨大企業の頂点に立つ社長の万年筆「プレジデントあんどう」。絶対権力で、どんな攻撃も受けつけない… 魔法使いすえつぐが DNA を取り出したときだけ、権力がくずれる。勝てば MR「プレジデントあんどう」が仲間になる',
+    tip: 'すえつぐがいないと絶対に勝てません。あんどうは「絶対権力」で、すえつぐの「DNAを取り出す」を受けるまでダメージ・毒・流星・道連れが効かない。時間切れ (30 ターン) は負け。すえつぐを守りながら、あんどうが場にいるときに DNA を取り出そう。社長命令は控えにもダメージが入るので、控えのすえつぐも削られる',
+    enemy: [['ando', 20], ['gyokuji', 20], ['rainbowpen', 20]],
+    titles: { 1: '社長室最速クリア👔', 2: '社長室準最速クリア👔' },
+    start: Date.parse('2026-11-22T12:00:00+09:00'), end: Date.parse('2026-11-26T12:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)
@@ -696,7 +719,7 @@ for (const q of QUESTS) { const k = 'CB_QUEST_' + q.id.toUpperCase().replace(/-/
 const questBonus = (q, c) => { const k = !c.horse && q?.bonus?.[c.id]; return k ? { ...c, maxHp: Math.round(c.maxHp * k), atk: Math.round(c.atk * k), def: Math.round(c.def * k), bonus: k } : c; };
 const QUEST_AWARD_RANKS = 2; // 高難易度クエストで、公式アカウントが表彰する人数 (クリアした順)
 // クエストの敵のカード (高難易度は boost をかける。速さはそのまま)
-const questEnemyStats = (q, boost = q.boost || 1) => q.enemy.map(([id, lv]) => { const s = statsOf(id, lv); return boost === 1 ? s : { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
+const questEnemyStats = (q, boost = q.boost || 1) => q.enemy.map(([id, lv]) => { const s0 = statsOf(id, lv), s = q.bossPassive?.[id] === 'tyrant' ? { ...s0, tyrant: true } : s0; return boost === 1 ? s : { ...s, maxHp: Math.round(s.maxHp * boost), atk: Math.round(s.atk * boost), def: Math.round(s.def * boost) }; });
 const questsNow = (now = Date.now()) => QUESTS.filter((q) => now >= q.start && now < q.end);
 const QUEST_MIGRATION = `
 CREATE TABLE card_quests (
@@ -1061,7 +1084,7 @@ function install(app, ctx) {
       : { id: 0, username: 'cpu', displayName: 'CPU', avatar: { kind: 'emoji', emoji: '🤖', color: '#64748b' } };
     const b = { id: crypto.randomBytes(8).toString('hex'), mode, uids, quest, oni, acts: [null, null], timer: null, deadline: 0, left: [null, null], ended: false,
       players: uids.map((u) => (u ? userView(u) : cpuView)),
-      state: { turn: 0, winner: null, sides: uids.map((u) => newSide(u ? deckStats(u).map((c) => questBonus(quest, c)) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
+      state: { turn: 0, winner: null, ...(quest?.timeupLose ? { timeupWinner: uids.findIndex((u) => !u) } : {}), sides: uids.map((u) => newSide(u ? deckStats(u).map((c) => questBonus(quest, c)) : quest ? questEnemyStats(quest) : oni ? oniDeckStats(oni) : mode === 'easy' ? easyDeck(uids[0]) : cpuDeck(uids[0]))) } };
     const items = quest?.hard ? { list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })), from: quest.start + ITEMS_AFTER } : null;
     uids.forEach((u, i) => { if (u) { battleOf.set(u, b); send(u, { t: 'start', mode, ...extra, ...(items ? { items, coins: player(u).coins } : {}), quest: quest ? { id: quest.id, name: quest.name, emoji: quest.emoji, bg: quest.bg || null, hard: !!quest.hard } : null, oni: oni ? { id: oni.id, name: oni.name } : null, you: i, players: b.players, state: publicState(b) }); } });
     nextTurn(b);

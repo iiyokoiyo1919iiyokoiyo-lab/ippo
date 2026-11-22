@@ -400,6 +400,26 @@
         ${twinkle(8, 30, 4, '#ffd43b')}${twinkle(28, 22, 3, '#fff')}
         <path d="M12,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#f783ac"/><path d="M100,108 c-3,-4 3,-7 3,-2 c0,-5 6,-2 3,2 l-3,3z" fill="#da77f2"/>`;
       },
+      // プレジデントあんどう (MR・おもい・社長命令): 黒と金の高級万年筆の社長。七三分けにサングラス、金のネクタイ、
+      // うしろに金の後光と上がりつづけるグラフ。片手に「決裁」のはんこ
+      ando: () => {
+        const black = lg('pb', [[0, '#495057'], [0.45, '#212529'], [1, '#000']], 1, 0), gold = lg('pg', [[0, '#fff3bf'], [0.5, '#fab005'], [1, '#e67700']], 1, 0);
+        return `
+        ${[0, 25, 50, 75, 100, 125, 150, 175].map((a) => `<path d="M60,58 L${(60 + Math.cos(a * Math.PI / 180) * 72).toFixed(1)},${(58 - Math.sin(a * Math.PI / 180) * 72).toFixed(1)}" stroke="#ffd43b" stroke-width="6" opacity=".2"/>`).join('')}
+        <path d="M6,104 L24,90 L36,96 L52,76 L64,82 L84,58" stroke="#2f9e44" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/><path d="M84,58 l-9,1 l6,7z" fill="#2f9e44"/>
+        <path d="M60,118 L48,100 L72,100Z" fill="${gold}" stroke="#7a4b00" stroke-width="1.4"/><path d="M60,116 V104" stroke="#7a4b00" stroke-width="1.4"/>
+        <rect x="38" y="24" width="44" height="80" rx="18" fill="${black}" stroke="#000" stroke-width="2"/>
+        <rect x="38" y="84" width="44" height="7" fill="${gold}"/><rect x="38" y="40" width="44" height="5" fill="${gold}"/>
+        <path d="M82,34 h6 v40 q0,6 -6,6" stroke="${gold}" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path d="M40,30 Q46,14 66,16 Q80,18 80,32 Q70,22 58,26 Q48,24 40,30Z" fill="#141517"/><path d="M58,17 Q57,22 59,26" stroke="#495057" stroke-width="1.4" fill="none"/>
+        <ellipse cx="50" cy="34" rx="5" ry="10" fill="#fff" opacity=".18" transform="rotate(12 50 34)"/>
+        <rect x="41" y="50" width="16" height="10" rx="4" fill="#000" stroke="#fab005" stroke-width="1.2"/><rect x="63" y="50" width="16" height="10" rx="4" fill="#000" stroke="#fab005" stroke-width="1.2"/><path d="M57,54 h6" stroke="#fab005" stroke-width="1.4"/>
+        <path d="M44,52 l5,0" stroke="#fff" stroke-width="1.4" opacity=".7"/><path d="M66,52 l5,0" stroke="#fff" stroke-width="1.4" opacity=".7"/>
+        <path d="M52,68 Q60,74 68,68" stroke="#f8f9fa" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <path d="M56,74 L60,72 L64,74 L62,92 L60,96 L58,92Z" fill="${gold}" stroke="#7a4b00" stroke-width="1"/>
+        <g transform="translate(100 88) rotate(-16)"><rect x="-8" y="-14" width="16" height="14" rx="3" fill="#8d5a2b" stroke="#3b1d00" stroke-width="1.2"/><rect x="-10" y="0" width="20" height="8" rx="2" fill="#c92a2a" stroke="#7a1414" stroke-width="1.2"/><text x="0" y="6.5" font-size="6" font-weight="900" text-anchor="middle" fill="#fff" font-family="serif">決裁</text></g>
+        ${twinkle(22, 26, 5, '#fff3bf')}${twinkle(100, 22, 4, '#ffd43b')}`;
+      },
       // Y (MR・つつむ・死の歌声─一方的な愛─): 歌姫にあこがれる、歌のへたなマイク。まるい網の頭にピンクのリボンとティアラ、
       // 目をつぶって大きな口で熱唱。音程のはずれたぐにゃぐにゃの音符と、こっそりドクロの音符
       yhime: () => {

@@ -2128,6 +2128,7 @@ body.arena-open { overflow: hidden; }
 .cb-dna em { position: relative; font-style: normal; font-weight: 900; color: #fff; background: linear-gradient(90deg, #ae3ec9, #e64980); padding: 2px 14px; border-radius: 999px; font-size: 15px; animation: cb-shout 1.2s cubic-bezier(.2, 1.6, .4, 1) .45s both; }
 @keyframes cb-dna-spin { from { transform: rotate(0) scale(.3); opacity: 0; } 20% { opacity: 1; } to { transform: rotate(320deg) scale(1.1); opacity: 0; } }
 .cb-sealed { color: #e64980; font-weight: 800; }
+.cb-tyrant { color: #f08c00; font-weight: 900; }
 @media (prefers-reduced-motion: reduce) { .cb-dna, .cb-dna::before { animation: none; } .cb-dna * { animation: none !important; } }
 /* 説教 (ウォーターミッドナイト) */
 .cb-scolded { color: #1971c2; font-weight: 800; }
