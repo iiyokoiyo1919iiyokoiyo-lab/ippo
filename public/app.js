@@ -2836,6 +2836,7 @@ function route() {
   if (h === '/monster') { setActiveNav('games'); return viewMonster(); }
   if (h === '/arena') { setActiveNav('games'); return viewArena(); }
   if (h === '/treasure') { setActiveNav('games'); return viewTreasure(); }
+  if (h === '/baseball') { setActiveNav('games'); return viewBaseball(); }
   if (h === '/horse/race') { setActiveNav('games'); return viewRace(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
@@ -3113,6 +3114,20 @@ window.addEventListener('message', (e) => {
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'login') openAuth();
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'exit') location.hash = '#/games';
 });
+// IppO ベースボール (/games/baseball/ を iframe で開く。画面いっぱい。もどるはゲームの中の ✕)
+function viewBaseball() {
+  main.innerHTML = pageHead({ title: 'IppO ベースボール', sub: 'ミニゲーム · マイチーム・ドラフト・リアルタイム対戦', back: '#/games' }) + `<div class="horse-wrap"></div>`;
+  $('#baseball-frame')?.remove();
+  const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'baseball-frame'; frame.src = '/games/baseball/'; frame.title = 'IppO ベースボール'; frame.allow = 'fullscreen';
+  document.body.append(frame); document.body.classList.add('arena-open'); window.scrollTo(0, 0);
+  viewCleanup = () => { frame.remove(); document.body.classList.remove('arena-open'); };
+}
+window.addEventListener('message', (e) => {
+  const bf = $('#baseball-frame');
+  if (!bf || e.source !== bf.contentWindow || e.origin !== location.origin) return;
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-baseball' && e.data.type === 'login') openAuth();
+  if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-baseball' && e.data.type === 'exit') location.hash = '#/games';
+});
 // 宝探し (/games/treasure/ を iframe で開く。シティバトルと同じく画面いっぱい)
 async function viewTreasure() {
   let st = null; try { st = await api('/treasure/status', { noAuthPrompt: true }); } catch {}
@@ -3177,6 +3192,10 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card game-card-new" href="#/baseball">
+      <span class="game-card-art mb-art" aria-hidden="true">⚾</span>
+      <span class="game-card-body"><b>IppO ベースボール <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>自分だけのチームを作って、毎時の自動試合でリーグ昇格をめざす。毎朝のドラフト会議・ガチャで選手を集めて、3D のリアルタイム対戦も</span>
+        <span class="chip chip-accent">⚾ 3D・レート戦</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/treasure">
       <span class="game-card-art mb-art" aria-hidden="true">🗝️</span>
       <span class="game-card-body"><b>宝探し <span class="chip" style="font-size:10px">🛠️ メンテ中</span></b><span>コンクリートの校舎がならぶキャンパスに、宝箱が 12 個。みんなで早いもの勝ちで探そう (戦いなし)</span>

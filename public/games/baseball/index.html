@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>IppO ベースボール</title>
+<style>
+:root{--bg:#0d1326;--surface:#151d38;--surface2:#1d2747;--ink:#eef2ff;--muted:#9aa6cc;--line:#2b3762;--primary:#f08c00;--blue:#3b6fe0;--ok:#2f9e44;--danger:#e03131;--gold:#fab005;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+button{font:inherit;cursor:pointer;color:inherit}
+#app{max-width:760px;margin:0 auto;padding:calc(8px + env(safe-area-inset-top)) 12px 90px;min-height:100%}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:10px}.hd h1{flex:1;margin:0;font-size:19px;font-weight:900;letter-spacing:.02em}.hd h1 small{font-size:11px;color:var(--muted);font-weight:700;margin-left:6px}
+.souls{padding:4px 10px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);font-weight:900;white-space:nowrap}
+.x{border:0;border-radius:50%;width:36px;height:36px;background:var(--surface2);font-size:17px}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;gap:2px;padding:6px 6px calc(6px + env(safe-area-inset-bottom));background:rgba(13,19,38,.96);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
+.tabs a{flex:1;max-width:120px;text-align:center;text-decoration:none;color:var(--muted);font-size:11px;font-weight:800;padding:4px 0;border-radius:10px}.tabs a b{display:block;font-size:20px;line-height:1.2}.tabs a.on{color:#fff;background:var(--surface2)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:10px}
+.card h2{margin:0 0 8px;font-size:15px;font-weight:900}
+.btn{border:0;border-radius:12px;padding:10px 14px;font-weight:900;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.p{background:linear-gradient(135deg,#ffa94d,#f08c00);color:#2b1300;box-shadow:0 3px 0 rgba(120,60,0,.6)}.btn.b{background:linear-gradient(135deg,#5c8dff,#3b5bdb);color:#fff;box-shadow:0 3px 0 rgba(20,40,120,.6)}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:10px}.btn.block{display:flex;width:100%}.btn:disabled{opacity:.45;cursor:not-allowed}
+.muted{color:var(--muted)}.small{font-size:12px}.row{display:flex;gap:8px;align-items:center}.grow{flex:1;min-width:0}
+.lg{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-weight:900;font-size:13px}
+.lg.bronze{background:#8c5a2b}.lg.silver{background:#7d8597;color:#fff}.lg.gold{background:#d4a017;color:#2b1d00}.lg.elite{background:#7048e8;color:#fff}.lg.champion{background:linear-gradient(90deg,#e03131,#f08c00);color:#fff}.lg.king{background:linear-gradient(90deg,#ffd43b,#fab005,#ffe066);color:#3b1d00}
+.bar{height:10px;border-radius:999px;background:var(--surface2);overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#4dabf7,#69db7c)}
+.pl{display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;background:var(--surface2);margin-bottom:6px;cursor:pointer}
+.pl .no{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:#2b3762;font-size:14px}
+.pl b{display:block;font-size:14px}.pl small{color:var(--muted)}
+.r-N{color:#ced4da}.r-R{color:#74c0fc}.r-SR{color:#da77f2}.r-SSR{background:linear-gradient(90deg,#ffd43b,#ff922b,#f783ac);-webkit-background-clip:text;background-clip:text;color:transparent}
+.chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:800;background:#2b3762;margin:1px 2px 1px 0}.chip.sp{background:#5f3dc4}.chip.aw{background:linear-gradient(90deg,#f08c00,#e03131)}.chip.star{background:linear-gradient(90deg,#ffd43b,#fab005);color:#3b1d00}
+.st{display:grid;grid-template-columns:58px 1fr 32px;gap:4px 8px;align-items:center;font-size:13px}.st .bar{height:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:center}th{color:var(--muted);font-weight:700}td.l,th.l{text-align:left}
+.modal{position:fixed;inset:0;z-index:50;background:rgba(5,8,20,.7);display:grid;place-items:center;padding:12px}.modal>div{width:min(560px,100%);max-height:88vh;overflow:auto}
+.toast{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:90;background:#1d2747;border:1px solid var(--line);padding:8px 14px;border-radius:12px;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.4)}.toast.err{background:#5c1a1a}
+.in{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);color:var(--ink);font:inherit}
+select.in{padding:6px}
+/* ---------- 試合 (3D) ---------- */
+#match{position:fixed;inset:0;z-index:40;background:#000;display:none;touch-action:none;user-select:none;-webkit-user-select:none}
+#match.on{display:block}#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud{position:absolute;pointer-events:none;z-index:2}
+#sb{left:8px;top:calc(8px + env(safe-area-inset-top));background:rgba(5,8,20,.78);border-radius:12px;padding:6px 10px;font-weight:900;font-size:13px;min-width:170px}
+#sb .sc{display:flex;justify-content:space-between;gap:10px}#sb .cnt{display:flex;gap:8px;margin-top:4px;font-size:12px}#sb .cnt i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#444;margin-left:2px}#sb .cnt .b i.on{background:#69db7c}#sb .cnt .s i.on{background:#ffd43b}#sb .cnt .o i.on{background:#ff6b6b}
+#bases{position:absolute;right:10px;top:calc(10px + env(safe-area-inset-top));width:64px;height:64px;transform:rotate(45deg)}#bases i{position:absolute;width:20px;height:20px;background:rgba(255,255,255,.25);border:2px solid #fff;border-radius:3px}#bases i.on{background:#ffd43b}
+#who{left:50%;top:calc(8px + env(safe-area-inset-top));transform:translateX(-50%);text-align:center;background:rgba(5,8,20,.7);border-radius:12px;padding:4px 12px;font-size:12px;font-weight:800;max-width:52vw}
+#msg{left:50%;top:34%;transform:translate(-50%,-50%);font-size:40px;font-weight:900;text-shadow:0 4px 0 #000,0 0 20px rgba(0,0,0,.6);text-align:center;white-space:nowrap;display:none}
+#msg.show{display:block;animation:pop .35s cubic-bezier(.2,1.6,.4,1)}#msg small{display:block;font-size:16px}
+@keyframes pop{from{transform:translate(-50%,-50%) scale(.5);opacity:0}}
+#ctl{left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+#ctl>*{pointer-events:auto}
+.pitches{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;max-width:96vw}.pitches button{border:0;border-radius:10px;padding:7px 9px;font-size:12px;font-weight:900;background:rgba(20,28,60,.88);border:1px solid #3b4a80}.pitches button.on{background:#f08c00;color:#2b1300;border-color:#ffd8a8}
+#meter{width:min(340px,80vw);height:26px;border-radius:999px;background:rgba(10,14,30,.85);border:2px solid #fff;position:relative;overflow:hidden;display:none}#meter.on{display:block}
+#meter .g{position:absolute;left:34%;right:34%;top:0;bottom:0;background:rgba(105,219,124,.45)}#meter .p{position:absolute;left:43%;right:43%;top:0;bottom:0;background:rgba(255,212,59,.75)}#meter .k{position:absolute;top:-2px;bottom:-2px;width:5px;background:#fff;box-shadow:0 0 8px #fff}
+.bigbtn{border:0;border-radius:999px;padding:14px 32px;font-size:18px;font-weight:900;background:linear-gradient(135deg,#ffa94d,#f08c00);color:#2b1300;box-shadow:0 4px 0 rgba(120,60,0,.7)}
+#hint{font-size:12px;font-weight:800;background:rgba(5,8,20,.7);padding:4px 10px;border-radius:999px;text-align:center}
+#mx{position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3;border:0;border-radius:999px;padding:8px 12px;background:rgba(5,8,20,.75);font-weight:900;font-size:12px}
+#pinfo{left:8px;bottom:calc(64px + env(safe-area-inset-bottom));background:rgba(5,8,20,.72);border-radius:10px;padding:4px 8px;font-size:11px;font-weight:800}
+@media (prefers-reduced-motion:reduce){#msg.show{animation:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="match">
+  <canvas id="cv"></canvas>
+  <div class="hud" id="sb"></div><div class="hud" id="bases"><i style="right:0;bottom:0"></i><i style="right:0;top:0"></i><i style="left:0;top:0"></i></div>
+  <div class="hud" id="who"></div><div class="hud" id="msg"></div><div class="hud" id="pinfo"></div>
+  <div class="hud" id="ctl"></div>
+  <button id="mx" type="button">🏳️ 降参</button>
+</div>
+<script src="bb-core.js?v=1"></script>
+<script type="module" src="bb.js?v=1"></script>
+</body>
+</html>
