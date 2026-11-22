@@ -99,6 +99,127 @@ RT.on((m) => {
   if (location.hash !== '#/dm/' + m.from && location.hash !== '#/dm') toast(`@${m.from} さんからメッセージ: ${m.message.content.slice(0, 30)}`);
 });
 
+// ---------- 音声通話 (1 対 1・WebRTC。合図は RT で送る。音声はブラウザどうしで直接) ----------
+const CALL = (() => {
+  let cur = null; // { id, peer: { username, displayName }, role: 'caller' | 'callee', state, pc, stream, audio, startedAt, pending: [], muted }
+  let ui = null, tick = null, tone = null, cfg = null;
+  const FAIL = { nouser: '相手が見つかりません', notallowed: 'この相手にはまだかけられません (相手から DM が届いているか、相手にフォローされていると、かけられます)', 'self-busy': 'ほかの通話中です', busy: '相手はほかの通話中です', offline: '相手はいまオンラインではありません (不在着信を残しました)' };
+  const END = { declined: '相手は通話に出られませんでした', missed: '応答がありませんでした', canceled: '通話がキャンセルされました', hangup: '通話が終わりました', dropped: '通話が切れました', limit: '通話の時間の上限 (3 時間) になりました', elsewhere: 'ほかの端末で応答しました' };
+  // 呼び出し音 (WebAudio で合成。かける側は「プルル」、かかってきた側は「ピロリロ」)
+  function ring(kind) {
+    stopRing();
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)(), g = ac.createGain(); g.gain.value = 0; g.connect(ac.destination);
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = kind === 'in' ? 880 : 440; o.connect(g); o.start();
+      const beat = () => { const t = ac.currentTime; g.gain.cancelScheduledValues(t);
+        if (kind === 'in') [0, 0.18, 0.36].forEach((d, i) => { o.frequency.setValueAtTime([880, 1046, 1318][i], t + d); g.gain.setValueAtTime(0.12, t + d); g.gain.setValueAtTime(0, t + d + 0.15); });
+        else { g.gain.setValueAtTime(0.08, t); g.gain.setValueAtTime(0, t + 1); } };
+      beat(); const iv = setInterval(beat, kind === 'in' ? 1400 : 3000);
+      tone = { stop() { clearInterval(iv); try { o.stop(); ac.close(); } catch {} } };
+    } catch {}
+    if (kind === 'in' && navigator.vibrate) try { navigator.vibrate([400, 300, 400]); } catch {}
+  }
+  function stopRing() { tone?.stop(); tone = null; }
+  const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  function render() {
+    if (!cur) { ui?.remove(); ui = null; clearInterval(tick); tick = null; return; }
+    if (!ui) { ui = document.createElement('div'); ui.className = 'call-ui'; ui.setAttribute('role', 'dialog'); ui.setAttribute('aria-label', '音声通話'); document.body.append(ui);
+      ui.addEventListener('click', (e) => { const b = e.target.closest('[data-call]'); if (!b) return; const a = b.dataset.call; if (a === 'accept') accept(); else if (a === 'decline') decline(); else if (a === 'hangup') hangup(); else if (a === 'mute') mute(); }); }
+    const p = cur.peer, st = cur.state;
+    const status = st === 'calling' ? '呼び出し中…' : st === 'incoming' ? '着信中…' : st === 'connecting' ? 'つないでいます…' : st === 'active' ? `<span class="call-time">${fmt(Date.now() - cur.startedAt)}</span>` : '';
+    ui.className = `call-ui ${st}`;
+    ui.innerHTML = `<div class="call-card">
+      <div class="call-ava" aria-hidden="true">${esc([...(p.displayName || p.username)][0] || '?')}<i></i><i></i></div>
+      <div class="call-who"><b>${esc(p.displayName)}</b><span>@${esc(p.username)}</span></div>
+      <div class="call-status" aria-live="polite">📞 ${status}</div>
+      <div class="call-btns">${st === 'incoming'
+        ? '<button type="button" class="call-btn no" data-call="decline" aria-label="拒否">✖<small>拒否</small></button><button type="button" class="call-btn yes" data-call="accept" aria-label="応答">📞<small>応答</small></button>'
+        : `${st === 'active' || st === 'connecting' ? `<button type="button" class="call-btn mute${cur.muted ? ' on' : ''}" data-call="mute" aria-pressed="${cur.muted ? 'true' : 'false'}">${cur.muted ? '🔇' : '🎙️'}<small>${cur.muted ? 'ミュート中' : 'ミュート'}</small></button>` : ''}<button type="button" class="call-btn no" data-call="hangup" aria-label="切る">✖<small>${st === 'calling' ? 'やめる' : '切る'}</small></button>`}</div>
+    </div>`;
+    if (st === 'active' && !tick) tick = setInterval(() => { const t = ui && $('.call-time', ui); if (t && cur) t.textContent = fmt(Date.now() - cur.startedAt); }, 1000);
+  }
+  async function config() { if (!cfg) cfg = await api('/call/config').catch(() => ({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })); return cfg; }
+  async function mic() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('このブラウザでは通話できません');
+    try { return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
+    catch { throw new Error('マイクを使えませんでした。ブラウザの設定でマイクを許可してください'); }
+  }
+  async function makePc() {
+    const c = cur, pc = new RTCPeerConnection({ iceServers: (await config()).iceServers });
+    c.pc = pc;
+    c.stream.getTracks().forEach((t) => pc.addTrack(t, c.stream));
+    pc.onicecandidate = (e) => { if (e.candidate && cur === c) RT.send({ t: 'call-signal', id: c.id, data: { candidate: e.candidate.toJSON() } }); };
+    pc.ontrack = (e) => { if (!c.audio) { c.audio = new Audio(); c.audio.autoplay = true; } c.audio.srcObject = e.streams[0]; c.audio.play().catch(() => {}); };
+    pc.onconnectionstatechange = () => {
+      if (cur !== c) return;
+      if (pc.connectionState === 'connected' && c.state !== 'active') { c.state = 'active'; c.startedAt = Date.now(); render(); }
+      if (pc.connectionState === 'failed') { toast('通話をつなげませんでした (回線の都合かもしれません)', 'error'); hangup(); }
+    };
+    return pc;
+  }
+  function cleanup(msg) {
+    stopRing();
+    if (!cur) return;
+    try { cur.pc?.close(); } catch {}
+    cur.stream?.getTracks().forEach((t) => t.stop());
+    if (cur.audio) { cur.audio.srcObject = null; }
+    cur = null; render();
+    if (msg) toast(msg);
+  }
+  async function start(username, displayName) {
+    if (cur) return toast('ほかの通話中です', 'error');
+    if (!RT.connected) return toast('接続中です。少し待ってからもう一度どうぞ', 'error');
+    let stream; try { stream = await mic(); } catch (e) { return toast(e.message, 'error'); }
+    cur = { id: null, peer: { username, displayName: displayName || username }, role: 'caller', state: 'calling', stream, pending: [], muted: false };
+    render(); ring('out');
+    RT.send({ t: 'call-invite', to: username });
+  }
+  async function accept() {
+    if (!cur || cur.state !== 'incoming') return;
+    stopRing();
+    try { cur.stream = await mic(); } catch (e) { toast(e.message, 'error'); return decline(); }
+    cur.state = 'connecting'; render();
+    await makePc();
+    RT.send({ t: 'call-accept', id: cur.id });
+  }
+  function decline() { if (!cur) return; RT.send({ t: 'call-decline', id: cur.id }); cleanup(); }
+  function hangup() { if (!cur) return; if (cur.id) RT.send({ t: 'call-hangup', id: cur.id }); cleanup(); }
+  function mute() { if (!cur?.stream) return; cur.muted = !cur.muted; cur.stream.getAudioTracks().forEach((t) => { t.enabled = !cur.muted; }); render(); }
+  async function onSignal(data) {
+    const c = cur, pc = c?.pc; if (!pc) return;
+    try {
+      if (data.sdp) {
+        await pc.setRemoteDescription(data.sdp);
+        for (const cand of c.pending.splice(0)) await pc.addIceCandidate(cand).catch(() => {});
+        if (data.sdp.type === 'offer') { const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); RT.send({ t: 'call-signal', id: c.id, data: { sdp: { type: ans.type, sdp: ans.sdp } } }); }
+      } else if (data.candidate) {
+        if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {}); else c.pending.push(data.candidate);
+      }
+    } catch (e) { console.warn('[call]', e); }
+  }
+  RT.on(async (m) => {
+    if (!m.t?.startsWith?.('call-') && m.t !== 'close') return;
+    if (m.t === 'close') { if (cur) cleanup('接続が切れたため、通話を終了しました'); return; }
+    if (m.t === 'call-incoming') {
+      if (cur) return; // 通話中はほかの着信を受けない (サーバーでも止めている)
+      cur = { id: m.id, peer: m.from, role: 'callee', state: 'incoming', pending: [], muted: false };
+      render(); ring('in');
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') try { new Notification('IppO 着信', { body: `${m.from.displayName} さんから音声通話` }); } catch {}
+    } else if (m.t === 'call-ringing') { if (cur?.role === 'caller' && !cur.id) cur.id = m.id; }
+    else if (m.t === 'call-fail') { if (cur?.role === 'caller' && !cur.id) cleanup(FAIL[m.reason] || '通話をかけられませんでした'); }
+    else if (m.t === 'call-accepted') {
+      if (!cur || cur.id !== m.id) return;
+      stopRing(); cur.state = 'connecting'; render();
+      const pc = await makePc();
+      const off = await pc.createOffer({ offerToReceiveAudio: true }); await pc.setLocalDescription(off);
+      RT.send({ t: 'call-signal', id: cur.id, data: { sdp: { type: off.type, sdp: off.sdp } } });
+    } else if (m.t === 'call-signal') { if (cur && cur.id === m.id) onSignal(m.data); }
+    else if (m.t === 'call-end') { if (cur && cur.id === m.id) cleanup(END[m.reason] || '通話が終わりました'); }
+  });
+  window.addEventListener('beforeunload', () => { if (cur?.id) RT.send({ t: 'call-hangup', id: cur.id }); });
+  return { start, get busy() { return !!cur; } };
+})();
+
 // ---------- トースト ----------
 function toast(msg, type = '') {
   const el = document.createElement('div');
@@ -2504,6 +2625,12 @@ async function viewDmThread(username) {
     peerUser = user;
     Object.assign(peer, { online: p?.online ?? null, lastSeenAt: p?.lastSeenAt ?? null, readUpTo: p?.readUpTo ?? null });
     $('.page-head h1', main).innerHTML = `<a href="#/u/${esc(user.username)}" style="color:inherit">${esc(user.displayName)}</a>${adminBadge(user)}<span class="sub dm-status" id="dm-status"></span>`;
+    // 📞 音声通話 (かけられる相手のときだけ出す)
+    api('/call/can/' + encodeURIComponent(user.username), { noAuthPrompt: true }).then((c) => {
+      if (!c?.ok || $('#dm-call')) return;
+      $('.page-head', main)?.insertAdjacentHTML('beforeend', `<div class="page-head-actions"><button class="btn btn-outline btn-sm dm-call" id="dm-call" type="button" aria-label="${esc(user.displayName)}さんに音声通話をかける">📞 通話</button></div>`);
+      $('#dm-call').addEventListener('click', () => CALL.start(user.username, user.displayName));
+    }).catch(() => {});
     renderStatus();
     thread.innerHTML = messages.length ? '' : emptyState({ icon: 'mail', title: `${user.displayName}さんにメッセージを送ってみましょう` });
     append(messages);

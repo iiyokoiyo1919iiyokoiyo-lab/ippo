@@ -92,6 +92,11 @@
 - 確認用: URL の最後に `#debug` (`window.__tr`・`window.__cam` でカメラを動かせる)
 - いまはメンテナンス中 (`treasure.js` の `MAINT`): 管理者のほかは接続を断り (`maint`・4003)、アプリでは「メンテ中」と出す。環境変数 `TREASURE_MAINT=0` で解除
 
+## 音声通話 (call.js)
+- 1 対 1 の音声通話 (WebRTC)。合図 (かける・出る・切る・SDP・ICE) は DM のリアルタイム接続 `/rt` で中継 (`realtime.js` が `call-` で始まるメッセージを `ctx.callMessage` に渡す。`/rt` の maxPayload は 16KB)。音声はサーバーを通らない
+- かけられるのは、相手から DM が届いたことがあるか、相手にフォローされているときだけ (`canCall`)。DM の画面の右上に「📞 通話」。同時に 1 つ・呼び出しは 30 秒・最長 3 時間。記録 (通話時間・不在着信・出られなかった) は DM の会話に残る
+- 中継サーバー (TURN) は環境変数 `TURN_URL`・`TURN_USER`・`TURN_PASS` (なければ STUN だけ。回線によってはつながらない)。マイクは Permissions-Policy で IppO 自身にだけ許可 (`microphone=(self)`)
+
 ## そのほか
 - 既存の機能を消さない・データベースの構造を勝手に変えない (表の追加・列の追加は `db.migrate` で)・認証やアクセス制御を弱めない
 - 利用者の書いた文字は必ずエスケープして表示する (innerHTML に生のまま入れない)

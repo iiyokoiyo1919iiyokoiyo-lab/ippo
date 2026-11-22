@@ -25,7 +25,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', framable ? 'SAMEORIGIN' : 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()'); // マイクは音声通話のためだけに IppO 自身に許可
   if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   next();
 });
@@ -344,6 +344,7 @@ const ctx = { db, hydrate, hydrateAll, requireAuth, rateLimit, publicUser, befor
 require('./features')(app, ctx);
 require('./pixel')(app, ctx); // PIXEL WORLD
 require('./realtime')(app, ctx); // DM のオンライン表示・入力中・既読
+require('./call')(app, ctx); // 1 対 1 の音声通話 (WebRTC。合図は /rt で中継)
 require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真
@@ -366,6 +367,7 @@ const qUnreadFrom = db.prepare('SELECT COUNT(*) AS n FROM dm_messages WHERE send
 const qMarkRead = db.prepare(`INSERT INTO dm_reads (user_id, peer_id, last_read_id) VALUES (?, ?, ?)
   ON CONFLICT(user_id, peer_id) DO UPDATE SET last_read_id = MAX(last_read_id, excluded.last_read_id)`);
 const dmOut = (m, me) => ({ id: m.id, content: m.content, createdAt: m.created_at, mine: m.sender_id === me.id });
+ctx.dmOut = dmOut; // 通話の記録を DM に残すときに使う
 
 function unreadFrom(me, peerId) {
   const last = qLastRead.get(me.id, peerId)?.last_read_id || 0;

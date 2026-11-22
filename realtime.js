@@ -52,7 +52,7 @@ module.exports = function install(app, ctx) {
     return { online: isOnline(targetId), lastSeenAt: isOnline(targetId) ? null : lastSeen.get(targetId) || null };
   }
 
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 512 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 }); // 通話の合図 (SDP) が入るので 16KB まで (call.js で中身を確かめる)
   wss.on('connection', (ws, req, user) => {
     ws.userId = user.id;
     ws.alive = true;
@@ -77,9 +77,12 @@ module.exports = function install(app, ctx) {
         const peer = db.prepare('SELECT id FROM users WHERE username = ?').get(String(m.to || ''));
         if (!peer || peer.id === user.id || !canSeePresence(peer.id, user.id)) return;
         sendTo(peer.id, { t: 'typing', from: user.username });
+      } else if (typeof m.t === 'string' && m.t.startsWith('call-') && ctx.callMessage) {
+        ctx.callMessage(ws, user, m); // 音声通話の合図 (call.js)
       }
     });
     ws.on('close', () => {
+      ctx.callClosed?.(ws);
       const set = sockets.get(user.id);
       if (set) { set.delete(ws); if (!set.size) { sockets.delete(user.id); lastSeen.set(user.id, Date.now()); announcePresence(user.id); } }
     });
@@ -95,6 +98,9 @@ module.exports = function install(app, ctx) {
   // ---------- DM から呼ばれる通知 ----------
   ctx.rt = {
     presenceOf,
+    isOnline,
+    // ある接続のほかの、その人の全部の接続に送る (通話: ほかの端末の呼び出しを止める)
+    sendToUsersExcept(ids, except, msg) { const s = JSON.stringify(msg); for (const id of new Set(ids)) for (const ws of sockets.get(id) || []) if (ws !== except && ws.readyState === 1) ws.send(s); },
     broadcast(msg) { const s = JSON.stringify(msg); for (const set of sockets.values()) for (const ws of set) if (ws.readyState === 1) ws.send(s); },
     sendToUsers(ids, msg) { for (const id of new Set(ids)) sendTo(id, msg); },
     // 相手が自分のメッセージをどこまで読んだか (見せてよい時だけ)
