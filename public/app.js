@@ -3752,6 +3752,7 @@ async function viewBattle(params) {
     : e.k === 'dogma' ? `🧬 ${name(e.p, e.card)}のセントラルドグマ！ ${e.healed.map((x) => `${x.card} +${x.amount}`).join('・')} 回復`
     : e.k === 'morale' ? `${e.p === you ? '' : '相手の'}${e.card}がたおれ、${e.p === you ? '味方' : '相手'}の士気が上がった！🔥 (攻撃 1.4 倍・防御 1.3 倍)`
     : e.k === 'sermon' ? `${name(e.p, e.card)}の説教！ 📢${e.to !== null ? ` ${e.p === you ? '相手の' : ''}${e.target}の攻撃力が ${e.from} → ${e.to} に下がった` : ` (${e.p === you ? '相手の' : ''}${e.target}はもう説教ずみ)`}${e.cured.length ? `。${e.cured.join('・')}の毒が治った` : ''}`
+    : e.k === 'hit' && e.tyrantPierce ? `🗡️ ${name(e.p, e.card)}のつらぬく！ 絶対権力をつらぬいて ${e.target}に ${e.dmg} ダメージ`
     : e.k === 'immune' ? `👔 ${e.p === you ? '' : '相手の'}${e.card}の絶対権力！ ダメージを受けない`
     : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`

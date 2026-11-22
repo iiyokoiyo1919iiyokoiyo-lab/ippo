@@ -270,6 +270,7 @@ const TAIKA_POWER = 1.2;  // 大化の改新: 1.2 倍のこうげき + 味方の
 const ORDER_ACTIVE = 1.5, ORDER_BENCH = 0.7; // 社長命令: 場のカードに 1.5 倍・控えに 0.7 倍の無属性こうげき
 // 絶対権力 (クエスト「社長室の決戦」のボスだけ): わざを封じられる (DNAを取り出す) までは、どんなダメージも受けない
 const immune = (c) => !!c.tyrant && !(c.sealed > 0);
+const TYRANT_PIERCE = Number(process.env.CB_TYRANT_PIERCE) || 1; // ただし「つらぬく」は絶対権力をつらぬく (すえつぐなしの、難しい勝ち筋。Lv18 で つらぬく 2 枚のデッキは勝率 約 13%・1 枚は 約 6%、すえつぐ入りは 25%)
 const DEATHSONG_POWER = 1.2; // 死の歌声─一方的な愛─: 1.2 倍のこうげき + このターンに受けた相手が使い手を倒すと、相手のカードをランダムで 1 枚道連れ
 const DNA_POWER = 1.8; // DNAを取り出す: 1.8 倍のこうげき + 相手の場のカードは、そのバトル中ずっとわざを使えない (わざ封じ。交代しても・大化の改新でも戻らない)
 // ボスクエスト (高難易度クエスト) で使えるアイテム。対戦中にコインで買って、その場で使う (そのターンの行動になる)
@@ -326,16 +327,18 @@ function resolveTurn(state, acts, rnd) {
   const hit = (p, power, opt = {}) => {
     const me = sides[p].cards[sides[p].active], o = 1 - p;
     const ti = opt.target ?? sides[o].active, foe = sides[o].cards[ti], bench = ti !== sides[o].active;
-    if (immune(foe)) { ev.push({ k: 'immune', p: o, card: foe.name, bench }); return 0; } // 絶対権力: ダメージなし
+    const tyr = immune(foe);
+    if (tyr && !opt.pierce) { ev.push({ k: 'immune', p: o, card: foe.name, bench }); return 0; } // 絶対権力: ダメージなし (つらぬく だけは通る)
     const tm = opt.typeless ? 1 : typeMult(me.type, foe.type);
     const base = opt.pierce ? me.atk * power * 2 : me.atk * power * 2 - foe.def * 0.6; // 1 枚あたり 3〜4 回の攻撃で倒れるくらい
     let dmg = Math.max(1, Math.round(base * tm * (0.9 + rnd() * 0.2)));
     const g = bench ? 1 : guard[o];                                   // ガード・バリアが守るのは場に出ているカードだけ
     if (!opt.pierce) dmg = Math.round(dmg * g);
+    if (tyr) dmg = Math.max(1, Math.round(dmg * TYRANT_PIERCE)); // つらぬく: 絶対権力をつらぬく
     dmg = Math.min(dmg, foe.hp);
     foe.hp -= dmg;
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
-    ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
+    ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
@@ -704,10 +707,10 @@ const QUESTS = [
   { id: 'ando-2026', name: '社長室の決戦', boss: 'プレジデントあんどう', emoji: '👔', reward: 'ando', bg: 'shachou', hard: true, boost: 0.882, // tune_oni quest:ando-2026 (すえつぐ入りの Lv18 SSR・MR デッキで勝率 25%。すえつぐなしは 0.6 倍でも 0%)
     must: 'suetsugu', timeupLose: true, bossPassive: { ando: 'tyrant' },
     award: '社長の椅子が空いた…伝説の始まりだ👔👔👔',
-    hint: '🩷 すえつぐ必須！ いないと絶対にクリアできない (時間切れも負け)',
-    pr: 'ボスのプレジデントあんどうは「絶対権力」で、どんなこうげきも毒も効かない…！ 魔法使いすえつぐの「DNAを取り出す」でわざを封じたときだけ、権力を失ってダメージが通る。時間切れは負け。\n敵は おもい 2 体 (あんどう・皇帝の玉璽) と きる 1 体 (七色ボールペン覇王)。📄つつむ のすえつぐが有利！',
+    hint: '🩷 すえつぐの DNA で権力崩壊！ いなければ「つらぬく」だけが通る',
+    pr: 'ボスのプレジデントあんどうは「絶対権力」で、どんなこうげきも毒も効かない…！ 魔法使いすえつぐの「DNAを取り出す」でわざを封じたときだけ、権力を失ってダメージが通る。「つらぬく」だけは権力をつらぬける。時間切れは負け。\n敵は おもい 2 体 (あんどう・皇帝の玉璽) と きる 1 体 (七色ボールペン覇王)。📄つつむ のすえつぐが有利！',
     text: '巨大企業の頂点に立つ社長の万年筆「プレジデントあんどう」。絶対権力で、どんな攻撃も受けつけない… 魔法使いすえつぐが DNA を取り出したときだけ、権力がくずれる。勝てば MR「プレジデントあんどう」が仲間になる',
-    tip: 'すえつぐがいないと絶対に勝てません。あんどうは「絶対権力」で、すえつぐの「DNAを取り出す」を受けるまでダメージ・毒・流星・道連れが効かない。時間切れ (30 ターン) は負け。すえつぐを守りながら、あんどうが場にいるときに DNA を取り出そう。社長命令は控えにもダメージが入るので、控えのすえつぐも削られる',
+    tip: 'いちばんの攻略法は魔法使いすえつぐ。あんどうは「絶対権力」で、すえつぐの「DNAを取り出す」を受けるまでダメージ・毒・流星・道連れが効かない。すえつぐがいなければ、わざ「つらぬく」(流星定規・氷結万年筆など) だけがダメージを通せる (難しい)。時間切れ (30 ターン) は負け。すえつぐを守りながら、あんどうが場にいるときに DNA を取り出そう。社長命令は控えにもダメージが入るので、控えのすえつぐも削られる',
     enemy: [['ando', 20], ['gyokuji', 20], ['rainbowpen', 20]],
     titles: { 1: '社長室最速クリア👔', 2: '社長室準最速クリア👔' },
     start: Date.parse('2026-11-22T12:00:00+09:00'), end: Date.parse('2026-11-26T12:00:00+09:00') },
