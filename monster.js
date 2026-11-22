@@ -67,6 +67,7 @@ const MAX_CHILDREN = 5, TRAIN_TURNS = 10, INHERIT_RATE = 0.7, STUD_SCORE = 600, 
 // 売却: 強さの 8% + 市場価値の 2% (10〜500 コイン)。ショップのメス (B で約 200) を買って産ませて全部売っても得をしない値段
 const SELL = { power: 0.16, score: 0.04, min: 20, max: 1000 }; // 2026-11-22: 買取金額を倍に (8%・2%・10〜500 → 16%・4%・20〜1000)
 const EXTRACT_COST = 1000; // 変異抽出装置: 自分のモンスターの変異を、別の自分のモンスターに写す (元はそのまま)
+const EXTRACT_GIVE_MAX = 2; // 1 体が生涯で変異を分けられる相手は 2 体まで (同じ相手にもう一度分けるのは数えない)
 const sellPrice = (m) => clamp(Math.round(powerOf(m) * SELL.power + Math.max(0, m.score || 0) * SELL.score), SELL.min, SELL.max);
 const SCORE = { pvp: { win: 120, lose: 20 }, cpuMult: 0.6 };      // 市場価値 (戦績スコア)。CPU 戦は 0.6 倍
 const COINS = { pvp: { win: 50, lose: 10 }, cpu: { win: 15, lose: 3 } }; // 対戦でもらえるコイン (ぶんばとと共用)
@@ -328,13 +329,16 @@ module.exports = function install(app, ctx) {
   const userView = (id) => { if (!id) return { id: 0, username: '', displayName: 'IppO 公式', avatar: { kind: 'emoji', emoji: '🏛️', color: '#4b55f0' } }; const u = publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)); return u && { id: u.id, username: u.username, displayName: u.displayName, avatar: u.avatar, verified: u.verified, titles: u.titles || [] }; };
   const skillView = (id) => SKILLS[id] && { id, name: SKILLS[id].name, kind: SKILLS[id].kind, type: SKILLS[id].type, cmd: SKILLS[id].cmd, power: SKILLS[id].power };
   const parentBrief = (id) => { const p = getMon(id); return p ? { id: p.id, name: p.name, type: p.type, look: p.look, rank: rankOf(p), score: p.score, wins: p.wins, losses: p.losses, pvpWins: p.pvp_wins, pvpLosses: p.pvp_losses, owner: p.owner_id ? null : '公式' } : null; };
+  // 変異を分けた相手の数 (変異抽出装置の記録から。生涯の数なので、売っても・相手がいなくなっても減らない)
+  const qGiven = db.prepare("SELECT DISTINCT monster_id AS id FROM mon_mutation_log WHERE event = 'extract' AND json_extract(detail, '$.from') = ?");
+  const givenTo = (id) => qGiven.all(id).map((r) => r.id);
   const monView = (m, { full = false } = {}) => m && {
     id: m.id, name: m.name, sex: m.sex, type: m.type, gen: m.gen, look: m.look, status: m.status, trainLeft: m.train_left,
     hp: m.hp, atk: m.atk, mag: m.mag, def: m.def, spd: m.spd, skills: m.skills.map(skillView).filter(Boolean),
     score: m.score, wins: m.wins, losses: m.losses, pvpWins: m.pvp_wins, pvpLosses: m.pvp_losses, children: m.children, isStud: !!m.is_stud, studFee: m.stud_fee,
     listPrice: m.list_price, sellPrice: sellPrice(m), rank: rankOf(m), power: powerOf(m), inherited: m.inherited, ownerId: m.owner_id, createdAt: m.created_at,
     ...(m.mutations?.length ? { mutations: m.mutations.map((x) => MUT.viewOf(x, TYPES)).filter(Boolean), synergies: (m.syn || []).map((s) => ({ name: s.name, desc: s.desc })),
-      mutantRarity: MUT.topRarity(m.mutations), look: { ...m.look, viz: MUT.vizOf(m.mutations) }, baseStats: m.base, initScore: m.init_score } : {}),
+      mutantRarity: MUT.topRarity(m.mutations), look: { ...m.look, viz: MUT.vizOf(m.mutations) }, baseStats: m.base, initScore: m.init_score, giveLeft: Math.max(0, EXTRACT_GIVE_MAX - givenTo(m.id).length) } : {}),
     ...(full ? { father: m.father_id ? parentBrief(m.father_id) : null, mother: m.mother_id ? parentBrief(m.mother_id) : null } : {}),
   };
   function insertMon(m, owner, extra = {}) {
@@ -366,7 +370,7 @@ module.exports = function install(app, ctx) {
   app.get('/api/mon/catalog', (req, res) => res.json({
     types: TYPES, typeTable: Object.fromEntries(TYPE_IDS.map((a) => [a, Object.fromEntries(TYPE_IDS.map((d) => [d, typeMult(a, d)]))])),
     skills: Object.values(SKILLS).filter((s) => skillOk(s.id)).map((s) => skillView(s.id)), ranks: RANKS,
-    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS, extractCost: EXTRACT_COST, maxMutations: MUT.MAX_MUTATIONS }, guard: GUARD,
+    rules: { maxChildren: MAX_CHILDREN, trainTurns: TRAIN_TURNS, inheritRate: INHERIT_RATE, studScore: STUD_SCORE, score: SCORE, coins: COINS, inputMs: INPUT_MS, maxSkills: MAX_SKILLS, extractCost: EXTRACT_COST, maxMutations: MUT.MAX_MUTATIONS, extractGiveMax: EXTRACT_GIVE_MAX }, guard: GUARD,
   }));
   app.get('/api/mon/me', requireAuth, (req, res) => {
     const uid = req.user.id, started = !!db.prepare('SELECT 1 FROM mon_players WHERE user_id = ?').get(uid);
@@ -494,6 +498,8 @@ module.exports = function install(app, ctx) {
     if (!src || !MUT.BY_ID[mid]) return res.status(400).json({ error: 'その変異は持っていません' });
     if ((to.mutations || []).some((x) => x.id === mid)) return res.status(400).json({ error: 'もうその変異を持っています' });
     if ((to.mutations || []).length >= MUT.MAX_MUTATIONS) return res.status(400).json({ error: `変異は 1 体 ${MUT.MAX_MUTATIONS} つまでです` });
+    const given = givenTo(from.id);
+    if (!given.includes(to.id) && given.length >= EXTRACT_GIVE_MAX) return res.status(400).json({ error: `${from.name} はもう ${EXTRACT_GIVE_MAX} 体に変異を分けました (1 体が分けられるのは生涯で ${EXTRACT_GIVE_MAX} 体まで)` });
     db.exec('BEGIN');
     try {
       if (!coins.spend(uid, EXTRACT_COST)) { db.exec('ROLLBACK'); return res.status(400).json({ error: `コインが足りません (${EXTRACT_COST} コイン)` }); }

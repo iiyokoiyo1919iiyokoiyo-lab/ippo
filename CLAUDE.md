@@ -49,7 +49,7 @@
   - 変異の能力は保存した能力値に足さず、表示とバトルで計算する (配合で子に渡すのは変異なしの能力)。R 以上の変異で生まれたら市場価値 1000 (`init_score`。種モンの条件には数えない)
   - テストで必ず変異させるときは `MON_MUTATION_FORCE=1` (本番では設定しない)
   - 変異は 36 種類・相乗効果 10 (2026-11-22 に 12 種類と 3 つ追加: 黒化・金色化・虎縞・斑紋・硝子の大砲・賢者の脳・不屈・炎の体・氷の体・王族・虚無種・獣王種 / 氷炎・闇の王・狩りの王)。絵の部品 (`mon-art.js`) は tint black/gold・pattern stripes/spots・flames・frost・crown・mane
-  - 変異抽出装置 (1000 コイン・`EXTRACT_COST`): モンスターの詳細から、自分のほかのモンスターの変異を 1 つえらんで写す (元はそのまま・同じレアリティと出方・4 つまで・origin `extract`。`POST /api/mon/monster/:id/extract`)
+  - 変異抽出装置 (1000 コイン・`EXTRACT_COST`): モンスターの詳細から、自分のほかのモンスターの変異を 1 つえらんで写す (元はそのまま・同じレアリティと出方・4 つまで・origin `extract`。1 体が生涯で変異を分けられる相手は 2 体まで (`EXTRACT_GIVE_MAX`。記録 `mon_mutation_log` の event `extract` から数える)。`POST /api/mon/monster/:id/extract`)
 - 売却: モンスターの詳細から。値段は強さの 16% + 市場価値の 4% (20〜1000 コイン。2026-11-22 に倍に。`monster.js` の `SELL`)。状態を `sold` にしてデータは残す (血統のため。自分の一覧・数・ランキングには出ない)。セリ中・バトル中・最後の 1 体は売れない
 - ぶんバトに連れていく: `cards.js` の表 `card_monsters` (カード ID は `m:`)。評価 → レア度 (`MONCARD_RARITY`: C→N・B→R・A→SR・S/SS→SSR・Z→MR)、属性 → 相性・わざ (`MONCARD_TYPE` / `MONCARD_SKILL`)。能力はモンスターの能力に比例 (上限なし。`MONCARD_SCALE`: はじめのモンスターで R の平均くらい。変異なしは +5% (`MONCARD_PLAIN_BONUS`))。突然変異 R 以上は「限定級」(恒常の SSR の平均の 95%〜100% にそろえる (`MONCARD_LIMITED_FLOOR` / `MONCARD_LIMITED_CAP`)・倍率は評価にかかわらず 1.12)。計算を変えたら `MONCARD_FORMULA` を上げる (起動時に連れてきたカードを計算し直す)。1 体 1 枚、連れてきたあとも「最新の強さにする」で写し直せる (レベルはそのまま)。絵は `GET /api/cards/mon-art/:id` (サーバーで mon-art.js を動かして SVG)
 - フォルダ: 自分のモンスターをフォルダに分けて整理できる (表 `mon_folders` / `mon_folder_items`。1 体は 1 つのフォルダだけ・入っていなければ「未分類」・20 個まで・名前 12 文字)。ホームのタブで切りかえ、「📁 整理する」でえらんでまとめて移す・詳細画面からも移せる。フォルダを消してもモンスターは消えない (未分類にもどる)。ほかの人には見えない

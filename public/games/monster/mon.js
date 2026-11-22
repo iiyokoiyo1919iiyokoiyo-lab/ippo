@@ -245,11 +245,12 @@
   function openExtract(m) {
     const have = new Set((m.mutations || []).map((x) => x.id)), cost = catalog.rules.extractCost || 1000;
     const srcs = me.monsters.filter((x) => x.id !== m.id && (x.mutations || []).some((y) => !have.has(y.id)));
+    const gmax = catalog.rules.extractGiveMax || 2;
     const wrap = document.createElement('div'); wrap.className = 'xt-wrap';
     wrap.innerHTML = `<div class="card xt" role="dialog" aria-label="変異抽出装置"><h2>🧪 変異抽出装置</h2>
-      <p class="small">ほかのモンスターの変異を 1 つえらんで、<b>${esc(m.name)}</b> に写します。元のモンスターの変異はそのまま。レアリティと出方 (表・潜在) も同じ。<br>1 回 <b>🪙 ${cost.toLocaleString()}</b> (いま 🪙 ${Number(me.coins).toLocaleString()})</p>
-      <div class="xt-list">${srcs.length ? srcs.map((x) => `<div class="xt-src"><div class="row" style="gap:8px;align-items:center">${MonArt.svg(x.look, x.type, { rank: x.rank, cls: '' }).replace('class="ma-svg', 'style="width:48px;height:48px" class="ma-svg')}<b>${esc(x.name)}</b></div>
-        ${x.mutations.filter((y) => !have.has(y.id)).map((y) => `<button class="btn sm xt-pick" data-from="${esc(x.id)}" data-mut="${esc(y.id)}"><span class="mutb mr-${esc(y.rarity)}">変異${esc(y.rarity)}</span> ${esc(y.name)}${y.mode === 'latent' ? ' (潜在)' : ''} <span class="small muted">${esc((y.effects || []).join(' · '))}</span></button>`).join('')}</div>`).join('') : '<p class="muted">写せる変異を持ったモンスターがいません</p>'}</div>
+      <p class="small">ほかのモンスターの変異を 1 つえらんで、<b>${esc(m.name)}</b> に写します。元のモンスターの変異はそのまま。レアリティと出方 (表・潜在) も同じ。1 体が変異を分けられるのは、生涯で ${gmax} 体までです。<br>1 回 <b>🪙 ${cost.toLocaleString()}</b> (いま 🪙 ${Number(me.coins).toLocaleString()})</p>
+      <div class="xt-list">${srcs.length ? srcs.map((x) => `<div class="xt-src"><div class="row" style="gap:8px;align-items:center">${MonArt.svg(x.look, x.type, { rank: x.rank, cls: '' }).replace('class="ma-svg', 'style="width:48px;height:48px" class="ma-svg')}<b>${esc(x.name)}</b><span class="small muted">分けられるのは あと ${Number(x.giveLeft ?? gmax)} 体</span></div>
+        ${x.mutations.filter((y) => !have.has(y.id)).map((y) => `<button class="btn sm xt-pick" ${x.giveLeft === 0 ? 'disabled' : ''} data-from="${esc(x.id)}" data-mut="${esc(y.id)}"><span class="mutb mr-${esc(y.rarity)}">変異${esc(y.rarity)}</span> ${esc(y.name)}${y.mode === 'latent' ? ' (潜在)' : ''} <span class="small muted">${esc((y.effects || []).join(' · '))}</span></button>`).join('')}</div>`).join('') : '<p class="muted">写せる変異を持ったモンスターがいません</p>'}</div>
       <button class="btn block" id="xt-close">とじる</button></div>`;
     document.body.append(wrap);
     const close = () => wrap.remove();
