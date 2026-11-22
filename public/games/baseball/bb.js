@@ -26,7 +26,7 @@ const tabs = (on) => `<nav class="tabs">${[['home', '🏟️', 'ホーム'], ['t
 function bindCommon() { $('#exit')?.addEventListener('click', () => parent.postMessage({ source: 'ippo-baseball', type: 'exit' }, location.origin)); }
 const statBar = (label, v, max = 100, suf = '') => `<span>${label}</span><span class="bar"><i style="width:${Math.min(100, v / max * 100)}%"></i></span><b>${v}${suf}</b>`;
 const spChips = (p) => (p.specials || []).map((s) => `<span class="chip ${s.award ? 'aw' : 'sp'}" title="${esc(s.desc)}">${esc(s.name)}</span>`).join('');
-const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="no">${p.kind === 'P' ? esc(p.pos) : esc(p.pos)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>
+const plRow = (p, extra = '') => `<div class="pl" data-pid="${esc(p.id)}"><span class="no">${p.kind === 'P' ? esc(p.pos) : esc(p.pos)}</span><span class="grow"><b><span class="r-${esc(p.rarity)}">${esc(p.rarity)}</span> ${esc(p.name)} <small>#${p.number}</small>${p.real ? ` <span class="chip">${esc(p.real.team || '実名')}</span>` : ''}${p.awakened ? ' <span class="chip star">覚醒</span>' : ''}</b>${p.real?.note ? `<small>🔥 ${esc(p.real.note)}</small> ` : ''}
   <small>${p.kind === 'P' ? `${p.stats.velo}km 変${p.stats.brk} 威${p.stats.stuff} · ${p.pitches.length}球種` : `ミ${p.stats.meet} パ${p.stats.power} 速${p.stats.speed} 守${p.stats.tech}`}</small> ${spChips(p)}</span>${extra}</div>`;
 function playerModal(p, { release = false } = {}) {
   const s = p.season;
@@ -36,7 +36,7 @@ function playerModal(p, { release = false } = {}) {
     ${p.kind === 'P' ? `<p class="small" style="margin:8px 0 4px"><b>球種 (${p.pitches.length})</b></p><div>${p.pitches.map((x) => `<span class="chip">${esc(x.name)}</span>`).join('')}</div>` : ''}
     ${p.specials?.length ? `<p class="small" style="margin:8px 0 4px"><b>特殊能力</b></p>${p.specials.map((x) => `<div class="small"><span class="chip ${x.award ? 'aw' : 'sp'}">${esc(x.name)}</span> ${esc(x.desc)}</div>`).join('')}` : ''}
     ${s ? `<p class="small" style="margin:8px 0 4px"><b>今シーズン</b></p><p class="small muted" style="margin:0">${p.kind === 'B' ? `${s.g}試合 打率 ${s.ab ? (s.h / s.ab).toFixed(3).replace(/^0/, '') : '-'} (${s.h}/${s.ab}) 本塁打 ${s.hr} 打点 ${s.rbi} 守備評価 ${s.def}` : `${s.g}試合 ${s.w}勝${s.l}敗 ${s.sv}S ${s.hld}H 防御率 ${s.outs ? (s.er * 27 / s.outs).toFixed(2) : '-'} 奪三振 ${s.k}`}</p>` : ''}
-    <p class="small muted">入手: ${{ start: 'はじめのチーム', draft: 'ドラフト', gacha: 'ガチャ', hot: 'ガチャ (前日の活躍選手)' }[p.origin] || esc(p.origin)} · 出場 ${p.games} 試合</p>
+    ${p.real ? `<p class="small">${esc(p.real.team)}${p.real.note ? ` · 🔥 ${esc(p.real.note)}` : ''}</p>` : ''}<p class="small muted">入手: ${{ start: 'はじめのチーム', draft: 'ドラフト', gacha: 'ガチャ', hot: 'ガチャ (前日の活躍選手)', real: 'ガチャ (前日の活躍選手・実名)' }[p.origin] || esc(p.origin)} · 出場 ${p.games} 試合</p>
     ${release ? '<button class="btn sm" id="rel">手放す (たましいが少しもどる)</button>' : ''}</div>`;
   document.body.append(m);
   m.addEventListener('click', async (e) => {
@@ -153,6 +153,14 @@ async function viewGacha() {
     <div class="card"><h2>🎰 選手ガチャ</h2><p class="small">前日の試合で活躍した選手が入っています (🔥 30%)。そのほか SSR 3%・SR 12%・R 30%・N 25%</p>
       <div class="row"><button class="btn p grow" data-n="1">1 回 (🔥${g.price})</button><button class="btn b grow" data-n="10">10 回 (🔥${g.price * 10})</button></div></div>
     <div class="card"><h2>🔥 前日の活躍選手</h2>${g.hot.length ? g.hot.map((p) => plRow(p)).join('') : '<p class="small muted">まだいません (前の日の試合の活躍で決まります)</p>'}</div>
+    ${me.admin ? `<div class="card"><h2>🛠️ 前日の活躍選手 (実名) を登録 <small class="muted">管理者だけ</small></h2>
+      <p class="small muted" style="margin-top:0">登録した選手は今日のガチャの「前日の活躍選手」に入ります (30% の枠)。成績のメモは画面に出ます</p>
+      <div class="row" style="flex-wrap:wrap;gap:6px"><input class="in" id="hn" placeholder="選手名" maxlength="24" style="flex:2;min-width:140px"><input class="in" id="ht" placeholder="球団" maxlength="20" style="flex:1;min-width:90px"><input class="in" id="hno" placeholder="背番号" inputmode="numeric" style="width:70px"></div>
+      <div style="height:6px"></div><input class="in" id="hnote" placeholder="前日の活躍 (例: 3安打 2本塁打 5打点)" maxlength="60">
+      <div style="height:6px"></div><div class="row" style="flex-wrap:wrap;gap:6px"><select class="in" id="hk" style="width:auto"><option value="B">野手</option><option value="P">投手</option></select><select class="in" id="hr" style="width:auto"><option>SR</option><option>SSR</option><option>R</option><option>N</option></select><select class="in" id="hpos" style="width:auto">${['捕', '一', '二', '三', '遊', '左', '中', '右', '指', '先', '抑'].map((x) => `<option>${x}</option>`).join('')}</select><select class="in" id="hbat" style="width:auto"><option value="R">右</option><option value="L">左</option></select></div>
+      <div style="height:6px"></div><div class="row" style="flex-wrap:wrap;gap:6px" id="hstats"></div>
+      <div id="hpit" class="small" style="margin-top:6px"></div>
+      <div style="height:8px"></div><button class="btn p block" id="hadd">登録する</button></div>` : ''}
     <div id="res"></div>` + tabs('gacha');
   bindCommon();
   $$('[data-n]').forEach((b) => b.onclick = async () => {
@@ -163,6 +171,16 @@ async function viewGacha() {
     } catch (e) { toast(e.message, true); }
   });
   $$('.card [data-pid]').forEach((el) => el.onclick = () => playerModal(g.hot.find((p) => p.id === el.dataset.pid)));
+  if (me.admin) {
+    const stats = () => { const P = $('#hk').value === 'P'; $('#hstats').innerHTML = (P ? [['velo', '球速', 148], ['brk', '変化力', 65], ['stuff', '球威', 65], ['stamina', 'スタミナ', 65]] : [['meet', 'ミート', 70], ['power', 'パワー', 70], ['speed', '走力', 55], ['tech', '守備', 60]]).map(([k, n, v]) => `<label class="small" style="flex:1;min-width:70px">${n}<input class="in hs" data-k="${k}" type="number" value="${v}"></label>`).join('');
+      $('#hpit').innerHTML = P ? `球種: ${Object.entries(me.pitches).map(([k, n]) => `<label style="white-space:nowrap;margin-right:6px"><input type="checkbox" class="hp" value="${k}" ${['straight', 'slider', 'fork'].includes(k) ? 'checked' : ''}>${esc(n)}</label>`).join('')}` : ''; };
+    $('#hk').onchange = stats; stats();
+    $('#hadd').onclick = async () => {
+      const body = { name: $('#hn').value, team: $('#ht').value, number: $('#hno').value, note: $('#hnote').value, kind: $('#hk').value, rarity: $('#hr').value, pos: $('#hpos').value, bat: $('#hbat').value, pitches: $$('.hp:checked').map((x) => x.value) };
+      for (const i of $$('.hs')) body[i.dataset.k] = i.value;
+      try { await api('/admin/hot', { method: 'POST', body }); toast('登録しました'); viewGacha(); } catch (e) { toast(e.message, true); }
+    };
+  }
 }
 
 // ---------- 対戦 (リアルタイム) ----------

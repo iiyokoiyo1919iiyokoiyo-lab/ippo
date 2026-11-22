@@ -129,14 +129,20 @@ module.exports = function install(app, ctx) {
   db.migrate('2026-11-22-baseball', MIGRATION);
   const sr = () => crypto.randomInt(0, 2 ** 31) / 2 ** 31; // サーバーの乱数
   const limit = rateLimit({ windowMs: 60_000, max: 60, key: (req) => 'bb' + req.user.id });
+  // しばらくはテスターだけ (環境変数 BB_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413。* で全員)。ほかの人には API も対戦も開かない
+  const TESTERS = new Set(String(process.env.BB_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+  const isTester = (u) => !!u && (TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase()));
+  const isAdmin = (u) => !!(ctx.isAdmin && ctx.isAdmin(u));
+  app.get('/api/bb-access', (req, res) => res.json({ ok: isTester(req.user) }));
+  app.use('/api/bb', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'IppO ベースボールはまだ準備中です' })));
 
-  const rowToPlayer = (r) => r && { id: r.id, ownerId: r.owner_id, name: r.name, kind: r.kind, pos: r.pos, number: r.number, stats: JSON.parse(r.stats), pitches: JSON.parse(r.pitches), specials: JSON.parse(r.specials), rarity: r.rarity, origin: r.origin, hidden: JSON.parse(r.hidden), games: r.games, look: JSON.parse(r.look) };
+  const rowToPlayer = (r) => r && { id: r.id, ownerId: r.owner_id, name: r.name, kind: r.kind, pos: r.pos, number: r.number, stats: JSON.parse(r.stats), pitches: JSON.parse(r.pitches), specials: JSON.parse(r.specials), rarity: r.rarity, origin: r.origin, hidden: JSON.parse(r.hidden), games: r.games, look: JSON.parse(r.look), ...(JSON.parse(r.hidden).real ? { real: JSON.parse(r.hidden).real } : {}) };
   const qIns = db.prepare('INSERT INTO bb_players (id, owner_id, name, kind, pos, number, stats, pitches, specials, rarity, origin, hidden, games, look, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)');
   const savePlayer = (p, owner) => qIns.run(p.id, owner, p.name, p.kind, p.pos, p.number, JSON.stringify(p.stats), JSON.stringify(p.pitches || []), JSON.stringify(p.specials || []), p.rarity, p.origin, JSON.stringify(p.hidden || {}), JSON.stringify(p.look || {}), Date.now());
   const playersOf = (uid) => db.prepare('SELECT * FROM bb_players WHERE owner_id = ? ORDER BY created_at').all(uid).map(rowToPlayer);
   const teamRow = (uid) => db.prepare('SELECT * FROM bb_teams WHERE user_id = ?').get(uid);
   // 公開する選手の形 (隠している「大化け」は見せない)
-  const pubPlayer = (p) => ({ id: p.id, name: p.name, kind: p.kind, pos: p.pos, number: p.number, stats: p.stats, pitches: (p.pitches || []).map((x) => ({ id: x, name: C.PITCHES[x]?.name })), specials: (p.specials || []).map((k) => ({ id: k, ...SPECIALS[k] })), rarity: p.rarity, origin: p.origin, games: p.games, look: p.look, awakened: !!p.hidden?.awakened });
+  const pubPlayer = (p) => ({ ...(p.real ? { real: { team: p.real.team || '', note: p.real.note || '' } } : {}), id: p.id, name: p.name, kind: p.kind, pos: p.pos, number: p.number, stats: p.stats, pitches: (p.pitches || []).map((x) => ({ id: x, name: C.PITCHES[x]?.name })), specials: (p.specials || []).map((k) => ({ id: k, ...SPECIALS[k] })), rarity: p.rarity, origin: p.origin, games: p.games, look: p.look, awakened: !!p.hidden?.awakened });
 
   // ---------- チーム ----------
   function autoLineup(uid) {
@@ -421,7 +427,7 @@ module.exports = function install(app, ctx) {
       players: ps.map((p) => ({ ...pubPlayer(p), season: st.get(p.id) || null })), games, season: { id: s, end: seasonEnd(s) }, nextGame: next,
       rules: { promote: PROMOTE_WINS, win: WIN_SOULS, lose: LOSE_SOULS, ticket: TICKET, gacha: GACHA, roster: ROSTER_MAX }, specials: SPECIALS, pitches: Object.fromEntries(C.PITCH_IDS.map((k) => [k, C.PITCHES[k].name])) };
   }
-  app.get('/api/bb/me', requireAuth, (req, res) => res.json(meView(req.user.id)));
+  app.get('/api/bb/me', requireAuth, (req, res) => res.json({ ...meView(req.user.id), admin: isAdmin(req.user) }));
   app.post('/api/bb/start', requireAuth, limit, (req, res) => {
     const uid = req.user.id; if (teamRow(uid)) return res.status(400).json({ error: 'もう始めています' });
     const name = String(req.body?.name || '').trim().slice(0, 14) || `${req.user.username} ナイン`;
@@ -510,14 +516,44 @@ module.exports = function install(app, ctx) {
   });
   // ガチャ (前日の活躍選手が入る)
   app.get('/api/bb/gacha', requireAuth, (req, res) => {
-    const y = dayKey(Date.now() - D), hot = db.prepare('SELECT player, score FROM bb_hot WHERE day = ? ORDER BY score DESC LIMIT 8').all(y).map((x) => ({ ...pubPlayer(JSON.parse(x.player)), score: x.score }));
+    const y = dayKey(Date.now() - D), hot = db.prepare('SELECT player, score FROM bb_hot WHERE day = ? ORDER BY score DESC LIMIT 12').all(y).map((x) => ({ ...pubPlayer(JSON.parse(x.player)), score: x.score }));
     res.json({ price: GACHA, hot, rates: { hot: 30, SSR: 3, SR: 12, R: 30, N: 25 } });
+  });
+  // 前日の活躍選手 (実名) を管理者が登録する: ガチャの「活躍選手」に入る (表 bb_hot。day は前日)
+  const num = (v, a, b, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(a, Math.min(b, n)) : d; };
+  app.post('/api/bb/admin/hot', requireAuth, limit, (req, res) => {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけができます' });
+    const b = req.body || {}, kind = b.kind === 'P' ? 'P' : 'B', name = String(b.name || '').trim().slice(0, 24);
+    if (!name) return res.status(400).json({ error: '選手の名前を入れてください' });
+    const team = String(b.team || '').trim().slice(0, 20), note = String(b.note || '').trim().slice(0, 60);
+    const rarity = ['N', 'R', 'SR', 'SSR'].includes(b.rarity) ? b.rarity : 'SR';
+    const p = { id: crypto.randomBytes(6).toString('hex'), name, kind, rarity, origin: 'real', number: num(b.number, 0, 99, 0), specials: [], hidden: {}, real: { team, note },
+      look: { skin: num(b.skin, 0, 3, 0), hair: 0, h: 1, build: 1, beard: false, bat: b.bat === 'L' ? 'L' : 'R' } };
+    if (kind === 'P') {
+      p.pos = ['先', '中', '抑'].includes(b.pos) ? b.pos : '先';
+      p.stats = { velo: num(b.velo, 120, 170, 145), brk: num(b.brk, 1, 99, 60), stuff: num(b.stuff, 1, 99, 60), stamina: num(b.stamina, 1, 99, 60) };
+      const ps = (Array.isArray(b.pitches) ? b.pitches : []).map(String).filter((x) => C.PITCHES[x]); p.pitches = ps.length ? [...new Set(ps)].slice(0, 9) : ['straight', 'slider', 'fork'];
+    } else {
+      p.pos = POS.includes(b.pos) ? b.pos : '中';
+      p.stats = { meet: num(b.meet, 1, 99, 60), power: num(b.power, 1, 99, 60), speed: num(b.speed, 1, 99, 50), tech: num(b.tech, 1, 99, 50) }; p.pitches = [];
+    }
+    const sp = (Array.isArray(b.specials) ? b.specials : []).map(String).filter((k) => SPECIALS[k] && !SPECIALS[k].award && (SPECIALS[k].kind === kind || SPECIALS[k].kind === '*')); p.specials = [...new Set(sp)].slice(0, 3);
+    db.prepare('INSERT INTO bb_hot (day, player, score) VALUES (?, ?, ?)').run(dayKey(Date.now() - D), JSON.stringify(p), 100 + num(b.order, 0, 99, 0));
+    console.log(`[bb] @${req.user.username} が実名の活躍選手を登録: ${name}`);
+    res.json({ ok: true });
+  });
+  app.post('/api/bb/admin/hot/delete', requireAuth, limit, (req, res) => {
+    if (!isAdmin(req.user)) return res.status(403).json({ error: '管理者だけができます' });
+    const id = String(req.body?.id || ''), y = dayKey(Date.now() - D);
+    const rows = db.prepare('SELECT rowid, player FROM bb_hot WHERE day = ?').all(y), hit = rows.find((r) => JSON.parse(r.player).id === id);
+    if (hit) db.prepare('DELETE FROM bb_hot WHERE rowid = ?').run(hit.rowid);
+    res.json({ ok: !!hit });
   });
   app.post('/api/bb/gacha', requireAuth, limit, (req, res) => {
     const uid = req.user.id, n = Number(req.body?.n) === 10 ? 10 : 1, cost = GACHA * n;
     if (!teamRow(uid)) return res.status(400).json({ error: 'まだ始めていません' });
     if (playersOf(uid).length + n > ROSTER_MAX) return res.status(400).json({ error: `選手は ${ROSTER_MAX} 人までです (選手を手放してください)` });
-    const y = dayKey(Date.now() - D), hot = db.prepare('SELECT player FROM bb_hot WHERE day = ? ORDER BY score DESC LIMIT 8').all(y).map((x) => JSON.parse(x.player));
+    const y = dayKey(Date.now() - D), hot = db.prepare('SELECT player FROM bb_hot WHERE day = ? ORDER BY score DESC LIMIT 12').all(y).map((x) => JSON.parse(x.player));
     const out = [];
     db.exec('BEGIN');
     try {
@@ -525,7 +561,7 @@ module.exports = function install(app, ctx) {
       if (!u.changes) { db.exec('ROLLBACK'); return res.status(400).json({ error: `たましいが足りません (${cost})` }); }
       for (let i = 0; i < n; i++) {
         const x = hot.length ? sr() : 0.3 + sr() * 0.7; let p; // 活躍選手がいない日は、その 30% をふつうの排出に
-        if (hot.length && x < 0.3) { const h = hot[Math.floor(sr() * hot.length)]; p = { ...h, id: crypto.randomBytes(6).toString('hex'), origin: 'hot', hidden: {} }; }
+        if (hot.length && x < 0.3) { const h = hot[Math.floor(sr() * hot.length)]; p = { ...h, id: crypto.randomBytes(6).toString('hex'), origin: h.origin === 'real' ? 'real' : 'hot', hidden: h.real ? { real: h.real } : {} }; }
         else p = makePlayer(sr, { rarity: x < 0.33 ? 'SSR' : x < 0.45 ? 'SR' : x < 0.75 ? 'R' : 'N', origin: 'gacha' });
         savePlayer(p, uid); out.push(pubPlayer(p));
       }
@@ -637,6 +673,7 @@ module.exports = function install(app, ctx) {
     m.ws.forEach((w, i) => { send(w, { t: 'end', winner, you: i, score: m.score, line: m.line, delta: deltas[i], rated: m.rated, forfeit }); if (w) matchOf.delete(w); });
   }
   wss.on('connection', (ws, req, user) => {
+    if (!isTester(user)) { send(ws, { t: 'error', error: 'IppO ベースボールはまだ準備中です' }); return ws.close(); }
     if (!teamRow(user.id)) { send(ws, { t: 'error', error: 'マイチームを作ってから遊べます' }); return ws.close(); }
     ws.user = user;
     ws.on('message', (raw) => {

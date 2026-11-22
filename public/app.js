@@ -3115,7 +3115,9 @@ window.addEventListener('message', (e) => {
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-arena' && e.data.type === 'exit') location.hash = '#/games';
 });
 // IppO ベースボール (/games/baseball/ を iframe で開く。画面いっぱい。もどるはゲームの中の ✕)
-function viewBaseball() {
+async function viewBaseball() {
+  let ok = false; try { ok = (await api('/bb-access', { noAuthPrompt: true })).ok; } catch {}
+  if (!ok) { main.innerHTML = pageHead({ title: 'IppO ベースボール', sub: 'ミニゲーム', back: '#/games' }) + `<div class="content">${emptyState({ icon: 'sparkle', title: 'ただいま準備中です', text: 'もうしばらくお待ちください' })}</div>`; return; } // しばらくはテスターだけ
   main.innerHTML = pageHead({ title: 'IppO ベースボール', sub: 'ミニゲーム · マイチーム・ドラフト・リアルタイム対戦', back: '#/games' }) + `<div class="horse-wrap"></div>`;
   $('#baseball-frame')?.remove();
   const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'baseball-frame'; frame.src = '/games/baseball/'; frame.title = 'IppO ベースボール'; frame.allow = 'fullscreen';
@@ -3192,7 +3194,7 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
-    <a class="card game-card game-card-new" href="#/baseball">
+    <a class="card game-card game-card-new" href="#/baseball" id="bb-game" style="display:none">
       <span class="game-card-art mb-art" aria-hidden="true">⚾</span>
       <span class="game-card-body"><b>IppO ベースボール <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>自分だけのチームを作って、毎時の自動試合でリーグ昇格をめざす。毎朝のドラフト会議・ガチャで選手を集めて、3D のリアルタイム対戦も</span>
         <span class="chip chip-accent">⚾ 3D・レート戦</span></span>${icon('chevron', 'chev')}</a>
@@ -3220,6 +3222,7 @@ function viewGames() {
   loadEventBanners();
   // ブリードモンスターズはテスト中 (テスターにだけ一覧に出す)
   if (me) api('/mon/access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#mon-game')) $('#mon-game').style.display = ''; }).catch(() => {});
+  if (me) api('/bb-access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#bb-game')) $('#bb-game').style.display = ''; }).catch(() => {}); // IppO ベースボール: しばらくはテスターだけ
 }
 
 // =====================================================================
