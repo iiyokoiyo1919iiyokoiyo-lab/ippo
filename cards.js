@@ -706,7 +706,7 @@ const QUESTS = [
     titles: { 1: 'Y降臨最速クリア🎤', 2: 'Y降臨準最速クリア🎤' },
     start: Date.parse('2026-11-22T08:00:00+09:00'), end: Date.parse('2026-11-25T08:00:00+09:00') },
   // すえつぐがいないと絶対にクリアできないクエスト: ボスは「絶対権力」(わざを封じられるまでダメージを受けない)・時間切れは負け (timeupLose)
-  { id: 'ando-2026', name: '社長室の決戦', boss: 'プレジデントあんどう', emoji: '👔', reward: 'ando', bg: 'shachou', hard: true, boost: 0.882, // tune_oni quest:ando-2026 (すえつぐ入りの Lv18 SSR・MR デッキで勝率 25%。すえつぐなしは 0.6 倍でも 0%)
+  { id: 'ando-2026', name: '社長室の決戦', boss: 'プレジデントあんどう', emoji: '👔', reward: 'ando', bg: 'shachou', hard: true, boost: 0.979, // tune_oni quest:ando-2026 (DNA を先に封じるよう直したあと 2026-11-23 に測り直し。すえつぐ入りの Lv18 SSR・MR デッキで勝率 28%。すえつぐなしは 0.6 倍でも 0%)
     must: 'suetsugu', timeupLose: true, bossPassive: { ando: 'tyrant' },
     award: '社長の椅子が空いた…伝説の始まりだ👔👔👔',
     hint: '🩷 すえつぐの DNA で権力崩壊！ いなければ「つらぬく」だけが通る',
