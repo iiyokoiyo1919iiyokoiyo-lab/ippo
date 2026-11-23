@@ -401,10 +401,11 @@ function resolveTurn(state, acts, rnd) {
         hit(p, DEATHSONG_POWER);
         if (foe.hp > 0 && me.hp > 0) { loved.set(foe, me); ev.push({ k: 'deathsong', p, card: me.name, target: foe.name }); }
       }
-      else if (me.skill === 'dna') { // DNAを取り出す: 1.8 倍のこうげき → 相手の場のカードのわざを、そのバトル中ずっと封じる
+      else if (me.skill === 'dna') { // DNAを取り出す: 相手の場のカードのわざを、そのバトル中ずっと封じる → 1.8 倍のこうげき
+        // 先に封じる (絶対権力もここで崩れるので、DNA のこうげきからダメージが通る)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
-        hit(p, DNA_POWER);
         if (foe.hp > 0) { const again = foe.sealed > 0; foe.sealed = 1; ev.push({ k: 'sealed', p: o, card: foe.name, by: me.name, again }); if (foe.tyrant && !again) ev.push({ k: 'tyrantdown', p: o, card: foe.name }); }
+        hit(p, DNA_POWER);
       }
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして怯ませる (ダメージはなし)。相手より先なら、そのターンの相手の行動を止める・後なら次のターン
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
