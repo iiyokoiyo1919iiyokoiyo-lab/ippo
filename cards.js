@@ -8,6 +8,7 @@
 // ・乱数はすべてサーバー側 (crypto)。ガチャの結果は記録に残す
 // =====================================================================
 const crypto = require('crypto');
+const STORY = require('./card-stories.js'); // 限定キャラ・MR のサイドストーリー
 const { WebSocketServer } = require('ws');
 
 // ---------- カード ----------
@@ -158,6 +159,7 @@ const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 �
 // レベル: Lv15 までは、同じカードを引くか、レベルアップ書 (今のレベルと同じ枚数) で上がる。
 // Lv16〜20 はレベルアップ書だけで上がり、1 つにつき 50 枚 (同じカードを引いても Lv15 より上には上がらない)
 const MAX_LEVEL = 20, DUP_MAX_LEVEL = 15, HIGH_LEVEL_COST = 50;
+const HARD_QUEST_COST = 60; // 高難易度 (ゲキムズ) クエストは 1 回 60 コイン (挑戦するときに払う・負けても返さない)
 const levelCost = (lv) => (lv < DUP_MAX_LEVEL ? lv : HIGH_LEVEL_COST); // Lv lv → lv+1 に使うレベルアップ書の枚数
 
 // ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
@@ -779,7 +781,7 @@ function install(app, ctx) {
     db.migrate('2026-11-29-card-monsters-z-mr', "UPDATE card_monsters SET rarity = 'MR' WHERE rarity = 'UR';"); // 評価 Z は UR → MR に (倍率はどちらも 1.2)
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
-  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
+  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, cost: q.hard ? HARD_QUEST_COST : 0, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
     enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     reward: { ...statsOf(q.reward, 1), skillName: SKILLS[CARDS[q.reward].skill].name, skillDesc: SKILLS[CARDS[q.reward].skill].desc },
     cleared: uid ? clearedOf(uid).has(q.id) : false });
@@ -855,6 +857,17 @@ function install(app, ctx) {
     urPromote: UR_PROMOTE, lrPromote: { copies: LR_PROMOTE.copies, bonus: Math.round((LR_PROMOTE.mult - 1) * 100) }, fesLr: { copies: FES_LR.copies, ids: FES_LIMITED.filter((id) => isReleased(id)) }, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, hardQuestScrolls: HARD_QUEST_SCROLLS, coinsPerScroll: COINS_PER_SCROLL, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
   app.get('/api/cards/me', requireAuth, (req, res) => res.json(me(req.user.id)));
+  // サイドストーリー (限定キャラ・MR)。読めない話は題名と条件だけ送り、本文は送らない
+  app.get('/api/cards/stories', requireAuth, (req, res) => {
+    const uid = req.user.id, o = owned(uid), promoted = new Set([...urOf(uid), ...lrOf(uid)]);
+    const list = Object.entries(STORY.STORIES).filter(([id]) => CARDS[id] && isReleased(id)).map(([id, st]) => {
+      const lv = o[id] || 0, has = lv > 0;
+      return { id, name: CARDS[id].name, emoji: CARDS[id].emoji, rarity: CARDS[id].rarity, fes: isFes(id), tagline: st.tagline, owned: has, level: lv,
+        chapters: st.chapters.map((c, i) => { const u = STORY.UNLOCK[i] || STORY.UNLOCK[STORY.UNLOCK.length - 1], open = !!(has && (lv >= u.level || (u.promoted && promoted.has(id))));
+          return { n: i + 1, title: c.title, open, need: u.label, ...(open ? { text: c.text } : {}) }; }) };
+    });
+    res.json({ stories: list });
+  });
   // 鬼難のデッキ (CPU が使う 5 種類)
   app.get('/api/cards/oni', (req, res) => res.json({ reward: REWARD.oni, decks: ONI_DECKS.map((d) => ({ id: d.id, name: d.name, emoji: d.emoji, text: d.text, boost: d.boost,
     cards: oniDeckStats(d).map((s, i) => ({ ...s, lv: d.cards[i][1], skillName: SKILLS[CARDS[s.id].skill].name, skillDesc: SKILLS[CARDS[s.id].skill].desc })) })) }));
@@ -1266,6 +1279,9 @@ function install(app, ctx) {
         if (m.mode === 'quest') {
           const q = questsNow().find((x) => x.id === String(m.quest || ''));
           if (!q) return send(uid, { t: 'error', msg: 'そのクエストは今は開催していません' });
+          if (q.hard) { // 高難易度クエストは 1 回 60 コイン
+            if (!db.prepare('UPDATE card_players SET coins = coins - ? WHERE user_id = ? AND coins >= ?').run(HARD_QUEST_COST, uid, HARD_QUEST_COST).changes) return send(uid, { t: 'error', msg: `コインが足りません (高難易度クエストは 1 回 ${HARD_QUEST_COST} コイン)` });
+          }
           return startBattle('quest', [uid, null], q);
         }
         if (m.mode === 'random') {

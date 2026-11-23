@@ -2848,6 +2848,7 @@ function route() {
   if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
   if (h === '/games/cards/oni') { setActiveNav('games'); return viewOni(); }
   if (h === '/games/cards/usage') { setActiveNav('games'); return viewCardUsage(); }
+  if (h === '/games/cards/stories') { setActiveNav('games'); return viewCardStories(); }
   if (h === '/games/cards/board') { setActiveNav('games'); return viewCardBoard(); }
   if (h.startsWith('/games/cards/battle')) { setActiveNav('games'); return viewBattle(new URLSearchParams(h.split('?')[1] || '')); }
   if (h === '/pixel/archive') { setActiveNav('pixel'); return viewPixelArchive(); }
@@ -3501,6 +3502,7 @@ async function viewCards() {
       <div class="panel-head"><h3>${icon('users', 'ic-sm')}デッキ</h3><span><a class="btn btn-ghost btn-sm" href="#/games/cards/usage">📊 採用率</a><a class="btn btn-ghost btn-sm" href="#/games/cards/collection">デッキを変える</a></span></div>
       <div class="cb-deck">${mine.deck.map((id) => C[id] ? cbCard(C[id], { level: C[id].horse || C[id].monster ? C[id].level : Math.min(mine.owned[id] || 1, cat.maxLevel) }) : '').join('')}</div>
     </section>
+    <a class="card cb-story-bn" href="#/games/cards/stories"><span class="cb-story-bn-ic" aria-hidden="true">📖</span><span><b>サイドストーリー</b><small>限定キャラ・MR の物語。カードを育てると続きが読める</small></span><span aria-hidden="true">›</span></a>
     <section class="card card-pad">
       <div class="panel-head"><h3>${icon('sparkle', 'ic-sm')}対戦</h3><span class="text-xs muted">レート ${mine.rating} · ${mine.wins}勝${mine.losses}敗${mine.draws ? mine.draws + '分' : ''}</span></div>
       <div class="cb-modes">
@@ -3960,10 +3962,34 @@ async function viewQuest() {
       ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。ガチで難しいので、デッキと作戦をしっかり考えて挑もう！</p>` : ''}
       <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
-      ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}</a>
+      ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}${q.cost ? ` <small>(🪙${q.cost})</small>` : ''}</a>${q.cost ? `<p class="text-xs muted" style="margin:6px 0 0;text-align:center">高難易度クエストは 1 回 🪙${q.cost} コイン (挑戦するときに払います)</p>` : ''}
          <a class="btn btn-ghost btn-block" href="#/games/cards/collection" style="margin-top:8px">デッキを変える</a>`
       : '<button class="btn btn-primary btn-block" type="button" id="cbq-login">ログインして挑戦する</button>'}</section>`).join('');
   $('#cbq-login')?.addEventListener('click', () => openAuth());
+}
+
+// ---------- サイドストーリー (限定キャラ・MR) ----------
+//   第 1 話はカードを持っていると、第 2 話は Lv10、第 3 話は Lv20 か昇格 (UR / LR) で読める。読めない話の本文はサーバーが送らない
+async function viewCardStories() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: '📖 サイドストーリー', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbs">${loadingBlock()}</div>`;
+  let d; try { d = await api('/cards/stories'); } catch (e) { $('#cbs').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const root = $('#cbs'); if (!root) return;
+  root.innerHTML = `<p class="text-sm muted" style="margin:0">限定キャラと MR だけの物語。第 1 話はカードを持っていると、第 2 話は Lv10、最終話は Lv20 か昇格 (UR / LR) で読めます</p>
+    ${d.stories.map((st) => `<section class="card cb-story${st.owned ? '' : ' locked'}">
+      <div class="cb-story-hd"><span class="cb-story-art">${CBArt.svg(st.id, st.rarity, { label: st.name })}</span><div><span class="cb-story-tag">${st.fes ? '🎊 祭の限定キャラ' : st.rarity === 'MR' ? '💎 MR' : '限定'}</span><h3>${esc(st.emoji)} ${esc(st.name)}</h3><p>「${esc(st.tagline)}」</p>
+        <small>${st.owned ? `Lv${st.level} · ${st.chapters.filter((c) => c.open).length}/${st.chapters.length} 話 読める` : '🔒 まだ持っていません'}</small></div></div>
+      <div class="cb-story-chs">${st.chapters.map((c) => `<button type="button" class="cb-story-ch${c.open ? '' : ' locked'}" data-sid="${esc(st.id)}" data-n="${c.n}" ${c.open ? '' : 'disabled'}><b>${esc(c.title)}</b><small>${c.open ? '読む ›' : `🔒 ${esc(c.need)}`}</small></button>`).join('')}</div></section>`).join('')}`;
+  const openCh = (st, n) => {
+    const c = st.chapters[n - 1]; if (!c?.open) return;
+    const ov = document.createElement('div'); ov.className = 'cb-reader';
+    ov.innerHTML = `<article><header><span>${esc(st.emoji)} ${esc(st.name)}</span><button type="button" class="btn btn-ghost btn-sm" data-close>とじる</button></header>
+      <h2>${esc(c.title)}</h2><div class="cb-reader-body">${esc(c.text).split('\n').map((l) => `<p>${l}</p>`).join('')}</div>
+      <footer>${n > 1 && st.chapters[n - 2].open ? `<button class="btn btn-ghost" data-go="${n - 1}">‹ 前の話</button>` : '<span></span>'}${st.chapters[n]?.open ? `<button class="btn btn-primary" data-go="${n + 1}">次の話 ›</button>` : st.chapters[n] ? `<small class="muted">次の話: 🔒 ${esc(st.chapters[n].need)}</small>` : '<small class="muted">― おわり ―</small>'}</footer></article>`;
+    document.body.append(ov);
+    ov.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (e.target === ov || e.target.closest('[data-close]') || g) ov.remove(); if (g) openCh(st, Number(g.dataset.go)); });
+  };
+  $$('[data-sid]', root).forEach((b) => b.addEventListener('click', () => openCh(d.stories.find((x) => x.id === b.dataset.sid), Number(b.dataset.n))));
 }
 
 // ---------- 対戦 ----------
