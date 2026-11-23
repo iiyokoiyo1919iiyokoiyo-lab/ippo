@@ -134,9 +134,10 @@ module.exports = function install(app, ctx) {
   const sr = () => crypto.randomInt(0, 2 ** 31) / 2 ** 31; // サーバーの乱数
   let career = null; // baseball-career.js (下で用意する)
   const limit = rateLimit({ windowMs: 60_000, max: 60, key: (req) => 'bb' + req.user.id });
-  // しばらくはテスターだけ (環境変数 BB_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413。* で全員)。ほかの人には API も対戦も開かない
+  // 2026-11-23 17:30 (日本時間) に一般解放 (環境変数 BB_OPEN_AT で上書き)。それまではテスターだけ (環境変数 BB_TESTERS = カンマ区切りのユーザー名。未設定なら RCN413。* で全員)
+  const OPEN_AT = Date.parse(process.env.BB_OPEN_AT || '2026-11-23T17:30:00+09:00');
   const TESTERS = new Set(String(process.env.BB_TESTERS ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
-  const isTester = (u) => !!u && (TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase()));
+  const isTester = (u) => !!u && (Date.now() >= OPEN_AT || TESTERS.has('*') || TESTERS.has(String(u.username).toLowerCase())); // 解放後はログインしている人みんな
   const isAdmin = (u) => !!(ctx.isAdmin && ctx.isAdmin(u));
   app.get('/api/bb-access', (req, res) => res.json({ ok: isTester(req.user) }));
   app.use('/api/bb', (req, res, next) => (isTester(req.user) ? next() : res.status(req.user ? 403 : 401).json({ error: 'IppO ベースボールはまだ準備中です' })));
