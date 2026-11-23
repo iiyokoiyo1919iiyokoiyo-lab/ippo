@@ -345,7 +345,7 @@ function resolveTurn(state, acts, rnd) {
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
-      const live = sides[p].cards.map((c, i) => [c, i]).filter(([c]) => c.hp > 0 && !immune(c));
+      const live = sides[p].cards.map((c, i) => [c, i]).filter(([c]) => c.hp > 0); /* 絶対権力 (あんどう) も道連れにできる */
       if (live.length) { const [v, vi] = live[Math.floor(rnd() * live.length)]; v.hp = 0; v.poison = 0;
         ev.push({ k: 'curse', p, by: foe.name, card: v.name, bench: vi !== sides[p].active }); ev.push({ k: 'ko', p, card: v.name, bench: vi !== sides[p].active }); }
     }
