@@ -124,6 +124,7 @@
   - トレード: `POST /api/bb/trades` (相手の選手と自分の選手を 1〜3 人ずつ)・`/trades/:id/accept|reject|cancel`。出した選手は `bb_trade_locks` (主キー) で 1 つのトレードにだけ。承認はトランザクションで、持ち主・人数 (40 人まで・野手 9 投手 5) を確かめ、状態を `pending` から変えられたときだけ移籍。24 時間で期限切れ。市場価値は参考 (`value`)
   - スカウト: ドラフト候補の能力は見せず、スカウトで幅つきの推定 (`scout.width`。レベル 1〜5 で精度が上がる・1 日 3 回無料)。隠し逸材 (`hidden.gem`。目玉とは別枠・毎回は出ない・成長がとても大きい) と大化けはスカウトで見つかることがある
   - テスト用 (`BB_TEST=1` の管理者だけ): `POST /api/bb/test/round`・`/test/close-season`・`/test/draft`・`/test/player`。本番では設定しない
+- オーダー (`#order`・bb.js の `viewOrder`): 球場の上に選手カード (守備位置ごと・打順の番号つき)・下にベンチと DH。タブは 投手 (先発 5・中継ぎ 2・抑え 1)・野手・控え。カードを 2 枚つづけてタップで入れかえ、「保存」で `POST /api/bb/lineup`。守備位置は選手のポジションから自動でわりあてる (`assignSlots`。あぶれた人は空いた所・最後は DH)。チーム総合力 = 出場 17 人の総合評価の合計 × 10・TEAM RANK は平均から
 - 画面 (bb.js・index.html): ダークネイビー × 白の情報面 × ゴールド。下のナビ (ホーム・マイチーム・ドラフト・対戦・その他)。選手プロフィール `#player/<id>`・ニュース `#news`・記事 `#article/<id>`・トレード `#trade`・図鑑 `#zukan`・アプリとして使う `#install`。球団エンブレムはチーム名から作る SVG
 - アプリとして開く (PWA): `public/games/baseball/manifest.webmanifest` (範囲 `/games/baseball/`)・サービスワーカー `sw.js` (画面はネットワーク優先・つながらなければ `offline.html`。API・ログインはキャッシュしない)・アイコンとスプラッシュは `node tools/make_bb_icons.js`。IppO の iframe の外で開いたときはゲームの中でログインできる。オフラインのときは操作を止めて帯を出す
 

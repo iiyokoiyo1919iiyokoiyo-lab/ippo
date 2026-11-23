@@ -176,18 +176,7 @@ function viewTeam(sub = 'players') {
   const sorter = (a, b) => (sortK === 'age' ? a.age - b.age : sortK === 'rar' ? RN[b.rarity] - RN[a.rarity] || b.ovr - a.ovr : b.ovr - a.ovr);
   const opt = (list, sel, none = false) => `${none ? '<option value="">(なし)</option>' : ''}${list.map((p) => `<option value="${esc(p.id)}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)} (${p.grade}${p.ovr} ${p.kind === 'P' ? `${p.stats.velo}km` : `ミ${p.stats.meet} パ${p.stats.power}`})</option>`).join('')}`;
   const seg = `<div class="seg"><a href="#team" class="${sub === 'players' ? 'on' : ''}">選手 (${ps.length}/${me.rules.roster})</a><a href="#order" class="${sub === 'order' ? 'on' : ''}">オーダー</a></div>`;
-  if (sub === 'order') {
-    render(head('マイチーム', esc(t.name)) + seg + `<div class="card"><div class="ch"><h3>打順</h3><button class="btn sm" id="auto">おまかせ</button></div>${t.lineup.map((id, i) => `<div class="row ord"><b>${i + 1}</b><select class="in lu">${opt(bats, id)}</select></div>`).join('')}</div>
-      <div class="card"><h3>先発ローテーション</h3>${Array.from({ length: 5 }, (_, i) => `<div class="row ord"><b>${i + 1}</b><select class="in rot">${opt(pits, t.rotation[i], i > 0)}</select></div>`).join('')}
-      <h3 style="margin-top:14px">中継ぎ・抑え</h3>${[0, 1].map((i) => `<div class="row ord"><b>中</b><select class="in su">${opt(pits, t.bullpen.setup?.[i], true)}</select></div>`).join('')}<div class="row ord"><b>抑</b><select class="in" id="cl">${opt(pits, t.bullpen.closer, true)}</select></div></div>
-      <div class="sticky"><button class="btn p block" id="save">オーダーを保存</button></div>
-      <div class="card"><h3>球団名</h3><div class="row"><input class="in grow" id="tn" maxlength="14" value="${esc(t.name)}"><button class="btn sm" id="ren">変える</button></div></div>`, 'team');
-    $('#auto').onclick = async () => { try { me = await api('/auto-lineup', { method: 'POST' }); toast('おまかせで組みました'); viewTeam('order'); } catch (e) { toast(e.message, true); } };
-    $('#save').onclick = async () => { const lineup = $$('.lu').map((s) => s.value), rotation = $$('.rot').map((s) => s.value).filter(Boolean), setup = $$('.su').map((s) => s.value).filter(Boolean), closer = $('#cl').value || null;
-      try { me = await api('/lineup', { method: 'POST', body: { lineup, rotation, setup, closer } }); toast('保存しました'); } catch (e) { toast(e.message, true); } };
-    $('#ren').onclick = async () => { try { me = await api('/rename', { method: 'POST', body: { name: $('#tn').value } }); toast('球団名を変えました'); viewTeam('order'); } catch (e) { toast(e.message, true); } };
-    return;
-  }
+  if (sub === 'order') return viewOrder(seg);
   const list = (filt === 'B' ? bats : filt === 'P' ? pits : ps).slice().sort(sorter), inLineup = new Set([...t.lineup, ...t.rotation, ...(t.bullpen.setup || []), t.bullpen.closer].filter(Boolean));
   render(head('マイチーム', esc(t.name)) + seg + `<div class="fbar"><div class="chipsel">${[['all', 'すべて'], ['B', `野手 ${bats.length}`], ['P', `投手 ${pits.length}`]].map(([k, n]) => `<button data-f="${k}" class="${filt === k ? 'on' : ''}">${n}</button>`).join('')}</div>
     <select class="in mini" id="srt">${[['ovr', '総合評価順'], ['rar', 'レア度順'], ['age', '若い順']].map(([k, n]) => `<option value="${k}" ${sortK === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
@@ -195,6 +184,79 @@ function viewTeam(sub = 'players') {
   $$('[data-f]').forEach((b) => b.onclick = () => { ls.set('bb_team_f', b.dataset.f); viewTeam(); });
   $('#srt').onchange = (e) => { ls.set('bb_team_s', e.target.value); viewTeam(); };
   $$('[data-pid]').forEach((el) => el.onclick = () => { location.hash = '#player/' + encodeURIComponent(el.dataset.pid); });
+}
+
+// ---------- オーダー (球場の上に選手カードをならべる) ----------
+//   野手: 守備位置にカード (打順の番号つき)・下にベンチと DH。投手: 先発 5・中継ぎ 2・抑え 1。控え: 出ていない選手
+//   カードを 2 枚つづけてタップすると入れかわる (出場 ↔ ベンチ・打順どうし・投手の役割どうし)。保存するまでサーバーには送らない
+const SLOTS = [['左', '左翼手', 17, 6], ['中', '中堅手', 50, 4], ['右', '右翼手', 83, 6], ['三', '三塁手', 13, 37], ['遊', '遊撃手', 36.5, 32], ['二', '二塁手', 63.5, 32], ['一', '一塁手', 87, 37], ['捕', '捕手', 50, 69]]; /* left, top (%) */
+function assignSlots(ids, byId) { // 打順の 9 人を守備位置にわりあてる (自分のポジション優先・あぶれた人は空いた所・最後の 1 人は DH)
+  const slots = [...SLOTS.map((x) => x[0]), '指'], out = {}, rest = [];
+  for (const id of ids) { const p = byId.get(id), k = p && slots.find((x) => x === p.pos && !out[x]); if (k) out[k] = id; else rest.push(id); }
+  for (const id of rest) { const k = slots.find((x) => !out[x]); if (k) out[k] = id; }
+  return out;
+}
+function viewOrder(seg) {
+  const ps = me.players, byId = new Map(ps.map((p) => [p.id, p])), t = me.team;
+  const O = { lineup: [...t.lineup], rot: [...t.rotation], setup: [...(t.bullpen.setup || [])], closer: t.bullpen.closer || null };
+  let tab = ls.get('bb_order_tab', 'B'), disp = ls.get('bb_order_disp', 0), sel = null, dirty = false;
+  const DISP = ['総合', '能力', '年齢'];
+  const used = () => new Set([...O.lineup, ...O.rot, ...O.setup, O.closer].filter(Boolean));
+  const power = () => { const ids = [...O.lineup, ...O.rot, ...O.setup, O.closer].filter(Boolean).map((id) => byId.get(id)).filter(Boolean); return { sum: ids.reduce((a, p) => a + p.ovr, 0) * 10, avg: ids.length ? ids.reduce((a, p) => a + p.ovr, 0) / ids.length : 0 }; };
+  const rank = (a) => (a >= 80 ? 'SS' : a >= 72 ? 'S' : a >= 64 ? 'A' : a >= 56 ? 'B' : a >= 48 ? 'C' : 'D');
+  const sub = (p) => (disp === 1 ? (p.kind === 'P' ? `${p.stats.velo}km 変${p.stats.brk}` : `ミ${p.stats.meet} パ${p.stats.power}`) : disp === 2 ? `${p.age}歳` : `${p.grade} ${p.ovr}`);
+  const card = (id, { label = '', no = 0, key, empty = '空き' } = {}) => {
+    const p = byId.get(id), on = sel && sel.key === key;
+    if (!p) return `<button type="button" class="oc empty${on ? ' sel' : ''}" data-k="${esc(key)}"><span class="oc-pos">${esc(label)}</span><span class="oc-art"></span><b>${esc(empty)}</b><span class="oc-lv">-</span></button>`;
+    return `<button type="button" class="oc r-${esc(p.rarity)}${on ? ' sel' : ''}" data-k="${esc(key)}">${label ? `<span class="oc-pos">${esc(label)}</span>` : ''}<span class="oc-art">${art(p, 66, false)}<i class="oc-rr">${esc(p.rarity)}</i>${no ? `<i class="oc-no">${no}</i>` : ''}</span><b>${esc(p.name.split(' ')[0])}</b><span class="oc-lv">${esc(sub(p))}</span></button>`;
+  };
+  // key: 'L:<打順の番号>' (出場の野手)・'R:<n>' 先発・'S:<n>' 中継ぎ・'C' 抑え・'B:<id>' ベンチ
+  const getK = (key) => { const [k, n] = key.split(':'); return k === 'L' ? O.lineup[n] : k === 'R' ? O.rot[n] : k === 'S' ? O.setup[n] : k === 'C' ? O.closer : n; };
+  const setK = (key, id) => { const [k, n] = key.split(':'); if (k === 'L') O.lineup[n] = id; else if (k === 'R') O.rot[n] = id; else if (k === 'S') O.setup[n] = id; else if (k === 'C') O.closer = id; };
+  function tapCard(key) {
+    if (!sel) { sel = { key }; return draw(); }
+    if (sel.key === key) { sel = null; return draw(); }
+    const a = sel.key, b = key, ia = getK(a), ib = getK(b), ka = a[0], kb = b[0]; sel = null;
+    const isP = (k) => 'RSC'.includes(k), kindOf = (k, id) => (k === 'L' ? 'B' : isP(k) ? 'P' : byId.get(id)?.kind);
+    if (kindOf(ka, ia) !== kindOf(kb, ib) && !(ka === 'B' && !ia) && !(kb === 'B' && !ib)) { toast('野手どうし・投手どうしで入れかえてください', true); return draw(); }
+    if (ka === 'B' && kb === 'B') return draw();
+    if (ka !== 'B' && kb !== 'B') { setK(a, ib || null); setK(b, ia || null); }
+    else { const slot = ka === 'B' ? b : a, benchId = ka === 'B' ? ia : ib; setK(slot, benchId); }
+    O.rot = O.rot.filter(Boolean).concat(Array(5).fill(null)).slice(0, 5); /* 先発は前につめる */
+    if (!O.rot[0]) { toast('先発は 1 人以上必要です', true); O.rot[0] = ia || ib; }
+    dirty = true; draw();
+  }
+  function draw() {
+    const y0 = scrollY, u = used(), pw = power(), slotOf = assignSlots(O.lineup, byId), noOf = (id) => O.lineup.indexOf(id) + 1;
+    const benchB = ps.filter((p) => p.kind === 'B' && !u.has(p.id)).sort((a, b) => b.ovr - a.ovr), benchP = ps.filter((p) => p.kind === 'P' && !u.has(p.id)).sort((a, b) => b.ovr - a.ovr);
+    const lkey = (id) => 'L:' + O.lineup.indexOf(id);
+    const field = tab === 'B'
+      ? `<div class="ofield">${SLOTS.map(([k, label, x, y]) => `<div class="oslot" style="left:${x}%;top:${y}%">${card(slotOf[k], { label, no: noOf(slotOf[k]), key: lkey(slotOf[k]) })}</div>`).join('')}</div>
+        <div class="obench"><div class="obench-l"><span class="olbl">ベンチ</span><div class="orow">${benchB.map((p) => card(p.id, { key: 'B:' + p.id })).join('') || '<p class="small muted">ベンチの野手はいません</p>'}</div></div>
+          <div class="obench-dh"><span class="olbl dh">DH</span>${card(slotOf['指'], { no: noOf(slotOf['指']), key: lkey(slotOf['指']) })}</div></div>
+        <div class="obat"><span class="olbl">打順</span>${O.lineup.map((id, i) => { const p = byId.get(id); return `<button type="button" class="ob1${sel?.key === 'L:' + i ? ' sel' : ''}" data-k="L:${i}"><b>${i + 1}</b>${esc(p?.name.split(' ')[0] || '-')}<small>${esc(Object.entries(slotOf).find(([, v]) => v === id)?.[0] || '')}</small></button>`; }).join('')}</div>`
+      : tab === 'P'
+        ? `<div class="ofield mound"><div class="ogrp"><span class="olbl">先発ローテーション</span><div class="orow wrap">${O.rot.map((id, i) => card(id, { label: `先発${i + 1}`, key: 'R:' + i })).join('')}</div></div>
+            <div class="ogrp"><span class="olbl">中継ぎ・抑え</span><div class="orow wrap">${[0, 1].map((i) => card(O.setup[i], { label: '中継ぎ', key: 'S:' + i, empty: '空き' })).join('')}${card(O.closer, { label: '抑え', key: 'C' })}</div></div></div>
+          <div class="obench"><div class="obench-l"><span class="olbl">控えの投手</span><div class="orow">${benchP.map((p) => card(p.id, { key: 'B:' + p.id })).join('') || '<p class="small muted">控えの投手はいません</p>'}</div></div></div>`
+        : `<div class="ohint">出場していない選手 (${benchB.length + benchP.length} 人)。タップでプロフィール</div><div class="ogrid">${[...benchB, ...benchP].map((p) => `<a class="oc r-${esc(p.rarity)}" href="#player/${encodeURIComponent(p.id)}"><span class="oc-pos">${p.kind === 'P' ? '投' : '野'}・${esc(p.pos)}</span><span class="oc-art">${art(p, 66, false)}<i class="oc-rr">${esc(p.rarity)}</i></span><b>${esc(p.name.split(' ')[0])}</b><span class="oc-lv">${esc(sub(p))}</span></a>`).join('') || '<p class="small muted">全員が出場しています</p>'}</div>`;
+    render(head('オーダー', esc(t.name)) + seg + `<section class="ohead">${emblem(t.name, 40)}<div class="ohk"><span>チーム総合力</span><b>${pw.sum.toLocaleString()}</b></div><div class="ohk"><span>出場</span><b>${u.size}<small>/17</small></b></div>
+      <div class="orank"><small>TEAM RANK</small><b>${rank(pw.avg)}</b></div></section>
+      <div class="otabs">${[['P', '投手'], ['B', '野手'], ['R', '控え']].map(([k, n]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}<button type="button" class="odisp" id="disp">表示<b>${DISP[disp]}</b></button></div>
+      ${tab !== 'R' ? `<p class="ohint">${sel ? '入れかえる相手のカードをタップ' : 'カードを 2 枚つづけてタップすると入れかわります'}</p>` : ''}
+      <div class="ostage">${field}</div>
+      <div class="sticky orow2"><button class="btn" id="auto">おまかせ</button><button class="btn ${dirty ? 'gold' : 'p'} grow" id="save" ${dirty ? '' : 'disabled'}>${dirty ? 'オーダーを保存' : '保存ずみ'}</button></div>
+      <div class="card"><h3>球団名</h3><div class="row"><input class="in grow" id="tn" maxlength="14" value="${esc(t.name)}"><button class="btn sm" id="ren">変える</button></div></div>`, 'team');
+    scrollTo(0, y0); /* 入れかえのたびに上へもどらない */
+    $$('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; ls.set('bb_order_tab', tab); sel = null; draw(); });
+    $('#disp').onclick = () => { disp = (disp + 1) % DISP.length; ls.set('bb_order_disp', disp); draw(); };
+    $$('button[data-k]').forEach((b) => b.onclick = () => tapCard(b.dataset.k));
+    $('#auto').onclick = async () => { try { me = await api('/auto-lineup', { method: 'POST' }); toast('おまかせで組みました'); viewTeam('order'); } catch (e) { toast(e.message, true); } };
+    $('#save').onclick = async () => { try { me = await api('/lineup', { method: 'POST', body: { lineup: O.lineup, rotation: O.rot.filter(Boolean), setup: O.setup.filter(Boolean), closer: O.closer || null } }); toast('オーダーを保存しました'); dirty = false; draw(); } catch (e) { toast(e.message, true); } };
+    $('#ren').onclick = async () => { try { me = await api('/rename', { method: 'POST', body: { name: $('#tn').value } }); toast('球団名を変えました'); viewTeam('order'); } catch (e) { toast(e.message, true); } };
+  }
+  while (O.rot.length < 5) O.rot.push(null);
+  draw();
 }
 
 // ---------- 選手プロフィール ----------

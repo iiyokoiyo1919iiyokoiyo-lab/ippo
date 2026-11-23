@@ -188,6 +188,48 @@ table.st tr:last-child td{border-bottom:0}table.st .l{text-align:left}table.st t
 #splash div{text-align:center}#splash img{width:108px;height:108px;border-radius:26px;box-shadow:0 18px 40px rgba(0,0,0,.5);animation:artIn .6s}#splash p{margin:14px 0 0;font-weight:800;letter-spacing:.12em;color:var(--gold2);font-size:15px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 @media (max-width:380px){.kpis b{font-size:19px}.tile b{font-size:22px}.ab{grid-template-columns:54px 1fr 20px 40px}.ph-art{width:190px}}
+
+/* ---------- オーダー (球場の上のカード) ---------- */
+.ohead{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:10px 12px;border-radius:16px;background:linear-gradient(180deg,#1b2b5c,#0b1636);border:1px solid rgba(233,196,106,.45);box-shadow:0 8px 22px rgba(0,0,0,.35)}
+.ohk{display:flex;flex-direction:column;align-items:flex-start;padding:4px 10px;border-radius:10px;background:rgba(0,0,0,.35)}.ohk span{font-size:10.5px;font-weight:800;color:var(--gold2);letter-spacing:.04em}.ohk b{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.1}.ohk small{font-size:11px;color:#9fb0dd}
+.orank{margin-left:auto;text-align:center;line-height:1}.orank small{display:block;font-size:9px;font-weight:900;letter-spacing:.08em;color:#c5cde8}.orank b{font-size:30px;font-weight:900;font-style:italic;background:var(--goldg);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 #5a3d00)}
+.otabs{display:flex;gap:6px;margin-bottom:8px}.otabs button{flex:1;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px 4px;background:linear-gradient(180deg,#2a3352,#161c33);color:#c5cde8;font-weight:900;font-size:14px}
+.otabs button.on{background:linear-gradient(180deg,#3b3418,#191508);color:var(--gold2);border-color:var(--gold2);box-shadow:inset 0 0 0 1px rgba(233,196,106,.4)}
+.otabs .odisp{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding:4px 12px;background:var(--goldg);color:#2a1d00;border:0}.otabs .odisp b{font-size:12px}
+.ohint{margin:0 0 8px;font-size:12px;color:#9fb0dd;text-align:center}
+.ostage{border-radius:20px;overflow:hidden;margin-bottom:12px;background:#0b2a17;box-shadow:0 12px 30px rgba(0,0,0,.45)}
+.ofield{position:relative;height:min(136vw,560px);background:
+  radial-gradient(ellipse 60% 30% at 50% 100%,#a86a3b 0 60%,transparent 61%),
+  conic-gradient(from 135deg at 50% 86%,transparent 0 0,rgba(0,0,0,0) 0),
+  repeating-linear-gradient(90deg,rgba(255,255,255,.045) 0 9%,rgba(0,0,0,.04) 9% 18%),
+  radial-gradient(ellipse 140% 110% at 50% 100%,#3f9b4d 0 62%,#2c7a3a 62% 64%,#173d22 64.5%),
+  linear-gradient(180deg,#0a1124 0 9%,#173d22 9%)}
+.ofield::before{content:"";position:absolute;left:50%;top:63%;width:44%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(45deg);background:#b97845;box-shadow:inset 0 0 0 9px #c98b55;border-radius:6px;opacity:.95}
+.ofield::after{content:"";position:absolute;left:50%;top:63%;width:30%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(45deg);background:#3f9b4d;border:2px solid rgba(255,255,255,.7)}
+.ofield.mound::before,.ofield.mound::after{display:none}.ofield.mound{height:auto;padding:12px 8px;background:radial-gradient(ellipse 80% 60% at 50% 40%,#b97845 0 22%,transparent 22.5%),radial-gradient(ellipse 140% 120% at 50% 100%,#3f9b4d 0 70%,#173d22 70.5%)}
+.oslot{position:absolute;transform:translateX(-50%);z-index:2}
+.oc{position:relative;display:flex;flex-direction:column;align-items:center;width:min(21vw,88px);padding:0 0 3px;border:0;border-radius:10px;background:linear-gradient(180deg,#2b2b2b,#0c0c0c);color:#fff;text-decoration:none;box-shadow:0 0 0 2px #c9a227,0 6px 14px rgba(0,0,0,.5);transition:transform .15s,box-shadow .15s;flex:none}
+.oc.r-SSR{box-shadow:0 0 0 2px #ffd43b,0 0 14px rgba(255,212,59,.55),0 6px 14px rgba(0,0,0,.5)}.oc.r-SR{box-shadow:0 0 0 2px #c77dff,0 6px 14px rgba(0,0,0,.5)}.oc.r-R{box-shadow:0 0 0 2px #4dabf7,0 6px 14px rgba(0,0,0,.5)}.oc.r-N{box-shadow:0 0 0 2px #868e96,0 6px 14px rgba(0,0,0,.5)}
+.oc.sel{transform:translateY(-6px) scale(1.06);box-shadow:0 0 0 3px #fff,0 0 22px rgba(255,255,255,.75),0 10px 18px rgba(0,0,0,.6);z-index:5;animation:ocPulse 1s infinite}
+@keyframes ocPulse{50%{box-shadow:0 0 0 3px var(--gold2),0 0 26px rgba(233,196,106,.9),0 10px 18px rgba(0,0,0,.6)}}
+.oc-pos{position:absolute;top:-17px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11.5px;font-weight:900;color:#d8ffb2;text-shadow:0 1px 0 #0b3d12,0 0 6px rgba(0,0,0,.8);letter-spacing:.04em}
+.oc-art{position:relative;display:block;width:100%;aspect-ratio:54/58;border-radius:9px 9px 0 0;overflow:hidden;background:#0d1d45}.oc-art svg{display:block;width:100%;height:100%}
+.oc-rr{position:absolute;left:3px;top:3px;font-style:normal;font-size:9.5px;font-weight:900;padding:0 4px;border-radius:5px;background:rgba(0,0,0,.6);color:#fff}.r-SSR .oc-rr{background:var(--goldg);color:#2a1d00}.r-SR .oc-rr{background:#7b2fd0}.r-R .oc-rr{background:#1864ab}
+.oc-no{position:absolute;right:3px;top:3px;font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:900;background:#c92a2a;color:#fff;box-shadow:0 0 0 2px #fff}
+.oc b{display:block;width:100%;padding:2px 2px 0;font-size:13px;font-weight:900;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:linear-gradient(180deg,#3a3a3a,#1a1a1a)}
+.oc-lv{display:block;width:100%;font-size:11.5px;font-weight:900;text-align:center;color:var(--gold2);font-variant-numeric:tabular-nums}
+.oc.empty{background:rgba(0,0,0,.35);box-shadow:0 0 0 2px rgba(255,255,255,.35)}.oc.empty b{background:none;color:#c5cde8}
+.obench{display:flex;gap:8px;padding:22px 8px 10px;background:linear-gradient(180deg,#14361f,#0b2414);border-top:2px solid rgba(255,255,255,.15)}
+.obench-l{flex:1;min-width:0;position:relative}.obench-dh{position:relative;flex:none;padding-left:8px;border-left:1px dashed rgba(255,255,255,.25)}
+.olbl{position:absolute;top:-19px;left:0;font-size:12.5px;font-weight:900;font-style:italic;color:#f783ac;text-shadow:0 1px 0 #000}.olbl.dh{left:8px;color:#b197fc}
+.orow{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 4px;scrollbar-width:none}.orow::-webkit-scrollbar{display:none}.orow.wrap{flex-wrap:wrap;justify-content:center;overflow:visible;row-gap:24px;padding-top:20px}
+.ogrp{position:relative;margin:10px 0 22px}.ogrp .olbl{position:static;display:block;text-align:center;font-size:14px;color:#fff3bf;margin-bottom:0}
+.obat{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:26px 8px 10px;background:#0b1a33}.obat .olbl{top:6px;left:10px;color:var(--gold2)}
+.ob1{display:flex;align-items:center;gap:6px;padding:7px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;font-size:12.5px;font-weight:800;text-align:left;white-space:nowrap;overflow:hidden}
+.ob1 b{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#c92a2a;font-size:11.5px}.ob1 small{margin-left:auto;color:#9fb0dd}.ob1.sel{border-color:var(--gold2);background:rgba(233,196,106,.2)}
+.ogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:22px 10px;padding:24px 10px 14px;justify-items:center;background:linear-gradient(180deg,#14361f,#0b2414)}
+.ogrid .oc{width:100%;max-width:92px}
+.orow2{display:flex;gap:8px}
 /* 前からの部品 (ボックススコア・イラストの編集・ガチャ) */
 .x{border:0;border-radius:12px;width:36px;height:36px;background:#f1f3f8;color:var(--ink);font-size:16px;flex:none}
 .btn.b{background:linear-gradient(135deg,#c9a227,#a8821a);color:#2a1d00}
@@ -230,6 +272,6 @@ table.st tr:last-child td{border-bottom:0}table.st .l{text-align:left}table.st t
 <script src="bb-core.js?v=1"></script>
 <script src="bb-art.js?v=1"></script>
 <script src="bb-illust.js?v=3"></script>
-<script type="module" src="bb.js?v=13"></script>
+<script type="module" src="bb.js?v=14"></script>
 </body>
 </html>
