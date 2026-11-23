@@ -171,7 +171,7 @@ export function createStadium(canvas) {
   const rubber = new THREE.Mesh(new THREE.BoxGeometry(0.61, 0.04, 0.15), new THREE.MeshStandardMaterial({ color: '#fff' })); rubber.position.set(0, 0.27, 18.44); scene.add(rubber);
   // ライン (ファウルライン・打席)
   const lineM = new THREE.MeshBasicMaterial({ color: '#f4f4f4' });
-  for (const s of [-1, 1]) { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 100), lineM); l.rotation.x = -Math.PI / 2; l.rotation.z = -s * Math.PI / 4; l.position.set(s * 35.35, 0.04, 35.35); scene.add(l); }
+  for (const s of [-1, 1]) { const l = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 100), lineM); l.rotation.x = -Math.PI / 2; l.rotation.z = s * Math.PI / 4; l.position.set(s * 35.35, 0.04, 35.35); /* 本塁から 45° (前は向きが逆だった) */ scene.add(l); }
   for (const s of [-1, 1]) { const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.22, 1.83)), new THREE.LineBasicMaterial({ color: '#f4f4f4' })); box.rotation.x = -Math.PI / 2; box.position.set(s * 0.93, 0.045, 0.1); scene.add(box); }
   // フェンス・観客席 (扇形)・照明塔
   const fenceR = (a) => 98 + (118 - 98) * Math.cos(a * 2); // 両翼 98m・中堅 118m (a = 中堅からの角度)
@@ -184,27 +184,41 @@ export function createStadium(canvas) {
     seg.position.set((x1 + x2) / 2, 1.7, (z1 + z2) / 2); seg.rotation.y = Math.atan2(x2 - x1, z2 - z1) - Math.PI / 2; seg.castShadow = true; fence.add(seg);
     const top = new THREE.Mesh(new THREE.BoxGeometry(len + 0.05, 0.12, 0.42), yellowM); top.position.set(seg.position.x, 3.45, seg.position.z); top.rotation.y = seg.rotation.y; fence.add(top);
   }
-  // 観客: スタンドの段 (箱) + 人 (色つきの小さな箱をたくさん)
+  // 観客席: ファウルラインに沿った内野席 (ラインから 20m 外)・本塁うしろのバックネット裏・外野フェンスのうしろ (中堅はバックスクリーンであける)
+  //   段 (箱) と人 (色つきの小さな箱) はインスタンスでまとめて描く。人はグラウンドのほうを向く
   const standM = new THREE.MeshStandardMaterial({ color: '#2c3140', roughness: 0.9 });
-  const crowdGeo = new THREE.BoxGeometry(0.45, 0.75, 0.35), crowdN = 5200, crowd = new THREE.InstancedMesh(crowdGeo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), crowdN);
-  const tmp = new THREE.Object3D(), col = new THREE.Color(); let ci = 0;
+  const crowdGeo = new THREE.BoxGeometry(0.45, 0.75, 0.35), crowdN = 7000, crowd = new THREE.InstancedMesh(crowdGeo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), crowdN);
+  const stepN = 2400, steps = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.9, 1.45), standM, stepN);
+  const tmp = new THREE.Object3D(), col = new THREE.Color(); let ci = 0, si = 0;
   const seatCols = ['#e03131', '#1c7ed6', '#f8f9fa', '#ffd43b', '#2f9e44', '#f783ac', '#343a40', '#ff922b'];
-  const standArc = (r0, a0, a1, rows, h0) => {
+  // 1 か所の席: (x, z) に、グラウンドの向き (fx, fz) を向いて座る
+  const seat = (x, y, z, fx, fz) => { if (ci >= crowdN || Math.random() < 0.16) return; tmp.position.set(x, y + 0.82, z); tmp.rotation.set(0, Math.atan2(fx, fz), 0); tmp.scale.set(1, 1, 1); tmp.updateMatrix(); crowd.setMatrixAt(ci, tmp.matrix); crowd.setColorAt(ci, col.set(seatCols[ci % 8]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.2)); ci++; };
+  // 段: 中心 (x, z)・長さ len・向き (fx, fz) の箱
+  const step = (x, y, z, len, fx, fz) => { if (si >= stepN) return; tmp.position.set(x, y, z); tmp.rotation.set(0, Math.atan2(fx, fz), 0); tmp.scale.set(len, 1, 1); tmp.updateMatrix(); steps.setMatrixAt(si++, tmp.matrix); };
+  // 内野席: ファウルライン (本塁から u の向き) に沿って、外向き n へずらした列
+  for (const sx of [-1, 1]) {
+    const u = [sx * Math.SQRT1_2, Math.SQRT1_2], n = [sx * Math.SQRT1_2, -Math.SQRT1_2];
+    for (let row = 0; row < 12; row++) {
+      const off = 19 + row * 1.45, y = 1.3 + row * 0.9;
+      for (let t = 6; t < 100; t += 6) { const cx = u[0] * (t + 3) + n[0] * off, cz = u[1] * (t + 3) + n[1] * off; step(cx, y, cz, 6.05, -n[0], -n[1]); }
+      for (let t = 6; t < 100; t += 0.85) seat(u[0] * t + n[0] * off, y, u[1] * t + n[1] * off, -n[0], -n[1]);
+    }
+  }
+  // 円の弧の席 (中心は本塁): 半径 r(a)・角度 a0〜a1 (中堅からの角度・左右対称で gap の内側はあける)
+  const arcStand = (rOf, a0, a1, rows, h0, gap = 0) => {
     for (let row = 0; row < rows; row++) {
-      const r = r0 + row * 1.4, y = h0 + row * 0.9;
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.7, r + 0.7, 0.9, 64, 1, true, a0, a1 - a0), standM); ring.position.y = y; ring.material.side = THREE.DoubleSide; scene.add(ring);
-      const step = 0.9 / r;
-      for (let a = a0; a < a1 && ci < crowdN; a += step) { if (Math.random() < 0.18) continue; tmp.position.set(Math.sin(a) * r, y + 0.82, Math.cos(a) * r); tmp.rotation.y = a + Math.PI; tmp.updateMatrix(); crowd.setMatrixAt(ci, tmp.matrix); crowd.setColorAt(ci, col.set(seatCols[ci % 8]).offsetHSL(0, 0, (Math.random() - 0.5) * 0.2)); ci++; }
+      const y = h0 + row * 0.9;
+      for (let a = a0; a < a1;) { const r = rOf(a) + row * 1.45, da = Math.min(0.06, 3 / r), am = a + da / 2; if (Math.abs(am) >= gap) step(Math.sin(am) * r, y, Math.cos(am) * r, r * da + 0.08, -Math.sin(am), -Math.cos(am)); a += da; }
+      for (let a = a0; a < a1; a += 0.85 / (rOf(a) + row * 1.45)) { if (Math.abs(a) < gap) continue; const r = rOf(a) + row * 1.45; seat(Math.sin(a) * r, y, Math.cos(a) * r, -Math.sin(a), -Math.cos(a)); }
     }
   };
-  standArc(26, Math.PI * 0.6, Math.PI * 1.4, 14, 1.2);    // 本塁のうしろ
-  standArc(48, Math.PI * 0.18, Math.PI * 0.62, 12, 2.0);  // 1 塁がわ
-  standArc(48, Math.PI * 1.38, Math.PI * 1.82, 12, 2.0);  // 3 塁がわ
-  standArc(124, -Math.PI * 0.22, Math.PI * 0.22, 10, 4.5); // 外野
+  arcStand(() => 21, Math.PI * 0.64, Math.PI * 1.36, 12, 1.2);                       // バックネット裏
+  arcStand((a) => fenceR(a) + 4, -Math.PI / 4 - 0.12, Math.PI / 4 + 0.12, 10, 4.2, 0.11); // 外野席 (中堅はあける)
+  steps.count = si; steps.instanceMatrix.needsUpdate = true; scene.add(steps);
   crowd.count = ci; crowd.instanceMatrix.needsUpdate = true; if (crowd.instanceColor) crowd.instanceColor.needsUpdate = true; scene.add(crowd);
   // 照明塔 (光る板)
   const lampM = new THREE.MeshBasicMaterial({ color: '#fffbe8' });
-  for (const [x, z] of [[-70, 30], [70, 30], [-60, 110], [60, 110], [-35, -30], [35, -30]]) {
+  for (const [x, z] of [[-58, -2], [58, -2], [-90, 30], [90, 30], [-67, 126], [67, 126], [-30, -38], [30, -38]]) { // 観客席のさらに外
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 42, 8), new THREE.MeshStandardMaterial({ color: '#5c6370' })); pole.position.set(x, 21, z); scene.add(pole);
     const panel = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 0.6), lampM); panel.position.set(x, 44, z); panel.lookAt(0, 0, 30); scene.add(panel);
   }
@@ -303,9 +317,14 @@ export function createStadium(canvas) {
   // ---------- 投球と打球のアニメーション ----------
   let pitchAnim = null, hitAnim = null;
   // 投げる: windup 秒の動きのあと、ボールが pc の軌道で飛ぶ。onRelease はボールが手をはなれた時刻 (performance.now) を返す
+  //   startWindup で先に動きを始めていたら (投げた人の画面)、その続きからボールを出す (待ち時間をなくす)
+  let windStart = 0, windLen = 0;
+  function startWindup(windup) { windStart = performance.now(); windLen = windup; people.pitcher.play([['p_kick', windup * 0.45], ['p_stride', windup * 0.4], ['p_release', windup * 0.15], ['p_follow', 0.4]]); }
   function throwPitch(pc, windup, onRelease) {
     pathDots.visible = false;
-    people.pitcher.play([['p_kick', windup * 0.45], ['p_stride', windup * 0.4], ['p_release', windup * 0.15], ['p_follow', 0.4]]);
+    const el = windStart ? (performance.now() - windStart) / 1000 : 1e9, pre = el < windLen + 2; windStart = 0;
+    if (pre) windup = Math.max(0, windLen - el); // もう動き始めている: のこりの分だけ待ってボールを出す
+    if (!pre) people.pitcher.play([['p_kick', windup * 0.45], ['p_stride', windup * 0.4], ['p_release', windup * 0.15], ['p_follow', 0.4]]);
     people.batter.play([['b_load', windup + pc.T * 0.4]]);
     pitchAnim = { pc, t: -windup, onRelease, released: false };
   }
@@ -385,5 +404,5 @@ export function createStadium(canvas) {
   function plateToScreen(x, y) { const v = new THREE.Vector3(W(x), y, 0).project(camera), r = canvas.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; }
   // 確認用: 打席のカメラを [x, y, z, 見る x, 見る y, 見る z] で変える
   const camBat = (c) => { CAM_BAT.pos.set(c[0], c[1], c[2]); CAM_BAT.look.set(c[3], c[4], c[5]); };
-  return { setPath, camBat, scene, camera, setupPlayers, setRunners, throwPitch, swingBat, hitBall, resetView, setCam, setMeet, setAim, scoreboard, screenToPlate, plateToScreen, people, dispose() { cancelAnimationFrame(raf); renderer.dispose(); } };
+  return { setPath, camBat, scene, camera, setupPlayers, setRunners, throwPitch, startWindup, swingBat, hitBall, resetView, setCam, setMeet, setAim, scoreboard, screenToPlate, plateToScreen, people, dispose() { cancelAnimationFrame(raf); renderer.dispose(); } };
 }

@@ -17,7 +17,7 @@ const H = 3600_000, D = 24 * H;
 const EPOCH = Date.parse('2026-11-22T00:00:00+09:00'), SEASON_MS = 3 * D;
 const LEAGUES = ['bronze', 'silver', 'gold', 'elite', 'champion'];
 const LEAGUE_NAME = { bronze: 'ブロンズ', silver: 'シルバー', gold: 'ゴールド', elite: 'エリート', champion: 'チャンピオン', king: 'KING' };
-const WINDUP = 0.9; // リアルタイム対戦: 投げる合図からボールが手をはなれるまでの動き (秒)
+const WINDUP = 0.35; // リアルタイム対戦: 投げる合図からボールが手をはなれるまでの動き (秒)。投げた人の画面はボタンを押した瞬間から動き始める
 const PROMOTE_WINS = 12, WIN_SOULS = 100, LOSE_SOULS = 30, START_SOULS = 1500, TICKET = 1500, GACHA = 200, ROSTER_MAX = 40;
 const POS = ['捕', '一', '二', '三', '遊', '左', '中', '右', '指'];
 const SURN = ['佐伯', '大河内', '神宮寺', '早乙女', '鳳', '千早', '霧島', '朝比奈', '東雲', '白鷺', '黒瀬', '真壁', '久遠', '天城', '若槻', '雪村', '橘', '御影', '桐生', '一ノ瀬', '如月', '有栖川', '風間', '氷室', '藤堂', '鷹野', '日向', '宗像', '鏑木', '葛城', '芹沢', '比嘉', '南雲', '北條', '西園寺', '小鳥遊', '五十嵐', '轟', '百瀬', '安曇'];
@@ -661,7 +661,7 @@ module.exports = function install(app, ctx) {
     const st = stateOf(m), d = defIdx(m);
     m.ws.forEach((w, i) => send(w, { t: 'turn', role: i === d ? 'pitch' : 'bat', state: st, seq: m.seq }));
     clearTimeout(m.timer);
-    if (!m.ws[d]) setTimeout(() => cpuPitch(m, m.seq), 900 + sr() * 900);
+    if (!m.ws[d]) setTimeout(() => cpuPitch(m, m.seq), 500 + sr() * 500);
     else m.timer = setTimeout(() => doPitch(m, { pitch: 'straight', x: (sr() - 0.5) * 0.3, y: 0.6 + sr() * 0.4, release: 0.5 + (sr() - 0.5) * 0.3 }), 20_000); // 20 秒たったら自動で投げる
   }
   function cpuPitch(m, seq) {

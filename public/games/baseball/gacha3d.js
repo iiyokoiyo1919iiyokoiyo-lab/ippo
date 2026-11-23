@@ -6,7 +6,7 @@
 //   ・選手の絵は bb-illust.js の SVG を画像にしてカードに貼る
 // =====================================================================
 import * as THREE from '../arena/vendor/three.module.min.js';
-import { makeHuman } from './stadium.js?v=6';
+import { makeHuman } from './stadium.js?v=7';
 
 const RC = { N: '#9aa5b8', R: '#4dabf7', SR: '#c77dff', SSR: '#ffd43b' };
 const svgTex = (svg, w, h) => new Promise((ok) => {

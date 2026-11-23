@@ -480,7 +480,7 @@ async function viewGacha() {
     <div id="res"></div>`, 'gacha');
   $$('[data-n]').forEach((b) => b.onclick = async () => {
     try { const r = await api('/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); me = r; $('.souls').textContent = `🔥 ${Number(r.team.souls).toLocaleString()}`;
-      try { const G = await import('./gacha3d.js?v=1'); $$('[data-n]').forEach((x) => { x.disabled = true; }); await new Promise((ok) => G.playGacha(r.results, ok)); } catch (e) { console.warn('gacha3d', e); } finally { $$('[data-n]').forEach((x) => { x.disabled = false; }); } // 3D の演出 (読みこめなければ結果だけ)
+      try { const G = await import('./gacha3d.js?v=2'); $$('[data-n]').forEach((x) => { x.disabled = true; }); await new Promise((ok) => G.playGacha(r.results, ok)); } catch (e) { console.warn('gacha3d', e); } finally { $$('[data-n]').forEach((x) => { x.disabled = false; }); } // 3D の演出 (読みこめなければ結果だけ)
       $('#res').innerHTML = `<div class="card"><h2>🎉 結果</h2><div class="cards">${r.results.map((p) => `<button class="cardbtn" data-pid="${esc(p.id)}">${art(p, 120)}</button>`).join('')}</div>${r.results.map((p) => plRow(p, p.origin === 'hot' ? '<span class="chip star">🔥活躍</span>' : '')).join('')}</div>`;
       $$('#res [data-pid]').forEach((el) => el.onclick = () => playerModal(r.results.find((p) => p.id === el.dataset.pid)));
       $('#res').scrollIntoView({ behavior: 'smooth' });
@@ -504,7 +504,7 @@ async function viewGacha() {
 // ---------- 試合の画面と操作 ----------
 let ws = null, M = null;
 async function startMatch(mode) {
-  if (!Stadium) { try { Stadium = await import('./stadium.js?v=6'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
+  if (!Stadium) { try { Stadium = await import('./stadium.js?v=7'); } catch (e) { return toast('3D を読みこめませんでした', true); } }
   ws?.close(); ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/bb`);
   ws.onopen = () => { ws.send(JSON.stringify({ t: mode })); const qs = $('#qs'); if (qs) qs.textContent = mode === 'queue' ? '相手を探しています… (見つからなければ CPU と練習もできます)' : ''; };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } onMsg(m); };
@@ -567,7 +567,7 @@ function startMeter() {
   const t0 = performance.now(); let pos = 0;
   const step = () => { if (!M.meterOn) return; const u = ((performance.now() - t0) / 1100) % 2; pos = u < 1 ? u : 2 - u; k.style.left = `calc(${pos * 100}% - 2px)`; requestAnimationFrame(step); };
   step();
-  btn.onclick = () => { M.meterOn = false; meter.classList.remove('on'); btn.disabled = true; ws.send(JSON.stringify({ t: 'pitch', pitch: M.pitch, x: M.aim.x, y: M.aim.y, release: pos })); const g = Math.abs(pos - 0.5); show(g <= 0.07 ? '✨ ナイスリリース' : g <= 0.16 ? 'いいね' : g > 0.24 ? '😱 失投…' : 'まあまあ', '', 900); };
+  btn.onclick = () => { M.meterOn = false; meter.classList.remove('on'); btn.disabled = true; ws.send(JSON.stringify({ t: 'pitch', pitch: M.pitch, x: M.aim.x, y: M.aim.y, release: pos })); M.S.startWindup?.(M.windup || 0.35); /* 返事を待たずに投げる動きを始める */ const g = Math.abs(pos - 0.5); show(g <= 0.07 ? '✨ ナイスリリース' : g <= 0.16 ? 'いいね' : g > 0.24 ? '😱 失投…' : 'まあまあ', '', 900); };
 }
 // 変化の予測: えらんだ球種が、ぴったりのリリースで狙いに来るときの軌道 (黄色い点の線)
 function preview() {
@@ -582,7 +582,7 @@ function preview() {
 function onPitched(m) {
   M.inFlight = true; M.S.setAim(0, 0, false); M.S.setPath(null);
   if (M.role === 'pitch') $m('#ctl').innerHTML = '';
-  M.S.throwPitch(m.pc, m.windup, (at) => { M.releaseAt = at; });
+  M.windup = m.windup; M.S.throwPitch(m.pc, m.windup, (at) => { M.releaseAt = at; });
   M.pc = m.pc;
   setTimeout(() => { if (M?.pc === m.pc) $m('#pinfo').textContent = `${m.pc.name} ${m.pc.km}km/h`; }, m.windup * 1000);
 }
