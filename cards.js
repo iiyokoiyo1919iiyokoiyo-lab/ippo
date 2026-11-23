@@ -159,7 +159,8 @@ const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 �
 // レベル: Lv15 までは、同じカードを引くか、レベルアップ書 (今のレベルと同じ枚数) で上がる。
 // Lv16〜20 はレベルアップ書だけで上がり、1 つにつき 50 枚 (同じカードを引いても Lv15 より上には上がらない)
 const MAX_LEVEL = 20, DUP_MAX_LEVEL = 15, HIGH_LEVEL_COST = 50;
-const HARD_QUEST_COST = 60; // 高難易度 (ゲキムズ) クエストは 1 回 60 コイン (挑戦するときに払う・負けても返さない)
+// 高難易度 (ゲキムズ) クエストのコイン: 挑戦は無料。クリアするたびに 60・はじめてのクリアは別に +1000・最速 (1 番目) +3000・準最速 (2 番目) +1500
+const HARD_QUEST_WIN = 60, HARD_QUEST_FIRST = 1000, HARD_QUEST_RANK_BONUS = { 1: 3000, 2: 1500 };
 const levelCost = (lv) => (lv < DUP_MAX_LEVEL ? lv : HIGH_LEVEL_COST); // Lv lv → lv+1 に使うレベルアップ書の枚数
 
 // ガチャ限定の SSR は、同じカードを 3 枚引くと UR に昇格する (UR の倍率は下の UR_MULT)
@@ -778,10 +779,12 @@ function install(app, ctx) {
     db.migrate('2026-11-30-card-monsters-limited', 'ALTER TABLE card_monsters ADD COLUMN limited INTEGER NOT NULL DEFAULT 0; ALTER TABLE card_monsters ADD COLUMN formula INTEGER NOT NULL DEFAULT 1;');
     // 新凸: IppO祭の限定キャラは UR のあとのダブりも数えるので、これまでにレベルアップ書に変換されたぶんを、ガチャの記録 (card_pulls) から枚数にもどす (書はそのまま)
     db.migrate('2026-11-21-fes-lr-copies', `UPDATE card_owned SET count = MAX(count, (SELECT COUNT(*) FROM card_pulls p WHERE p.user_id = card_owned.user_id AND p.card_id = card_owned.card_id)) WHERE card_id IN (${FES_LIMITED.map((id) => `'${id}'`).join(', ')});`);
+    // 2026-11-23: 高難易度クエストの最速・準最速クリアにコイン (3000・1500) を配るようにしたので、これまでのクエストの 1 番目・2 番目にも 1 回だけ配る
+    db.migrate('2026-11-23-hard-quest-rank-coins', QUESTS.filter((q) => q.hard).map((q) => [1, 2].map((rank) => `UPDATE card_players SET coins = coins + ${HARD_QUEST_RANK_BONUS[rank]} WHERE user_id = (SELECT user_id FROM card_quests WHERE quest_id = '${q.id.replace(/'/g, "''")}' ORDER BY cleared_at, rowid LIMIT 1 OFFSET ${rank - 1});`).join('\n')).join('\n'));
     db.migrate('2026-11-29-card-monsters-z-mr', "UPDATE card_monsters SET rarity = 'MR' WHERE rarity = 'UR';"); // 評価 Z は UR → MR に (倍率はどちらも 1.2)
     if (n) console.log(`[cards] 専用わざが付いていた馬 ${n} 頭を、ふつうのわざに付け直しました`); }
   const clearedOf = (uid) => new Set(db.prepare('SELECT quest_id FROM card_quests WHERE user_id = ?').all(uid).map((r) => r.quest_id));
-  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, cost: q.hard ? HARD_QUEST_COST : 0, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
+  const questView = (q, uid) => ({ id: q.id, name: q.name, boss: q.boss, emoji: q.emoji, text: q.text, start: q.start, end: q.end, hard: !!q.hard, coinRewards: q.hard ? { win: HARD_QUEST_WIN, first: HARD_QUEST_FIRST, rank: HARD_QUEST_RANK_BONUS } : null, tip: q.tip || '', items: q.hard ? { from: q.start + ITEMS_AFTER, list: Object.entries(ITEMS).map(([id, x]) => ({ id, ...x })) } : null, bonus: Object.entries(q.bonus || {}).map(([id, k]) => ({ ...statsOf(id, 1), mult: k, skillName: SKILLS[CARDS[id].skill].name })).filter((c) => isReleased(c.id)), bonusSoon: Object.entries(q.bonus || {}).filter(([id]) => !isReleased(id)).map(([id, k]) => ({ name: CARDS[id].name, mult: k, at: RELEASES[id] })), boostPct: q.hard ? Math.round(((q.boost || 1) - 1) * 100) : 0,
     enemy: q.enemy.map(([id, lv]) => ({ ...statsOf(id, 1), lv, skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc })),
     reward: { ...statsOf(q.reward, 1), skillName: SKILLS[CARDS[q.reward].skill].name, skillDesc: SKILLS[CARDS[q.reward].skill].desc },
     cleared: uid ? clearedOf(uid).has(q.id) : false });
@@ -1185,7 +1188,9 @@ function install(app, ctx) {
       const p = player(u), res = winner === -1 ? 'draw' : winner === i ? 'win' : 'lose';
       const count = p.reward_day === today ? p.reward_count : 0;
       const capped = !['easy', 'cpu', 'quest', 'oni'].includes(b.mode); // CPU 戦 (かんたん・ふつう・鬼難)・クエストの報酬は回数制限なし
-      const coins = !capped || count < REWARDS_PER_DAY ? (REWARD[b.mode] || REWARD.cpu)[res === 'win' ? 'win' : 'lose'] : 0;
+      let coins = !capped || count < REWARDS_PER_DAY ? (REWARD[b.mode] || REWARD.cpu)[res === 'win' ? 'win' : 'lose'] : 0;
+      if (b.quest?.hard && res === 'win') coins = HARD_QUEST_WIN; // 高難易度クエスト: クリアするたびに 60
+      let clearBonus = null;
       // クエスト: はじめて勝ったときだけ、報酬のカード
       let questReward = null, questCopy = null;
       const firstClear = b.quest && res === 'win' && db.prepare('INSERT OR IGNORE INTO card_quests (user_id, quest_id, cleared_at) VALUES (?, ?, ?)').run(u, b.quest.id, Date.now()).changes;
@@ -1204,6 +1209,10 @@ function install(app, ctx) {
         const rank = b.quest.hard ? db.prepare('SELECT COUNT(*) AS n FROM card_quests WHERE quest_id = ?').get(b.quest.id).n : 0;
         const title = rank >= 1 && b.quest.titles?.[rank];
         if (title) db.prepare('INSERT OR IGNORE INTO user_titles (user_id, title, source, granted_at) VALUES (?, ?, ?, ?)').run(u, title, `quest:${b.quest.id}:${rank}`, Date.now());
+        if (b.quest.hard) { // はじめてのクリア +1000・最速 +3000・準最速 +1500
+          clearBonus = { first: HARD_QUEST_FIRST, rank: HARD_QUEST_RANK_BONUS[rank] ? rank : 0, rankCoins: HARD_QUEST_RANK_BONUS[rank] || 0 };
+          coins += clearBonus.first + clearBonus.rankCoins;
+        }
         if (rank >= 1 && rank <= QUEST_AWARD_RANKS) ctx.officialAward?.({ title: title || null, quest: b.quest, rank, user: db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(u), turns: b.state.turn, at: Date.now() });
       }
       const scrolls = b.state.turn < SCROLL_MIN_TURNS || (reason === 'surrender' && res === 'lose') ? 0 : b.quest?.hard && res === 'win' ? HARD_QUEST_SCROLLS : SCROLL_REWARD[res];
@@ -1212,7 +1221,7 @@ function install(app, ctx) {
         wins = wins + ?, losses = losses + ?, draws = draws + ? WHERE user_id = ?`).run(coins, delta[i], today, count + (capped && coins ? 1 : 0),
         b.mode === 'random' && res === 'win' ? 1 : 0, b.mode === 'random' && res === 'lose' ? 1 : 0, b.mode === 'random' && res === 'draw' ? 1 : 0, u);
       battleOf.delete(u);
-      send(u, { t: 'end', result: res, reason, coins, scrolls, questCopy, quest: b.quest ? { id: b.quest.id, name: b.quest.name } : null, questReward, scrollMinTurns: SCROLL_MIN_TURNS, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
+      send(u, { t: 'end', result: res, reason, coins, clearBonus, scrolls, questCopy, quest: b.quest ? { id: b.quest.id, name: b.quest.name } : null, questReward, scrollMinTurns: SCROLL_MIN_TURNS, rating: b.mode === 'random' ? { delta: delta[i], now: player(u).rating } : null, state: publicState(b) });
     });
   }
   function leave(uid) {
@@ -1279,9 +1288,6 @@ function install(app, ctx) {
         if (m.mode === 'quest') {
           const q = questsNow().find((x) => x.id === String(m.quest || ''));
           if (!q) return send(uid, { t: 'error', msg: 'そのクエストは今は開催していません' });
-          if (q.hard) { // 高難易度クエストは 1 回 60 コイン
-            if (!db.prepare('UPDATE card_players SET coins = coins - ? WHERE user_id = ? AND coins >= ?').run(HARD_QUEST_COST, uid, HARD_QUEST_COST).changes) return send(uid, { t: 'error', msg: `コインが足りません (高難易度クエストは 1 回 ${HARD_QUEST_COST} コイン)` });
-          }
           return startBattle('quest', [uid, null], q);
         }
         if (m.mode === 'random') {

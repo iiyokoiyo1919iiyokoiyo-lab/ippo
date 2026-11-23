@@ -36,7 +36,7 @@
 - Y降臨 (11/22 8:00〜11/25 8:00) の Y のわざ「死の歌声─一方的な愛─」(`deathsong`): 1.2 倍のこうげき + 受けた相手がそのターンのうちに Y を倒すと、倒した側の場と控えの生きているカードからランダムで 1 枚が道連れ (`resolveTurn` の `loved`)
 - 社長室の決戦 (11/22 12:00〜11/26 12:00・ボス プレジデントあんどう): いちばんの攻略はすえつぐ (すえつぐなしは わざ「つらぬく」だけが絶対権力を通る (`TYRANT_PIERCE`)。Lv18 で すえつぐ入り 25%・つらぬく 2 枚 約 13%・1 枚 約 6%)。クエストの `bossPassive: { ando: 'tyrant' }` でボスだけ「絶対権力」(わざを封じられるまで、こうげき・毒・流星・道連れのダメージなし。`immune`)、`timeupLose` で時間切れは負け (`state.timeupWinner`)。報酬のあんどうには絶対権力はない。DNA は先に封じてからこうげきするので、DNA のこうげき自体からダメージが通る (2026-11-23 に修正)。`must: 'suetsugu'` で tune_oni が毎回すえつぐを入れて測る (`TUNE_NO_MUST=1` で入れずに測る)
 - 高難易度クエスト (`QUESTS` の `hard: true`) も同じ: 敵は先を読む CPU、`boost` は `node tools/tune_oni.js` の `quest:<id>` の結果を入れる
-- 高難易度 (ゲキムズ) クエストは 1 回 60 コイン (`cards.js` の `HARD_QUEST_COST`)。挑戦するとき (WebSocket の find) にサーバーで引く。足りなければ始まらない。負けても返さない
+- 高難易度 (ゲキムズ) クエストのコイン: 挑戦は無料。クリアするたびに 60 (`HARD_QUEST_WIN`)・はじめてのクリアは別に +1000 (`HARD_QUEST_FIRST`)・最速 (1 番目) +3000・準最速 (2 番目) +1500 (`HARD_QUEST_RANK_BONUS`)。結果の画面に `clearBonus` で出す。前のクエストの最速・準最速にはマイグレーション `2026-11-23-hard-quest-rank-coins` で 1 回だけ配った
 - サイドストーリー: 限定キャラ (祭の限定) と MR に 1 人 3 話 (`card-stories.js` の `STORIES`)。第 1 話はカードを持っていると、第 2 話は Lv10、最終話は Lv20 か昇格 (UR / LR) で読める (`UNLOCK`)。読めない話の本文はサーバーが送らない (`GET /api/cards/stories`)。画面は `#/games/cards/stories` (ぶんバトのホームのバナーから)。**新しい限定キャラ・MR を足したら、ストーリーも 3 話足す**
 
 ## ブリードモンスターズ (monster.js・public/games/monster/)

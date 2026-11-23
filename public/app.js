@@ -3962,7 +3962,7 @@ async function viewQuest() {
       ${q.hard ? `<p class="cb-quest-hard">⚠️ 高難易度: 敵は先を読む強い CPU${q.boostPct ? `・能力 ${q.boostPct > 0 ? '+' : ''}${q.boostPct}%` : ''}。ガチで難しいので、デッキと作戦をしっかり考えて挑もう！</p>` : ''}
       <p class="text-xs muted" style="margin:8px 0 0">${esc(q.tip)}</p></section>
     <section class="card card-pad">${me
-      ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}${q.cost ? ` <small>(🪙${q.cost})</small>` : ''}</a>${q.cost ? `<p class="text-xs muted" style="margin:6px 0 0;text-align:center">高難易度クエストは 1 回 🪙${q.cost} コイン (挑戦するときに払います)</p>` : ''}
+      ? `<a class="btn btn-primary btn-lg btn-block cb-quest-go" href="#/games/cards/battle?mode=quest&q=${encodeURIComponent(q.id)}">⚔️ ${q.cleared ? 'もう一度挑戦する' : '挑戦する！'}</a>${q.coinRewards ? `<p class="cb-quest-coins">🪙 クリアするたびに <b>+${q.coinRewards.win}</b> · はじめてのクリア <b>+${Number(q.coinRewards.first).toLocaleString()}</b> · 最速クリア <b>+${Number(q.coinRewards.rank[1]).toLocaleString()}</b> · 準最速 <b>+${Number(q.coinRewards.rank[2]).toLocaleString()}</b> (挑戦は無料)</p>` : ''}
          <a class="btn btn-ghost btn-block" href="#/games/cards/collection" style="margin-top:8px">デッキを変える</a>`
       : '<button class="btn btn-primary btn-block" type="button" id="cbq-login">ログインして挑戦する</button>'}</section>`).join('');
   $('#cbq-login')?.addEventListener('click', () => openAuth());
@@ -4190,7 +4190,8 @@ async function viewBattle(params) {
     const word = m.result === 'win' ? '勝ち！' : m.result === 'lose' ? '負け…' : '引き分け';
     box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
       <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
-      <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${m.coins}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
+      ${m.clearBonus ? `<p class="cb-clear-bonus">🎉 はじめてのクリア <b>+${Number(m.clearBonus.first).toLocaleString()}🪙</b>${m.clearBonus.rank ? `<br>${m.clearBonus.rank === 1 ? '🥇 最速クリア' : '🥈 準最速クリア'} <b>+${Number(m.clearBonus.rankCoins).toLocaleString()}🪙</b>` : ''}</p>` : ''}
+      <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${Number(m.coins).toLocaleString()}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
       ${m.questCopy ? (m.questCopy.lrUp ? `<div class="cb-lrup"><p class="cb-lr-shout">🌈 LR に昇格！！ 🌈</p><div class="cb-qreward-card">${cbCard(m.questCopy.lr, { level: 1, cls: 'tilt' })}</div><p>${esc(m.questCopy.name)} が <b class="cb-lr-word">LR</b> になった！ (能力 +${cbCatalogCache?.lrPromote?.bonus || 35}%)</p></div>`
         : `<p class="cb-lr-get">🎴 ${esc(m.questCopy.name)} を 1 枚ゲット！ <span>${m.questCopy.copies >= m.questCopy.need ? '🌈 LR 昇格ずみ' : `🌈 LR まで ${m.questCopy.copies}/${m.questCopy.need}`}</span></p>`) : ''}
       ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
