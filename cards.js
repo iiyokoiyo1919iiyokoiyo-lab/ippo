@@ -74,7 +74,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
-  ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 62, 16, 11, 14, 'buchigire'], // 2026-11-24 13:15 (日本時間) 登場。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
+  ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 62, 16, 11, 14, 'buchigire'], // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
   // ---- 2026-11-19 大量追加: R 20 体・SR 20 体・SSR 10 体 (すべて恒常。能力は既存カードと 1 対 1 で勝率 50% 前後に合わせた) ----
@@ -154,7 +154,7 @@ const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
 // 期間限定キャラの排出終了 (この時刻からガチャに出ない。図鑑・持っているカード・デッキはそのまま)
-const GACHA_ENDS = { suetsugu: Date.parse('2026-11-24T08:00:00+09:00'), tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
+const GACHA_ENDS = { suetsugu: Date.parse('2026-11-24T08:00:00+09:00'), yumiko: Date.parse('2026-11-25T13:15:00+09:00'), tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
 const inGacha = (id, now = Date.now()) => isReleased(id, now) && !(GACHA_ENDS[id] && now >= GACHA_ENDS[id]);
 const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => inGacha(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
@@ -173,7 +173,7 @@ const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from
 const LR_PROMOTE = { copies: 25, mult: 1.35 };
 const lrEligible = (cardId) => QUESTS.some((q) => q.hard && q.reward === cardId);
 // IppO祭の限定キャラ (ガチャ限定の SSR)。3 枚で UR、同じカードを 15 枚集めると LR に昇格 (新凸)。UR のあとのダブりも LR まではカードの枚数として数える
-const FES_LIMITED = ['scissors', 'tadokoro', 'suetsugu'];
+const FES_LIMITED = ['scissors', 'tadokoro', 'suetsugu', 'yumiko'];
 const FES_LR = { copies: 15 };
 const isFes = (cardId) => FES_LIMITED.includes(cardId);
 const lrNeed = (cardId) => (isFes(cardId) ? FES_LR.copies : lrEligible(cardId) ? LR_PROMOTE.copies : null); // LR に必要な枚数 (LR にならないカードは null)
@@ -210,6 +210,7 @@ const RATE_UPS = [
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
   { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ 1 体で 2% (11/20 8:29 まで。8:30 から筆の剣士)
+  { name: 'ユミコのブチギレ祭', id: 'yumiko', rate: 2, start: Date.parse('2026-11-24T13:15:00+09:00'), end: Date.parse('2026-11-25T13:15:00+09:00') }, // 限定キャラ ユミコ 1 体で 2% (11/24 13:15〜11/25 13:15・そのあと排出終了)
   { name: '毎週月曜のIppO祭', id: 'suetsugu', rate: 2, start: Date.parse('2026-11-23T08:00:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 限定キャラ 魔法使いすえつぐ 1 体で 2% (11/23(月) 8:00〜11/24 8:00)
   { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:35:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:35〜11/21 8:30。8:30 開始から 8:35 に変更)
 ];

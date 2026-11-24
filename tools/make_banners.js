@@ -72,9 +72,9 @@ function festCharRight(c, sk, { withSkill = true } = {}) {
   const ps = withSkill && cards.CARD_PASSIVE[c.id], n = [...c.name], cut = c.name.startsWith('魔法使い') ? 4 : Math.ceil(n.length / 2), l1 = n.slice(0, cut).join(''), l2 = n.slice(cut).join('');
   const big = (t, fs) => `<div style="font-size:${fs}px;line-height:1.08;white-space:nowrap;color:#ff2e93;-webkit-text-stroke:16px #fff;paint-order:stroke fill;text-shadow:0 8px 0 #7b2cbf,0 0 30px rgba(255,255,255,.7)">${esc(t)}</div>`;
   return `<div><span style="display:inline-block;padding:4px 18px;border-radius:999px;background:linear-gradient(90deg,#ffd43b,#ff8cc6,#b197fc,#74c0fc);color:#fff;font-size:30px;-webkit-text-stroke:6px #7b2cbf;paint-order:stroke fill;border:3px solid #fff">✨ ${esc(c.rarity)} ★ ${esc(cards.TYPES?.[c.type]?.name || '')}</span></div>
-    <div>${big(l1, ps ? 52 : 64)}${big(l2, ps ? 84 : 104)}</div>
+    <div>${n.length <= 4 ? big(c.name, ps ? 96 : 120) /* 短い名前は 1 行で大きく */ : big(l1, ps ? 52 : 64) + big(l2, ps ? 84 : 104)}</div>
     ${withSkill ? `    <div style="padding:${ps ? '10px 18px' : '14px 20px'};border-radius:24px;background:linear-gradient(135deg,rgba(70,10,110,.78),rgba(160,20,110,.7));border:3px solid #ffb3d9;box-shadow:0 0 24px rgba(255,140,198,.8),inset 0 0 18px rgba(255,255,255,.15);color:#fff">
-      <div style="font-size:31px;color:#ffe066;text-shadow:0 0 12px rgba(255,224,102,.7)">🧬 わざ「${esc(sk.name)}」</div>
+      <div style="font-size:31px;color:#ffe066;text-shadow:0 0 12px rgba(255,224,102,.7)">${c.skill === 'dna' ? '🧬' : esc(c.emoji || '✨')} わざ「${esc(sk.name)}」</div>
       <div style="margin-top:4px;font-size:22px;line-height:1.45;font-weight:800">${esc(sk.desc.replace(/\s*\([^()]*\)\s*$/, ''))}</div>
       ${cards.CARD_PASSIVE[c.id] ? `<div style="margin-top:6px;font-size:25px;color:#a5f3ff;text-shadow:0 0 12px rgba(165,243,255,.7)">💗 パッシブ「${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].name)}」</div><div style="font-size:20px;line-height:1.35;font-weight:800">${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].desc)}</div>` : ''}</div>` : ''}`;
 }
