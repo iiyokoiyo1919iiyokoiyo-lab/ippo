@@ -2904,6 +2904,7 @@ function route() {
   if (h === '/games/cards/collection') { setActiveNav('games'); return viewCollection(); }
   if (h === '/games/cards/quest') { setActiveNav('games'); return viewQuest(); }
   if (h === '/games/cards/oni') { setActiveNav('games'); return viewOni(); }
+  if (h === '/games/cards/trial') { setActiveNav('games'); return viewTrial(); }
   if (h === '/games/cards/usage') { setActiveNav('games'); return viewCardUsage(); }
   if (h === '/games/cards/stories') { setActiveNav('games'); return viewCardStories(); }
   if (h === '/games/cards/board') { setActiveNav('games'); return viewCardBoard(); }
@@ -3567,6 +3568,7 @@ async function viewCards() {
         <div class="cb-cpu-pick"><a class="btn btn-outline cb-easy-btn" href="#/games/cards/battle?mode=easy">🐣 CPU (かんたん)<small>SR までのキャラ · 勝ち +${cat.reward.easy?.win ?? 20}🪙</small></a>
           <a class="btn btn-outline" href="#/games/cards/battle?mode=cpu">🤖 CPU (ふつう)<small>勝ち +${cat.reward.cpu.win}🪙 · 回数制限なし</small></a>
           <a class="btn cb-oni-btn" href="#/games/cards/oni">👹 CPU (鬼難)<small>勝ち +${cat.reward.oni?.win ?? 40}🪙 · ガチで強い</small></a></div>
+        ${cat.trials?.length ? `<a class="btn cb-trial-btn" href="#/games/cards/trial">🧪 お試しバトル<small>${cat.trials.map((t) => esc(t.name)).join('・')} を Lv18 で試せる · 報酬なし</small></a>` : ''}
         <a class="btn cb-board-btn" href="#/games/cards/board">📋 レート戦 募集掲示板<small>相手をえらんでレート戦 · 勝ち +${cat.reward.random.win}🪙</small></a>
         <a class="btn btn-outline" href="#/games/cards/battle?mode=room-create">${icon('user-plus')}部屋を作って友だちと<small>部屋コードを教えて対戦</small></a>
         <form class="cb-join" id="cb-join"><input class="input" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="部屋コード (4けた)" required><button class="btn btn-outline" type="submit">入る</button></form>
@@ -3900,6 +3902,25 @@ async function viewCollection() {
   render();
 }
 
+// ---------- お試しバトル: 登場前・登場中のキャラを Lv18 で試す (報酬なし) ----------
+async function viewTrial() {
+  if (!requireLogin()) return;
+  main.innerHTML = pageHead({ title: '🧪 お試しバトル', sub: 'ぶんぼうぐバトラーズ', back: '#/games/cards' }) + `<div class="content stack" id="cbt">${loadingBlock()}</div>`;
+  let o; try { await cbCatalog(); o = await api('/cards/trials'); } catch (e) { $('#cbt').innerHTML = emptyState({ icon: 'alert', title: e.message }); return; }
+  const root = $('#cbt'); if (!root) return;
+  if (!o.trials.length) { root.innerHTML = emptyState({ icon: 'sparkle', title: 'いまお試しできるキャラはいません' }); return; }
+  const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  root.innerHTML = o.trials.map((t) => { const c = t.cards[0]; return `<section class="card cb-trial">
+      <div class="cb-trial-hero"><div class="cb-trial-pic">${CBArt.svg(c.id, c.rarity)}</div>
+        <div><span class="cb-trial-tag">${t.release && Date.now() < t.release ? `${esc(fmt(t.release))} 登場` : '登場中'}${c.fes ? ' · 🎊祭の限定' : ''}</span><h3>${esc(c.rarity)}「${esc(c.name)}」</h3>
+          <p class="cb-trial-st">Lv${Number(t.level)} · HP ${c.maxHp} · 攻 ${c.atk} · 防 ${c.def} · 速 ${c.spd}</p></div></div>
+      <div class="cb-trial-sk"><b>わざ「${esc(c.skillName)}」</b><p>${esc(c.skillDesc)}</p>${c.passiveName ? `<b>パッシブ「${esc(c.passiveName)}」</b><p>${esc(c.passiveDesc)}</p>` : ''}</div>
+      <p class="text-xs muted" style="margin:0 0 6px">お試しデッキ (全員 Lv${Number(t.level)})</p>
+      <div class="cb-deck">${t.cards.map((x) => cbCard(x, { small: true })).join('')}</div>
+      <p class="text-xs muted" style="margin:8px 0">相手は先を読む CPU (ランダムな SSR・MR 3 体・Lv${Number(t.level)})。報酬・レート・記録はありません · ${esc(fmt(t.until))} まで</p>
+      <a class="btn btn-primary btn-lg btn-block" href="#/games/cards/battle?mode=trial&deck=${encodeURIComponent(t.id)}&n=${Date.now()}">⚔️ お試しバトル</a></section>`; }).join('');
+}
+
 // ---------- CPU 戦「鬼難」: 5 種類のデッキからえらぶ ----------
 async function viewOni() {
   if (!requireLogin()) return;
@@ -4080,7 +4101,7 @@ async function viewBattle(params) {
   if (!requireLogin()) return;
   const mode = params.get('mode'), code = params.get('code') || '', questId = params.get('q') || '', oniDeck = params.get('deck') || '';
   const board = mode === 'room-create' && params.get('board') ? { comment: params.get('comment') || '', tag: params.get('tag') || '' } : null; // 対戦募集掲示板に出す
-  const titles = { quest: '🌠 期間限定クエスト', oni: '👹 CPU (鬼難)', easy: '🐣 CPU (かんたん)', cpu: 'CPU (ふつう)', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
+  const titles = { trial: '🧪 お試しバトル', quest: '🌠 期間限定クエスト', oni: '👹 CPU (鬼難)', easy: '🐣 CPU (かんたん)', cpu: 'CPU (ふつう)', random: 'ランダム対戦', 'room-create': '友だちと対戦', 'room-join': '友だちと対戦' };
   main.innerHTML = pageHead({ title: board ? '📋 対戦募集' : titles[mode] || '対戦', sub: 'ぶんぼうぐバトラーズ', back: board || params.get('from') === 'board' ? '#/games/cards/board' : '#/games/cards' }) + `<div class="content"><section class="card cb-battle" id="cbb">${loadingBlock()}</section></div>`;
   const cat = await cbCatalog().catch(() => null);
   const T = cat?.types || {};
@@ -4293,13 +4314,13 @@ async function viewBattle(params) {
     box().insertAdjacentHTML('beforeend', `<div class="cb-end ${m.result}"><b>${word}</b>
       <p>${m.reason === 'surrender' ? (m.result === 'win' ? '相手がこうさんしました' : 'こうさんしました') : m.reason === 'left' ? (m.result === 'win' ? '相手がいなくなりました' : '接続が切れたため負けになりました') : ''}</p>
       ${m.clearBonus ? `<p class="cb-clear-bonus">🎉 はじめてのクリア <b>+${Number(m.clearBonus.first).toLocaleString()}🪙</b>${m.clearBonus.rank ? `<br>${m.clearBonus.rank === 1 ? '🥇 最速クリア' : '🥈 準最速クリア'} <b>+${Number(m.clearBonus.rankCoins).toLocaleString()}🪙</b>` : ''}</p>` : ''}
-      <p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${Number(m.coins).toLocaleString()}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>
+      ${m.trial ? '<p class="cb-gain">🧪 お試しバトルなので、報酬・レート・記録はありません</p>' : `<p class="cb-gain">${m.scrolls ? `📜 レベルアップ書 +${m.scrolls} · ` : ''}${m.coins ? `+${Number(m.coins).toLocaleString()}🪙` : '今日の報酬は上限に達しています'}${m.rating ? ` · レート ${m.rating.now} (${m.rating.delta >= 0 ? '+' : ''}${m.rating.delta})` : ''}</p>`}
       ${m.questCopy ? (m.questCopy.lrUp ? `<div class="cb-lrup"><p class="cb-lr-shout">🌈 LR に昇格！！ 🌈</p><div class="cb-qreward-card">${cbCard(m.questCopy.lr, { level: 1, cls: 'tilt' })}</div><p>${esc(m.questCopy.name)} が <b class="cb-lr-word">LR</b> になった！ (能力 +${cbCatalogCache?.lrPromote?.bonus || 35}%)</p></div>`
         : `<p class="cb-lr-get">🎴 ${esc(m.questCopy.name)} を 1 枚ゲット！ <span>${m.questCopy.copies >= m.questCopy.need ? '🌈 LR 昇格ずみ' : `🌈 LR まで ${m.questCopy.copies}/${m.questCopy.need}`}</span></p>`) : ''}
       ${m.questReward ? `<div class="cb-qreward"><p class="cb-mr-shout">🎉 クエストクリア！</p><div class="cb-qreward-card">${cbCard(m.questReward, { level: 1, cls: 'tilt' })}</div>
         <p><em class="cb-mr-word">MR</em>「${esc(m.questReward.name)}」が仲間になった！<br><small>わざ「${esc(m.questReward.skillName)}」${esc(m.questReward.skillDesc)}</small></p></div>`
         : m.quest && m.result === 'win' && !m.questCopy ? '<p class="text-sm">クエストはクリアずみです (報酬のカードは 1 回だけ)</p>' : ''}
-      <div class="md-actions">${fromBoard ? '<a class="btn btn-primary" href="#/games/cards/board">掲示板にもどる</a><a class="btn btn-ghost" href="#/games/cards">ゲームのホーム</a>' : `<a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${mode === 'oni' && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : '#/games/cards'}">もどる</a>`}</div></div>`);
+      <div class="md-actions">${fromBoard ? '<a class="btn btn-primary" href="#/games/cards/board">掲示板にもどる</a><a class="btn btn-ghost" href="#/games/cards">ゲームのホーム</a>' : `<a class="btn btn-primary" href="#/games/cards/battle?mode=${esc(mode === 'room-join' ? 'room-create' : mode)}${mode === 'quest' ? `&q=${encodeURIComponent(questId)}` : ''}${(mode === 'oni' || mode === 'trial') && oniDeck ? `&deck=${encodeURIComponent(oniDeck)}` : ''}&n=${Date.now()}">もう一度</a><a class="btn btn-ghost" href="${mode === 'quest' ? '#/games/cards/quest' : mode === 'oni' ? '#/games/cards/oni' : mode === 'trial' ? '#/games/cards/trial' : '#/games/cards'}">もどる</a>`}</div></div>`);
     if (m.questReward) { cbCatalogCache = null; const q = box().querySelector('.cb-qreward'); if (q) { cbConfetti(q, 140, ['#ff6bd6', '#ffd43b', '#63e6be', '#4dabf7', '#b197fc', '#fff']); setTimeout(() => cbConfetti(q, 90, ['#ffe066', '#fff', '#d0a8ff']), 700); } }
   }
   function connect() {
