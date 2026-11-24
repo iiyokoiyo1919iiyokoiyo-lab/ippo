@@ -35,7 +35,7 @@ const SKILLS = {
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
 // dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '倒した相手を連れていく: そのターンの終わりに倒れる (ガード・バリア・絶対権力に関係なく)' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'こっちにおいで', desc: '倒した相手を連れていく: そのターンの終わりに倒れる (ガード・バリア・絶対権力に関係なく)' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
 const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
 const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife', yumiko2048: 'hold' };
@@ -75,7 +75,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
-  ['yumiko2048', '2048年のユミコ', '📓', 'SSR', 'wrap', 112, 24, 19, 18, 'diary'], // 2026-11-24 に「ぶっ壊れ」に強化 (前は 84/13/15/11)。2026-11-26 8:00 (日本時間) 登場の限定キャラ (超野獣祭 ピックアップ 2%・11/30 14:59 で排出終了)。HP 高めで回復の守りのキャラ。わざ「あの子の日記」・パッシブ「もう離さない」
+  ['yumiko2048', '2048年のユミコ', '📓', 'SSR', 'wrap', 112, 24, 19, 18, 'diary'], // 2026-11-24 に「ぶっ壊れ」に強化 (前は 84/13/15/11)。2026-11-26 8:00 (日本時間) 登場の限定キャラ (超野獣祭 ピックアップ 2%・11/30 14:59 で排出終了)。HP 高めで回復の守りのキャラ。わざ「あの子の日記」・パッシブ「こっちにおいで」
   ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 44, 27, 8, 15, 'buchigire'], // HP 少なめの攻撃力お化け (2026-11-24 に変更・前は HP 62・攻撃 16・防御 11・速さ 14)。パッシブ「ナイフ」
   // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
@@ -351,7 +351,7 @@ function resolveTurn(state, acts, rnd) {
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp > 0 && CARD_PASSIVE[me.id] === 'knife' && !immune(foe)) { const again = foe.poison > 0 && foe.bleed; foe.poison = POISON_TURNS; foe.bleed = true; if (!again) ev.push({ k: 'bleed', p: o, card: foe.name, by: me.name, bench }); } // パッシブ「ナイフ」: 失血 (毒と同じ)
-    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 1; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
+    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 1; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「こっちにおいで」: 倒した相手に「連れていかれる」印
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
@@ -475,7 +475,7 @@ function resolveTurn(state, acts, rnd) {
       if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
     });
   });
-  // 4.2 パッシブ「もう離さない」: 「連れていかれる」印のカードは、印がついた次のターンの終わりに倒れる (絶対権力に関係なく)
+  // 4.2 パッシブ「こっちにおいで」: 「連れていかれる」印のカードは、印がついた次のターンの終わりに倒れる (絶対権力に関係なく)
   [0, 1].forEach((p) => sides[p].cards.forEach((c, i) => {
     if (!(c.taken > 0) || c.hp <= 0) return;
     c.taken--;

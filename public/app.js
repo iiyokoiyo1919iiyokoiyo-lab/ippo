@@ -4050,7 +4050,7 @@ async function viewQuest() {
 // ---------- 2048年のユミコ: 特別なガチャ演出 (出たときだけ) ----------
 //   心拍計の音 → KEEP OUT のテープ → 散る花びら → 手紙「2048年のお母さんへ」が開いて文字が浮かぶ → 母と娘のうしろ姿の写真 → 光ってユミコが登場
 //   タップで最後の場面まで飛ばし、もう一度タップでとじる (ふつうの結果の演出へ)。絵は public/cards-img/yumiko2048*.jpg
-// 血しぶき (2048年のユミコ「もう離さない」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
+// 血しぶき (2048年のユミコ「こっちにおいで」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
 function ykSplat(seed) {
   let s = seed * 9301 + 49297; const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
   const n = 26, pts = [];
@@ -4139,9 +4139,9 @@ async function viewBattle(params) {
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
     : e.k === 'diary' ? `📓 ${name(e.p, e.card)}のあの子の日記！ ${e.p === you ? '味方' : '相手'}全員の HP が 45% 回復して、状態異常が治った`
     : e.k === 'diaryfull' ? `✉️「2048年のお母さんへ」… ${e.card}の HP が全回復した！`
-    : e.k === 'hold' ? `📓 もう離さない… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (このターンの終わりに倒れる)`
+    : e.k === 'hold' ? `📓 こっちにおいで… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (このターンの終わりに倒れる)`
     : e.k === 'takenwait' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれる… (あと${e.left}ターン)`
-    : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「もう離さない。」`
+    : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「こっちにおいで。」`
     : e.k === 'buchigire' ? `💢 ${name(e.p, e.card)}がブチギレた！ ${e.p === you ? '相手の' : ''}${e.target}を道連れにして、${e.card}も倒れた…！`
     : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
@@ -4280,8 +4280,8 @@ async function viewBattle(params) {
         }, t);
         t += 3300;
       }
-      else if (e.k === 'hold') { // もう離さない: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
-        const word = e.k === 'hold' ? 'もう離さない。' : 'お母さんも…ずっと一緒だよ？';
+      else if (e.k === 'hold') { // こっちにおいで: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
+        const word = e.k === 'hold' ? 'こっちにおいで。' : 'お母さんも…ずっと一緒だよ？';
         setTimeout(() => { overlayFx('yk-hold' + (e.k === 'taken' ? ' taken' : ''), `<div class="yk-petals">${ykPetals(8)}</div><div class="yk-write">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div><em>${esc(e.card)}${e.k === 'hold' ? ' は連れていかれる' : ' は連れていかれた…'}</em>`, 2800); replay(el(e.p), 'hurt'); }, t);
         t += 2300;
       }
