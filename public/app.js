@@ -3977,14 +3977,14 @@ async function viewCardStories() {
   const root = $('#cbs'); if (!root) return;
   root.innerHTML = `<p class="text-sm muted" style="margin:0">限定キャラと MR だけの物語。第 1 話はカードを持っていると、第 2 話は Lv10、最終話は Lv20 か昇格 (UR / LR) で読めます</p>
     ${d.stories.map((st) => `<section class="card cb-story${st.owned ? '' : ' locked'}">
-      <div class="cb-story-hd"><span class="cb-story-art">${CBArt.svg(st.id, st.rarity, { label: st.name })}</span><div><span class="cb-story-tag">${st.fes ? '🎊 祭の限定キャラ' : st.rarity === 'MR' ? '💎 MR' : '限定'}</span><h3>${esc(st.emoji)} ${esc(st.name)}</h3><p>「${esc(st.tagline)}」</p>
+      <div class="cb-story-hd"><span class="cb-story-art">${CBArt.svg(st.id, st.rarity, { label: st.name })}</span><div><span class="cb-story-tag">${st.fes ? '🎊 祭の限定キャラ' : st.rarity === 'MR' ? '💎 MR' : '限定'}</span><h3>${esc(st.emoji)} ${esc(st.name)}</h3><p>「${esc(st.tagline)}」</p>${st.warn ? `<span class="cb-story-warn">⚠️ ${esc(st.warn)}</span>` : ''}
         <small>${st.owned ? `Lv${st.level} · ${st.chapters.filter((c) => c.open).length}/${st.chapters.length} 話 読める` : '🔒 まだ持っていません'}</small></div></div>
       <div class="cb-story-chs">${st.chapters.map((c) => `<button type="button" class="cb-story-ch${c.open ? '' : ' locked'}" data-sid="${esc(st.id)}" data-n="${c.n}" ${c.open ? '' : 'disabled'}><b>${esc(c.title)}</b><small>${c.open ? '読む ›' : `🔒 ${esc(c.need)}`}</small></button>`).join('')}</div></section>`).join('')}`;
   const openCh = (st, n) => {
     const c = st.chapters[n - 1]; if (!c?.open) return;
     const ov = document.createElement('div'); ov.className = 'cb-reader';
     ov.innerHTML = `<article><header><span>${esc(st.emoji)} ${esc(st.name)}</span><button type="button" class="btn btn-ghost btn-sm" data-close>とじる</button></header>
-      <h2>${esc(c.title)}</h2><div class="cb-reader-body">${esc(c.text).split('\n').map((l) => `<p>${l}</p>`).join('')}</div>
+      <h2>${esc(c.title)}</h2>${st.warn ? `<p class="cb-story-warn">⚠️ ${esc(st.warn)}</p>` : ''}<div class="cb-reader-body">${esc(c.text).split('\n').map((l) => `<p>${l}</p>`).join('')}</div>
       <footer>${n > 1 && st.chapters[n - 2].open ? `<button class="btn btn-ghost" data-go="${n - 1}">‹ 前の話</button>` : '<span></span>'}${st.chapters[n]?.open ? `<button class="btn btn-primary" data-go="${n + 1}">次の話 ›</button>` : st.chapters[n] ? `<small class="muted">次の話: 🔒 ${esc(st.chapters[n].need)}</small>` : '<small class="muted">― おわり ―</small>'}</footer></article>`;
     document.body.append(ov);
     ov.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (e.target === ov || e.target.closest('[data-close]') || g) ov.remove(); if (g) openCh(st, Number(g.dataset.go)); });

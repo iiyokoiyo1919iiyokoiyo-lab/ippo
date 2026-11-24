@@ -876,7 +876,7 @@ function install(app, ctx) {
     const uid = req.user.id, o = owned(uid), promoted = new Set([...urOf(uid), ...lrOf(uid)]);
     const list = Object.entries(STORY.STORIES).filter(([id]) => CARDS[id] && isReleased(id)).map(([id, st]) => {
       const lv = o[id] || 0, has = lv > 0;
-      return { id, name: CARDS[id].name, emoji: CARDS[id].emoji, rarity: CARDS[id].rarity, fes: isFes(id), tagline: st.tagline, owned: has, level: lv,
+      return { id, name: CARDS[id].name, emoji: CARDS[id].emoji, rarity: CARDS[id].rarity, fes: isFes(id), tagline: st.tagline, warn: st.warn || '', owned: has, level: lv,
         chapters: st.chapters.map((c, i) => { const u = STORY.UNLOCK[i] || STORY.UNLOCK[STORY.UNLOCK.length - 1], open = !!(has && (lv >= u.level || (u.promoted && promoted.has(id))));
           return { n: i + 1, title: c.title, open, need: u.label, ...(open ? { text: c.text } : {}) }; }) };
     });
