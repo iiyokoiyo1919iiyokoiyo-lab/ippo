@@ -188,7 +188,7 @@ function statsOf(cardId, level = 1, ur = false) {
 }
 
 // ---------- ガチャ ----------
-const PULL_COST = 100, TEN_COST = 900, PITY = 80;
+const PULL_COST = 33, TEN_COST = 300, PITY = 80; // 2026-11-24 に 3 分の 1 の値段に (前は 1 回 100・10 回 900)
 // ---------- 期間限定のガチャのセール (この期間だけ値段が変わる。終わると自動で元にもどる) ----------
 // テストのときは環境変数 CB_SALE_START / CB_SALE_END (ミリ秒の時刻) で上書きできる
 const SALES = [
