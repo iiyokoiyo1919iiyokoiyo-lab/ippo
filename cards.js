@@ -29,13 +29,13 @@ const SKILLS = {
   order: { name: '社長命令', desc: '相手の場のカードに 1.5 倍、控えのカードに 0.7 倍の無属性こうげき' },
   deathsong: { name: '死の歌声─一方的な愛─', desc: '1.2 倍のこうげき。このターンにこのわざを受けた相手が、そのターンのうちに使い手を倒すと、相手の場と控えのカードからランダムで 1 枚を道連れにする' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
-  diary: { name: 'あの子の日記', desc: '味方全員の HP を 45% 回復して、毒・失血・怯み・眠りを治す。HP 30% 以下なら 1 回だけ自分は全回復 (バトルで 1 回)' },
+  diary: { name: 'あの子の日記', desc: '味方全員の HP を 60% 回復して状態異常を治し、相手の場のカードに 1.5 倍のこうげき。HP 40% 以下なら自分は全回復 (バトルで 2 回まで)' },
   buchigire: { name: 'ブチギレおばさん', desc: '相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
 // dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '倒した相手を連れていく: 交代できなくなり、次のターンの終わりに倒れる' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '倒した相手を連れていく: そのターンの終わりに倒れる (ガード・バリア・絶対権力に関係なく)' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
 const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
 const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife', yumiko2048: 'hold' };
@@ -75,7 +75,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
-  ['yumiko2048', '2048年のユミコ', '📓', 'SSR', 'wrap', 84, 13, 15, 11, 'diary'], // 2026-11-26 8:00 (日本時間) 登場の限定キャラ (超野獣祭 ピックアップ 2%・11/30 14:59 で排出終了)。HP 高めで回復の守りのキャラ。わざ「あの子の日記」・パッシブ「もう離さない」
+  ['yumiko2048', '2048年のユミコ', '📓', 'SSR', 'wrap', 112, 24, 19, 18, 'diary'], // 2026-11-24 に「ぶっ壊れ」に強化 (前は 84/13/15/11)。2026-11-26 8:00 (日本時間) 登場の限定キャラ (超野獣祭 ピックアップ 2%・11/30 14:59 で排出終了)。HP 高めで回復の守りのキャラ。わざ「あの子の日記」・パッシブ「もう離さない」
   ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 44, 27, 8, 15, 'buchigire'], // HP 少なめの攻撃力お化け (2026-11-24 に変更・前は HP 62・攻撃 16・防御 11・速さ 14)。パッシブ「ナイフ」
   // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
@@ -271,6 +271,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 }
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
+const DIARY = { heal: 0.6, full: 0.4, fullMax: 2, power: 1.5 }; // 2048年のユミコの「あの子の日記」(ぶっ壊れ)
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
 const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに 1.4 倍、控えに 0.8 倍
 const POISON_RATE = 0.08, POISON_TURNS = 3; // 毒: ターンの終わりに最大 HP の 8%、3 ターン (かけ直すと 3 ターンにもどる。重ねがけはしない)
@@ -350,7 +351,7 @@ function resolveTurn(state, acts, rnd) {
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp > 0 && CARD_PASSIVE[me.id] === 'knife' && !immune(foe)) { const again = foe.poison > 0 && foe.bleed; foe.poison = POISON_TURNS; foe.bleed = true; if (!again) ev.push({ k: 'bleed', p: o, card: foe.name, by: me.name, bench }); } // パッシブ「ナイフ」: 失血 (毒と同じ)
-    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 2; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
+    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 1; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
@@ -413,11 +414,12 @@ function resolveTurn(state, acts, rnd) {
         hit(p, DEATHSONG_POWER);
         if (foe.hp > 0 && me.hp > 0) { loved.set(foe, me); ev.push({ k: 'deathsong', p, card: me.name, target: foe.name }); }
       }
-      else if (me.skill === 'diary') { // あの子の日記: 味方全員を 45% 回復して状態異常を治す。HP 30% 以下なら 1 回だけ自分は全回復
-        const low = me.hp <= me.maxHp * 0.3 && !me.diaryFull, healed = [];
-        sides[p].cards.forEach((c) => { if (c.hp <= 0) return; const h = Math.min(c.maxHp - c.hp, Math.round(c.maxHp * 0.45)); c.hp += h; c.poison = 0; c.bleed = false; if (c.flinch) c.flinch = 0; c.sleep = false; healed.push({ card: c.name, amount: h }); });
+      else if (me.skill === 'diary') { // あの子の日記: 味方全員を 60% 回復して状態異常を治す → 相手の場のカードに 1.5 倍のこうげき。HP 40% 以下なら自分は全回復 (2 回まで)
+        const low = me.hp <= me.maxHp * DIARY.full && (me.diaryFull || 0) < DIARY.fullMax, healed = [];
+        sides[p].cards.forEach((c) => { if (c.hp <= 0) return; const h = Math.min(c.maxHp - c.hp, Math.round(c.maxHp * DIARY.heal)); c.hp += h; c.poison = 0; c.bleed = false; if (c.flinch) c.flinch = 0; c.sleep = false; healed.push({ card: c.name, amount: h }); });
         ev.push({ k: 'diary', p, card: me.name, healed });
-        if (low) { me.diaryFull = true; const h = me.maxHp - me.hp; me.hp = me.maxHp; ev.push({ k: 'diaryfull', p, card: me.name, amount: h }); }
+        if (low) { me.diaryFull = (me.diaryFull || 0) + 1; const h = me.maxHp - me.hp; me.hp = me.maxHp; ev.push({ k: 'diaryfull', p, card: me.name, amount: h }); }
+        hit(p, DIARY.power);
       }
       else if (me.skill === 'buchigire') { // ブチギレおばさん: 相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -521,7 +523,7 @@ function cpuAct(state, p, rnd) {
   const s = state.sides[p], me = s.cards[s.active], foe = state.sides[1 - p].cards[state.sides[1 - p].active];
   const meteorLeft = state.sides[1 - p].meteor?.left || 0;
   const sermonUseful = !foe.scolded || s.cards.some((c) => c.hp > 0 && c.poison > 0);
-  if (me.cd === 0 && !(me.sealed > 0) && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'diary' || me.hp < me.maxHp * 0.6) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
+  if (me.cd === 0 && !(me.sealed > 0) && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
   if (typeMult(foe.type, me.type) > 1 && rnd() < 0.5) {
     const i = s.cards.findIndex((c, k) => k !== s.active && c.hp > c.maxHp * 0.4 && typeMult(c.type, foe.type) >= 1);
     if (i >= 0) return { a: 'switch', i };

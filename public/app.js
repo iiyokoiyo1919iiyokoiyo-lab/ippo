@@ -4042,9 +4042,9 @@ async function viewBattle(params) {
     : e.k === 'immune' ? `👔 ${e.p === you ? '' : '相手の'}${e.card}の絶対権力！ ダメージを受けない`
     : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
-    : e.k === 'diary' ? `📓 ${name(e.p, e.card)}のあの子の日記！ ${e.p === you ? '味方' : '相手'}全員の HP が回復して、状態異常が治った`
+    : e.k === 'diary' ? `📓 ${name(e.p, e.card)}のあの子の日記！ ${e.p === you ? '味方' : '相手'}全員の HP が 60% 回復して、状態異常が治った`
     : e.k === 'diaryfull' ? `✉️「2048年のお母さんへ」… ${e.card}の HP が全回復した！`
-    : e.k === 'hold' ? `📓 もう離さない… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (交代できない・次のターンの終わりに倒れる)`
+    : e.k === 'hold' ? `📓 もう離さない… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (このターンの終わりに倒れる)`
     : e.k === 'takenwait' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれる… (あと${e.left}ターン)`
     : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「もう離さない。」`
     : e.k === 'buchigire' ? `💢 ${name(e.p, e.card)}がブチギレた！ ${e.p === you ? '相手の' : ''}${e.target}を道連れにして、${e.card}も倒れた…！`
@@ -4173,7 +4173,7 @@ async function viewBattle(params) {
         t += 900;
       }
       else if (e.k === 'diary') { // あの子の日記: 紫の夜・花びら・ユミコのカットイン・日記帳がひらく
-        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.jpg?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員の HP を 45% 回復</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
+        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.jpg?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員 60% 回復 + 1.5 倍こうげき</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
         t += 2100;
       }
       else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
