@@ -365,33 +365,45 @@
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
       // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
-      // ユミコ (SSR・おもい・ブチギレおばさん): ブチギレると止まらないおばさん。赤茶のパーマ・エプロン・腕まくり・怒りマーク 💢・頭から湯気・買い物袋 (ネギ)
+      // ユミコ (SSR・おもい・ブチギレおばさん): 闇堕ちしたユミコ。黒と紫のオーラ・乱れたパーマ・影の落ちた顔に赤く光る目・黒い服・包丁 (刃が光る)
       yumiko: () => {
-        const skin = rg('sk', [[0, '#ffd6c2'], [1, '#e8a183']], 0.4, 0.35, 0.8), apron = lg('ap', [[0, '#fff5f5'], [1, '#ffc9c9']]);
-        const curl = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${lg('hr' + x + '_' + y, [[0, '#c0563a'], [1, '#7a2414']])}" stroke="#5c1a0d" stroke-width="1"/>`;
-        const vein = (x, y, k) => `<g transform="translate(${x} ${y}) scale(${k})"><path d="M-6,-2 Q-2,-2 -2,-6 M2,-6 Q2,-2 6,-2 M6,2 Q2,2 2,6 M-2,6 Q-2,2 -6,2" stroke="#e03131" stroke-width="2.6" fill="none" stroke-linecap="round"/></g>`;
-        const steam = (x) => `<path d="M${x},14 C${x - 6},8 ${x + 6},4 ${x},-2" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" opacity=".85"/>`;
+        const skin = rg('sk', [[0, '#e9cfc6'], [1, '#a98a8a']], 0.4, 0.35, 0.8);
+        const curl = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${lg('hr' + x + '_' + y, [[0, '#4a1d24'], [1, '#160509']])}" stroke="#0b0205" stroke-width="1"/>`;
+        const wisp = (x, y, k, o) => `<path d="M${x},${y} C${x - 10 * k},${y - 14 * k} ${x + 10 * k},${y - 22 * k} ${x - 2 * k},${y - 36 * k}" stroke="#9c36b5" stroke-width="${3 * k}" fill="none" stroke-linecap="round" opacity="${o}"/>`;
         return `
-        <circle cx="60" cy="64" r="56" fill="${rg('aura', [[0, '#ffc9c9', 0.95], [0.55, '#ff6b6b', 0.45], [1, '#e03131', 0]])}"/>
-        ${Array.from({ length: 12 }, (_, i) => { const a = i * Math.PI / 6; return `<path d="M${(60 + Math.cos(a) * 30).toFixed(1)},${(64 + Math.sin(a) * 30).toFixed(1)} L${(60 + Math.cos(a + 0.12) * 58).toFixed(1)},${(64 + Math.sin(a + 0.12) * 58).toFixed(1)} L${(60 + Math.cos(a - 0.12) * 58).toFixed(1)},${(64 + Math.sin(a - 0.12) * 58).toFixed(1)}Z" fill="#ffe066" opacity=".35"/>`; }).join('')}
-        <path d="M28,118 Q24,92 40,84 Q60,76 80,84 Q96,92 92,118Z" fill="${lg('sw', [[0, '#9775fa'], [1, '#5f3dc4']])}" stroke="#3b2a85" stroke-width="2"/>
-        <path d="M42,88 Q60,82 78,88 L80,118 L40,118Z" fill="${apron}" stroke="#e03131" stroke-width="1.6"/>
-        <path d="M50,98 H70" stroke="#e03131" stroke-width="1.6"/><circle cx="60" cy="106" r="5" fill="none" stroke="#ff8787" stroke-width="1.4"/>
-        <path d="M30,96 L18,80" stroke="${skin}" stroke-width="10" stroke-linecap="round"/><path d="M30,96 L18,80" stroke="#c9825f" stroke-width="1" fill="none" opacity=".5"/>
-        <circle cx="16" cy="76" r="7" fill="${skin}" stroke="#c9825f" stroke-width="1.2"/><path d="M12,72 L20,72 M12,76 L20,76" stroke="#c9825f" stroke-width="1"/>
-        <path d="M90,96 L100,108" stroke="${skin}" stroke-width="10" stroke-linecap="round"/>
-        <path d="M94,100 L110,98 L114,120 L92,122Z" fill="${lg('bag', [[0, '#e9ecef'], [1, '#adb5bd']])}" stroke="#495057" stroke-width="1.2"/>
-        <path d="M104,98 L100,74 M108,98 L110,72" stroke="#51cf66" stroke-width="3.4" stroke-linecap="round"/><path d="M102,104 L106,98" stroke="#f8f9fa" stroke-width="5"/>
-        ${curl(38, 44, 10)}${curl(82, 44, 10)}${curl(40, 60, 8)}${curl(80, 60, 8)}${curl(46, 30, 10)}${curl(74, 30, 10)}${curl(60, 26, 11)}
-        <ellipse cx="60" cy="56" rx="21" ry="23" fill="${skin}" stroke="#c9825f" stroke-width="1.6"/>
-        <ellipse cx="60" cy="56" rx="21" ry="23" fill="#ff6b6b" opacity=".18"/>
-        ${curl(48, 36, 7)}${curl(60, 33, 7)}${curl(72, 36, 7)}
-        ${face(60, 55, { eyes: 'fierce', mouth: 'open', s: 0.8, brows: true, iris: '#7a2414' })}
-        <path d="M43,45 L53,49 M77,45 L67,49" stroke="#5c1a0d" stroke-width="2.6" stroke-linecap="round"/>
-        <path d="M45,60 Q48,62 51,60 M69,60 Q72,62 75,60" stroke="#c9825f" stroke-width="1" fill="none" opacity=".8"/>
-        ${vein(80, 36, 1.1)}${vein(40, 70, 0.8)}${vein(100, 30, 1.3)}
-        ${steam(44)}${steam(60)}${steam(76)}
-        <circle cx="39" cy="64" r="2.6" fill="#fff" stroke="#adb5bd" stroke-width=".8"/><circle cx="81" cy="64" r="2.6" fill="#fff" stroke="#adb5bd" stroke-width=".8"/>`;
+        <circle cx="60" cy="64" r="58" fill="${rg('aura', [[0, '#3b0d4a', 0.95], [0.55, '#1a0624', 0.85], [1, '#000', 0]])}"/>
+        ${Array.from({ length: 9 }, (_, i) => wisp(14 + i * 12, 118 - (i % 3) * 6, 0.8 + (i % 2) * 0.4, 0.35 + (i % 3) * 0.15)).join('')}
+        <circle cx="60" cy="58" r="40" fill="none" stroke="#e03131" stroke-width="1.2" opacity=".35" stroke-dasharray="3 5"/>
+        <path d="M24,120 Q20,92 38,82 Q60,72 82,82 Q100,92 96,120Z" fill="${lg('cl', [[0, '#2b2b36'], [1, '#08080c']])}" stroke="#000" stroke-width="2"/>
+        <path d="M40,84 Q60,96 80,84 L76,80 Q60,90 44,80Z" fill="#3b0d4a" stroke="#000" stroke-width="1"/>
+        <path d="M34,88 Q30,100 32,118 M86,88 Q90,100 88,118" stroke="#5f3dc4" stroke-width="1.2" fill="none" opacity=".6"/>
+        <path d="M84,90 L96,96" stroke="#2b2b36" stroke-width="11" stroke-linecap="round"/>
+        <g transform="translate(97 96) rotate(-74)">
+          <rect x="-3" y="-4" width="17" height="8" rx="2.5" fill="${lg('hd', [[0, '#3d2b1f'], [1, '#1a110b']])}" stroke="#000" stroke-width="1"/>
+          <circle cx="2" cy="0" r="1.2" fill="#adb5bd"/><circle cx="9" cy="0" r="1.2" fill="#adb5bd"/>
+          <path d="M14,-5 L48,-2.5 Q46,3.6 14,4.6Z" fill="${lg('bl', [[0, '#f8f9fa'], [0.5, '#ced4da'], [1, '#868e96']], 0, 1)}" stroke="#495057" stroke-width="1"/>
+          <path d="M16,-3 L44,-1.6" stroke="#fff" stroke-width="1.2" opacity=".9"/>
+        </g>
+        ${twinkle(110, 50, 6, '#fff')}
+        <circle cx="97" cy="96" r="6.5" fill="${skin}" stroke="#6b4f4f" stroke-width="1.2"/><path d="M93,93 L101,93 M93,96.5 L101,96.5" stroke="#6b4f4f" stroke-width=".9"/>
+        <path d="M30,96 L22,112" stroke="#2b2b36" stroke-width="10" stroke-linecap="round"/><circle cx="21" cy="114" r="5.5" fill="${skin}" stroke="#6b4f4f" stroke-width="1.1"/>
+        ${curl(36, 46, 10)}${curl(84, 46, 10)}${curl(36, 64, 9)}${curl(84, 64, 9)}${curl(44, 30, 10)}${curl(76, 30, 10)}${curl(60, 25, 11)}${curl(32, 78, 7)}${curl(88, 78, 7)}
+        <path d="M30,52 C24,60 28,72 22,80 M90,52 C96,60 92,72 98,80" stroke="#160509" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <ellipse cx="60" cy="57" rx="21" ry="23" fill="${skin}" stroke="#4a2d2d" stroke-width="1.6"/>
+        <ellipse cx="60" cy="48" rx="22" ry="14" fill="#1a0624" opacity=".55"/>
+        <path d="M46,64 Q50,68 54,66 M66,66 Q70,68 74,64" stroke="#4a2d2d" stroke-width="1.2" fill="none" opacity=".8"/>
+        ${curl(48, 37, 7)}${curl(60, 34, 7.5)}${curl(72, 37, 7)}${curl(54, 40, 5)}${curl(66, 40, 5)}
+        <path d="M44,48 L54,53 M76,48 L66,53" stroke="#0b0205" stroke-width="3" stroke-linecap="round"/>
+        <path d="M45,56 Q50,52 55,56 Q50,58.5 45,56Z M65,56 Q70,52 75,56 Q70,58.5 65,56Z" fill="#14040a"/>
+        <circle cx="50" cy="55.6" r="2.3" fill="#ff1f3d"/><circle cx="70" cy="55.6" r="2.3" fill="#ff1f3d"/>
+        <circle cx="50" cy="55.6" r="5.5" fill="#ff1f3d" opacity=".28"/><circle cx="70" cy="55.6" r="5.5" fill="#ff1f3d" opacity=".28"/>
+        <circle cx="49.3" cy="54.8" r=".7" fill="#fff"/><circle cx="69.3" cy="54.8" r=".7" fill="#fff"/>
+        <path d="M50,70 Q60,75 70,69" stroke="#2b0a10" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M52,70.5 L54,72.6 M57,71.6 L58,73.8 M63,71.4 L62,73.6 M67,70.2 L65.6,72.4" stroke="#f1f3f5" stroke-width="1.1"/>
+        <path d="M44,60 L45,67 M76,60 L75,67" stroke="#4a2d2d" stroke-width=".9" opacity=".6"/>
+        <circle cx="38" cy="66" r="2.4" fill="#7048e8" stroke="#2b0a3b" stroke-width=".8"/><circle cx="82" cy="66" r="2.4" fill="#7048e8" stroke="#2b0a3b" stroke-width=".8"/>
+        <path d="M88,26 Q92,22 96,26 Q92,30 88,26Z M14,40 Q18,36 22,40 Q18,44 14,40Z" fill="#e03131" opacity=".7"/>
+        ${twinkle(102, 22, 3.4, '#da77f2')}${twinkle(16, 26, 2.8, '#da77f2')}`;
       },
       // 魔法使いすえつぐ (SSR・つつむ・DNAを取り出す): 自分を魔法少女だと思っている人型のおばさん。
       // パーマの髪にティアラ、ピンクのフリフリ衣装、ハートのステッキ。片手に抜き取った DNA (二重らせん)
