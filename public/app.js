@@ -4050,7 +4050,7 @@ async function viewQuest() {
 // ---------- 2048年のユミコ: 特別なガチャ演出 (出たときだけ) ----------
 //   心拍計の音 → KEEP OUT のテープ → 散る花びら → 手紙「2048年のお母さんへ」が開いて文字が浮かぶ → 母と娘のうしろ姿の写真 → 光ってユミコが登場
 //   タップで最後の場面まで飛ばし、もう一度タップでとじる (ふつうの結果の演出へ)。絵は public/cards-img/yumiko2048*.jpg
-// 血しぶき (2048年のユミコ「こっちにおいで」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
+// 血しぶき (2048年のユミコ「もう離さない」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
 function ykSplat(seed) {
   let s = seed * 9301 + 49297; const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
   const n = 26, pts = [];
@@ -4280,7 +4280,7 @@ async function viewBattle(params) {
         }, t);
         t += 3300;
       }
-      else if (e.k === 'hold') { // こっちにおいで: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
+      else if (e.k === 'hold') { // もう離さない (手書きの文字は「こっちにおいで。」): 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
         const word = e.k === 'hold' ? 'こっちにおいで。' : 'お母さんも…ずっと一緒だよ？';
         setTimeout(() => { overlayFx('yk-hold' + (e.k === 'taken' ? ' taken' : ''), `<div class="yk-petals">${ykPetals(8)}</div><div class="yk-write">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div><em>${esc(e.card)}${e.k === 'hold' ? ' は連れていかれる' : ' は連れていかれた…'}</em>`, 2800); replay(el(e.p), 'hurt'); }, t);
         t += 2300;
