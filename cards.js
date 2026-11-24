@@ -29,15 +29,16 @@ const SKILLS = {
   order: { name: '社長命令', desc: '相手の場のカードに 1.5 倍、控えのカードに 0.7 倍の無属性こうげき' },
   deathsong: { name: '死の歌声─一方的な愛─', desc: '1.2 倍のこうげき。このターンにこのわざを受けた相手が、そのターンのうちに使い手を倒すと、相手の場と控えのカードからランダムで 1 枚を道連れにする' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
+  diary: { name: 'あの子の日記', desc: '味方全員の HP を 45% 回復して、毒・失血・怯み・眠りを治す。HP 30% 以下なら 1 回だけ自分は全回復 (バトルで 1 回)' },
   buchigire: { name: 'ブチギレおばさん', desc: '相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
 // dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '倒した相手を連れていく: 交代できなくなり、次のターンの終わりに倒れる' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
 const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
-const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife' };
+const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife', yumiko2048: 'hold' };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv15 で +28%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
@@ -74,6 +75,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['yumiko2048', '2048年のユミコ', '📓', 'SSR', 'wrap', 84, 13, 15, 11, 'diary'], // 2026-11-26 8:00 (日本時間) 登場の限定キャラ (2048年のユミコ祭 ピックアップ 2%・11/27 8:00 で排出終了)。HP 高めで回復の守りのキャラ。わざ「あの子の日記」・パッシブ「もう離さない」
   ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 44, 27, 8, 15, 'buchigire'], // HP 少なめの攻撃力お化け (2026-11-24 に変更・前は HP 62・攻撃 16・防御 11・速さ 14)。パッシブ「ナイフ」
   // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
@@ -143,7 +145,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), ando: Date.parse('2026-11-22T12:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00'), yumiko: Date.parse('2026-11-24T13:15:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), ando: Date.parse('2026-11-22T12:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00'), yumiko: Date.parse('2026-11-24T13:15:00+09:00'), yumiko2048: Date.parse('2026-11-26T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -155,7 +157,7 @@ const NEW_DAYS = 7; // 登場から 7 日間は「新キャラ登場！」を出
 const isReleased = (id, now = Date.now()) => !RELEASES[id] || now >= RELEASES[id];
 const releasedIds = (now = Date.now()) => CARD_LIST.map((c) => c[0]).filter((id) => isReleased(id, now));
 // 期間限定キャラの排出終了 (この時刻からガチャに出ない。図鑑・持っているカード・デッキはそのまま)
-const GACHA_ENDS = { suetsugu: Date.parse('2026-11-24T08:00:00+09:00'), yumiko: Date.parse('2026-11-25T13:15:00+09:00'), tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
+const GACHA_ENDS = { suetsugu: Date.parse('2026-11-24T08:00:00+09:00'), yumiko: Date.parse('2026-11-25T13:15:00+09:00'), yumiko2048: Date.parse('2026-11-27T08:00:00+09:00'), tadokoro: Date.parse('2026-11-20T08:29:00+09:00'), scissors: Date.parse('2026-11-20T08:29:00+09:00') }; // タドコロ・疾風剣士ハサミ丸: タドコロ ピックアップの終わりと同時に排出終了
 const inGacha = (id, now = Date.now()) => isReleased(id, now) && !(GACHA_ENDS[id] && now >= GACHA_ENDS[id]);
 const poolOf = (r, now = Date.now()) => (BY_RARITY[r] || []).filter((id) => inGacha(id, now));
 const STARTER = ['pencil', 'eraser', 'sticky']; // はじめにもらえる 3 枚 (相性が 1 つずつ)
@@ -174,7 +176,7 @@ const isPromoted = (cardId, copies) => CARDS[cardId]?.rarity === UR_PROMOTE.from
 const LR_PROMOTE = { copies: 25, mult: 1.35 };
 const lrEligible = (cardId) => QUESTS.some((q) => q.hard && q.reward === cardId);
 // IppO祭の限定キャラ (ガチャ限定の SSR)。3 枚で UR、同じカードを 15 枚集めると LR に昇格 (新凸)。UR のあとのダブりも LR まではカードの枚数として数える
-const FES_LIMITED = ['scissors', 'tadokoro', 'suetsugu', 'yumiko'];
+const FES_LIMITED = ['scissors', 'tadokoro', 'suetsugu', 'yumiko', 'yumiko2048'];
 const FES_LR = { copies: 15 };
 const isFes = (cardId) => FES_LIMITED.includes(cardId);
 const lrNeed = (cardId) => (isFes(cardId) ? FES_LR.copies : lrEligible(cardId) ? LR_PROMOTE.copies : null); // LR に必要な枚数 (LR にならないカードは null)
@@ -211,6 +213,7 @@ const RATE_UPS = [
 const PICKUPS = [
   { name: '新キャラ ピックアップ', id: 'scissors', rate: 3, start: Date.parse('2026-11-18T10:25:00+09:00'), end: Date.parse('2026-11-19T08:35:00+09:00') }, // 疾風剣士ハサミ丸 1 体で 3% (タドコロの登場 11/19 8:35 まで)
   { name: 'タドコロ ピックアップ', id: 'tadokoro', rate: 2, start: Date.parse('2026-11-19T08:35:00+09:00'), end: Date.parse('2026-11-20T08:29:00+09:00') }, // タドコロ 1 体で 2% (11/20 8:29 まで。8:30 から筆の剣士)
+  { name: '2048年のユミコ祭', id: 'yumiko2048', rate: 2, start: Date.parse('2026-11-26T08:00:00+09:00'), end: Date.parse('2026-11-27T08:00:00+09:00') }, // 限定キャラ 2048年のユミコ 1 体で 2% (11/26 8:00〜11/27 8:00・そのあと排出終了)
   { name: 'ユミコのブチギレ祭', id: 'yumiko', rate: 2, start: Date.parse('2026-11-24T13:15:00+09:00'), end: Date.parse('2026-11-25T13:15:00+09:00') }, // 限定キャラ ユミコ 1 体で 2% (11/24 13:15〜11/25 13:15・そのあと排出終了)
   { name: '毎週月曜のIppO祭', id: 'suetsugu', rate: 2, start: Date.parse('2026-11-23T08:00:00+09:00'), end: Date.parse('2026-11-24T08:00:00+09:00') }, // 限定キャラ 魔法使いすえつぐ 1 体で 2% (11/23(月) 8:00〜11/24 8:00)
   { name: '筆の剣士 ピックアップ', id: 'brush', rate: 2, start: Date.parse('2026-11-20T08:35:00+09:00'), end: Date.parse('2026-11-21T08:30:00+09:00') }, // 筆の剣士 1 体で 2% (11/20 8:35〜11/21 8:30。8:30 開始から 8:35 に変更)
@@ -299,7 +302,7 @@ function resolveTurn(state, acts, rnd) {
   const act = [0, 1].map((p) => {
     const s = sides[p], a = acts[p] || { a: 'guard' };
     const me = s.cards[s.active];
-    if (a.a === 'switch' && Number.isInteger(a.i) && a.i !== s.active && s.cards[a.i]?.hp > 0) return a;
+    if (a.a === 'switch' && Number.isInteger(a.i) && a.i !== s.active && s.cards[a.i]?.hp > 0 && !(me.taken > 0)) return a; // 「連れていかれる」印のあいだは交代できない
     if (a.a === 'item' && ITEMS[a.item]) return a; // アイテムは怯んでいても使える (使うのはプレイヤー)
     if (me.flinch === 1) return { a: 'flinch' }; // 怯み: 交代のほかは何もできない
     if (a.a === 'skill' && me.cd === 0 && !(me.sealed > 0)) return a; // わざ封じ (DNAを取り出す) のあいだは、わざのかわりにこうげき
@@ -347,6 +350,7 @@ function resolveTurn(state, acts, rnd) {
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp > 0 && CARD_PASSIVE[me.id] === 'knife' && !immune(foe)) { const again = foe.poison > 0 && foe.bleed; foe.poison = POISON_TURNS; foe.bleed = true; if (!again) ev.push({ k: 'bleed', p: o, card: foe.name, by: me.name, bench }); } // パッシブ「ナイフ」: 失血 (毒と同じ)
+    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 2; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
@@ -409,6 +413,12 @@ function resolveTurn(state, acts, rnd) {
         hit(p, DEATHSONG_POWER);
         if (foe.hp > 0 && me.hp > 0) { loved.set(foe, me); ev.push({ k: 'deathsong', p, card: me.name, target: foe.name }); }
       }
+      else if (me.skill === 'diary') { // あの子の日記: 味方全員を 45% 回復して状態異常を治す。HP 30% 以下なら 1 回だけ自分は全回復
+        const low = me.hp <= me.maxHp * 0.3 && !me.diaryFull, healed = [];
+        sides[p].cards.forEach((c) => { if (c.hp <= 0) return; const h = Math.min(c.maxHp - c.hp, Math.round(c.maxHp * 0.45)); c.hp += h; c.poison = 0; c.bleed = false; if (c.flinch) c.flinch = 0; c.sleep = false; healed.push({ card: c.name, amount: h }); });
+        ev.push({ k: 'diary', p, card: me.name, healed });
+        if (low) { me.diaryFull = true; const h = me.maxHp - me.hp; me.hp = me.maxHp; ev.push({ k: 'diaryfull', p, card: me.name, amount: h }); }
+      }
       else if (me.skill === 'buchigire') { // ブチギレおばさん: 相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         if (foe.hp > 0) {
@@ -463,6 +473,14 @@ function resolveTurn(state, acts, rnd) {
       if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
     });
   });
+  // 4.2 パッシブ「もう離さない」: 「連れていかれる」印のカードは、印がついた次のターンの終わりに倒れる (絶対権力に関係なく)
+  [0, 1].forEach((p) => sides[p].cards.forEach((c, i) => {
+    if (!(c.taken > 0) || c.hp <= 0) return;
+    c.taken--;
+    if (c.taken > 0) return ev.push({ k: 'takenwait', p, card: c.name, left: c.taken, bench: i !== sides[p].active });
+    c.hp = 0; c.poison = 0;
+    ev.push({ k: 'taken', p, card: c.name, bench: i !== sides[p].active }); ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active });
+  }));
   // 4.4 パッシブ「セントラルドグマ」: 控えで生きているあいだ、味方全員 (生きているカード) の HP を最大 HP の 10% 回復 (控えに何枚いても 1 回だけ)
   [0, 1].forEach((p) => {
     const s = sides[p], src = s.cards.find((c, i) => c.passive === 'dogma' && c.hp > 0 && i !== s.active);
@@ -503,7 +521,7 @@ function cpuAct(state, p, rnd) {
   const s = state.sides[p], me = s.cards[s.active], foe = state.sides[1 - p].cards[state.sides[1 - p].active];
   const meteorLeft = state.sides[1 - p].meteor?.left || 0;
   const sermonUseful = !foe.scolded || s.cards.some((c) => c.hp > 0 && c.poison > 0);
-  if (me.cd === 0 && !(me.sealed > 0) && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
+  if (me.cd === 0 && !(me.sealed > 0) && (me.skill !== 'heal' || me.hp < me.maxHp * 0.55) && (me.skill !== 'diary' || me.hp < me.maxHp * 0.6) && (me.skill !== 'starlight' || meteorLeft <= 1) && (me.skill !== 'sermon' || sermonUseful) && rnd() < 0.8) return { a: 'skill' };
   if (typeMult(foe.type, me.type) > 1 && rnd() < 0.5) {
     const i = s.cards.findIndex((c, k) => k !== s.active && c.hp > c.maxHp * 0.4 && typeMult(c.type, foe.type) >= 1);
     if (i >= 0) return { a: 'switch', i };
@@ -631,7 +649,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order', 'buchigire'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order', 'buchigire', 'diary'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -879,7 +897,7 @@ function install(app, ctx) {
     const list = Object.entries(STORY.STORIES).filter(([id]) => CARDS[id] && isReleased(id)).map(([id, st]) => {
       const lv = o[id] || 0, has = lv > 0;
       return { id, name: CARDS[id].name, emoji: CARDS[id].emoji, rarity: CARDS[id].rarity, fes: isFes(id), tagline: st.tagline, warn: st.warn || '', owned: has, level: lv,
-        chapters: st.chapters.map((c, i) => { const u = STORY.UNLOCK[i] || STORY.UNLOCK[STORY.UNLOCK.length - 1], open = !!(has && (lv >= u.level || (u.promoted && promoted.has(id))));
+        chapters: st.chapters.map((c, i) => { const UL = st.unlock || STORY.UNLOCK, u = UL[i] || UL[UL.length - 1], open = !!(has && (lv >= u.level || (u.promoted && promoted.has(id))));
           return { n: i + 1, title: c.title, open, need: u.label, ...(open ? { text: c.text } : {}) }; }) };
     });
     res.json({ stories: list });

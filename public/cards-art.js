@@ -365,6 +365,45 @@
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
       // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
+      // 2048年のユミコ (SSR・つつむ・あの子の日記 / パッシブ もう離さない): 年をとった白髪まじりのユミコ。娘の日記帳 (ピンク・星のシール) を抱いて涙。
+      // うしろに、半分すけた女の子のかげ (肩に手をのせている)。薄水色の光 (ヴェール)・ガラスのかけら (ダイヤモンドダスト)・便箋
+      yumiko2048: () => {
+        const skin = rg('sk', [[0, '#f3ddd3'], [1, '#cfa898']], 0.4, 0.35, 0.8);
+        const curl = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${lg('hr' + x + '_' + y, [[0, '#e9ecef'], [1, '#868e96']])}" stroke="#5c636a" stroke-width="1"/>`;
+        const shard = (x, y, k, rot) => `<path d="M${x},${y - 4 * k} L${x + 2.4 * k},${y} L${x},${y + 4 * k} L${x - 2.4 * k},${y}Z" transform="rotate(${rot} ${x} ${y})" fill="#e7f5ff" stroke="#a5d8ff" stroke-width=".6" opacity=".9"/>`;
+        return `
+        <circle cx="60" cy="64" r="58" fill="${rg('aura', [[0, '#e7f5ff', 0.95], [0.55, '#a5d8ff', 0.5], [1, '#4dabf7', 0]])}"/>
+        <path d="M60,4 L40,120 L80,120Z" fill="#fff" opacity=".18"/>
+        <g opacity=".55">
+          <path d="M76,26 Q90,12 104,26 L108,58 Q98,52 92,56 L80,56 Q74,52 72,58Z" fill="#364fc7" opacity=".55"/>
+          <circle cx="90" cy="36" r="11" fill="#dbe4ff" stroke="#4263eb" stroke-width="1.2"/>
+          <path d="M78,50 Q90,44 102,50 L108,92 L74,92Z" fill="#dbe4ff" stroke="#4263eb" stroke-width="1.2"/>
+          <path d="M78,54 Q68,60 70,72" stroke="#dbe4ff" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M78,54 Q68,60 70,72" stroke="#4263eb" stroke-width="1" fill="none"/>
+          <path d="M85,36 Q87,38 89,36 M91,36 Q93,38 95,36" stroke="#364fc7" stroke-width="1.1" fill="none"/><path d="M88,42 Q90,43.5 92,42" stroke="#364fc7" stroke-width="1" fill="none"/>
+        </g>
+        <path d="M26,120 Q22,94 38,86 Q60,78 82,86 Q98,94 94,120Z" fill="${lg('cd', [[0, '#d0ebff'], [1, '#74c0fc']])}" stroke="#1c7ed6" stroke-width="1.8"/>
+        <path d="M50,86 L60,98 L70,86" stroke="#fff" stroke-width="2" fill="none"/>
+        ${curl(38, 46, 9)}${curl(82, 46, 9)}${curl(38, 62, 8)}${curl(82, 62, 8)}${curl(46, 32, 9)}${curl(74, 32, 9)}${curl(60, 27, 10)}
+        <ellipse cx="60" cy="58" rx="21" ry="23" fill="${skin}" stroke="#a07a6b" stroke-width="1.5"/>
+        ${curl(48, 38, 6.5)}${curl(60, 35, 7)}${curl(72, 38, 6.5)}
+        <path d="M45,51 Q50,48 55,51 M65,51 Q70,48 75,51" stroke="#5c636a" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <path d="M45,57 Q50,60 55,57 M65,57 Q70,60 75,57" stroke="#3b2a2a" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M47,60 Q46,66 48,70 M73,60 Q74,66 72,70" stroke="#74c0fc" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".9"/>
+        <circle cx="48" cy="71" r="1.8" fill="#a5d8ff"/><circle cx="72" cy="71" r="1.8" fill="#a5d8ff"/>
+        <path d="M53,71 Q60,75 67,71" stroke="#8a5a50" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <path d="M44,64 L45.5,67 M76,64 L74.5,67 M52,44 Q60,42 68,44" stroke="#a07a6b" stroke-width=".9" fill="none" opacity=".7"/>
+        <ellipse cx="44" cy="66" rx="3.6" ry="1.8" fill="#ff8787" opacity=".25"/><ellipse cx="76" cy="66" rx="3.6" ry="1.8" fill="#ff8787" opacity=".25"/>
+        <g transform="rotate(-8 60 100)">
+          <rect x="44" y="88" width="32" height="26" rx="3" fill="${lg('dy', [[0, '#ffc9e3'], [1, '#f783ac']])}" stroke="#c2255c" stroke-width="1.4"/>
+          <rect x="44" y="88" width="5" height="26" rx="2" fill="#e64980"/>
+          <path d="M62,94 L63.6,98 L68,98.4 L64.6,101 L65.8,105.2 L62,102.8 L58.2,105.2 L59.4,101 L56,98.4 L60.4,98Z" fill="#ffd43b" stroke="#f08c00" stroke-width=".7"/>
+          <path d="M52,109 H72" stroke="#fff" stroke-width="1.4" opacity=".8"/>
+        </g>
+        <circle cx="42" cy="104" r="6" fill="${skin}" stroke="#a07a6b" stroke-width="1.1"/><circle cx="78" cy="100" r="6" fill="${skin}" stroke="#a07a6b" stroke-width="1.1"/>
+        <g transform="rotate(14 100 92)"><rect x="92" y="82" width="18" height="22" rx="2" fill="#fff9db" stroke="#fab005" stroke-width="1"/><path d="M95,88 H107 M95,92 H107 M95,96 H103" stroke="#f783ac" stroke-width=".9"/><path d="M99,100 Q101,98 103,100 Q101,103 99,100Z" fill="#ff6b6b"/></g>
+        ${shard(16, 30, 1.6, 20)}${shard(26, 18, 1.1, -10)}${shard(104, 20, 1.4, 35)}${shard(14, 86, 1.2, 15)}${shard(108, 64, 1.0, -25)}${shard(22, 60, 0.9, 40)}
+        ${twinkle(30, 40, 3.6, '#fff')}${twinkle(100, 44, 3, '#fff')}${twinkle(18, 104, 2.6, '#d0ebff')}`;
+      },
       // ユミコ (SSR・おもい・ブチギレおばさん): 闇堕ちしたユミコ。黒と紫のオーラ・乱れたパーマ・影の落ちた顔に赤く光る目・黒い服・包丁 (刃が光る)
       yumiko: () => {
         const skin = rg('sk', [[0, '#e9cfc6'], [1, '#a98a8a']], 0.4, 0.35, 0.8);

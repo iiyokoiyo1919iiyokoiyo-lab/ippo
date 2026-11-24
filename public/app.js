@@ -4016,6 +4016,11 @@ async function viewBattle(params) {
     : e.k === 'immune' ? `👔 ${e.p === you ? '' : '相手の'}${e.card}の絶対権力！ ダメージを受けない`
     : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
+    : e.k === 'diary' ? `📓 ${name(e.p, e.card)}のあの子の日記！ ${e.p === you ? '味方' : '相手'}全員の HP が回復して、状態異常が治った`
+    : e.k === 'diaryfull' ? `✉️「2048年のお母さんへ」… ${e.card}の HP が全回復した！`
+    : e.k === 'hold' ? `📓 もう離さない… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (交代できない・次のターンの終わりに倒れる)`
+    : e.k === 'takenwait' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれる… (あと${e.left}ターン)`
+    : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「もう離さない。」`
     : e.k === 'buchigire' ? `💢 ${name(e.p, e.card)}がブチギレた！ ${e.p === you ? '相手の' : ''}${e.target}を道連れにして、${e.card}も倒れた…！`
     : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
@@ -4034,7 +4039,7 @@ async function viewBattle(params) {
   const fighter = (c, mineSide, key, meteor = 0) => `<div class="cb-fighter r-${esc(c.rarity)}${mineSide ? ' mine' : ''}${meteor ? ' meteor' : ''}" data-side="${mineSide ? 'me' : 'foe'}" style="--rc:${CB_RCOL[c.rarity]}">
       ${meteor ? '<span class="cb-rain" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' : ''}
       <span class="cb-fpic">${CBArt.svg(c.id, c.rarity, { label: c.name, coat: c.coat })}</span>
-      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.sealed > 0 ? ` · <span class="cb-sealed">🧬わざ封じ</span>` : ''}${c.tyrant && !(c.sealed > 0) ? ' · <span class="cb-tyrant">👔絶対権力 (ダメージ無効)</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">${c.bleed ? '🩸失血' : '☠️毒'} あと${c.poison}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
+      <div class="cb-finfo"><b>${esc(c.name)}</b><span class="cb-meta">${esc(T[c.type]?.icon || '')}${esc(T[c.type]?.name || '')} · 速 ${c.spd}${c.cd ? ` · わざ あと${c.cd}` : ''}${c.bonus ? ` · <span class="cb-bonus">⭐特効 ×${c.bonus}</span>` : ''}${c.scolded ? ' · <span class="cb-scolded">📢説教 攻↓</span>' : ''}${c.morale ? ' · <span class="cb-morale">🔥士気UP</span>' : ''}${c.sealed > 0 ? ` · <span class="cb-sealed">🧬わざ封じ</span>` : ''}${c.tyrant && !(c.sealed > 0) ? ' · <span class="cb-tyrant">👔絶対権力 (ダメージ無効)</span>' : ''}${c.flinch === 1 ? (c.sleep ? ' · <span class="cb-flinch">💤眠り</span>' : ' · <span class="cb-flinch">😨怯み</span>') : ''}${c.poison > 0 ? ` · <span class="cb-psn">${c.bleed ? '🩸失血' : '☠️毒'} あと${c.poison}</span>` : ''}${c.taken > 0 ? ` · <span class="cb-psn">📓連れていかれる あと${c.taken}</span>` : ''}${meteor ? ` · <span class="cb-met">🌠流星 あと${meteor}</span>` : ''}</span>${hpBar(c, key)}</div></div>`;
   const bench = (side, mineSide) => `<div class="cb-bench">${side.cards.map((c, i) => `<button type="button" class="cb-mini${i === side.active ? ' active' : ''}${c.hp <= 0 ? ' down' : ''}${c.poison > 0 && c.hp > 0 ? ' poisoned' : ''}" ${mineSide && picking && i !== side.active && c.hp > 0 ? `data-switch="${i}"` : 'disabled'} aria-label="${esc(c.name)} HP ${c.hp}">${CBArt.svg(c.id, 'N', { coat: c.coat })}<i style="width:${Math.max(0, (c.hp / c.maxHp) * 100)}%"></i></button>`).join('')}</div>`;
   function render() {
     if (!box() || !state) return;
@@ -4141,6 +4146,8 @@ async function viewBattle(params) {
         }, t);
         t += 900;
       }
+      else if (e.k === 'diary' || e.k === 'diaryfull') { setTimeout(() => { overlayFx('cb-dna' + (e.p === you ? '' : ' on-me'), e.k === 'diary' ? `<b>あの子の日記</b><i>📓 名探偵の日記ちょう</i><em>味方全員 回復</em>` : `<b>2048年のお母さんへ</b><i>✉️ お母さんとお酒を飲むのが夢なんだ</i><em>HP 全回復</em>`, 1700, e.p === you ? 'bottom' : 'top'); }, t); t += 900; }
+      else if (e.k === 'hold' || e.k === 'taken') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>${e.k === 'hold' ? 'もう離さない' : '連れていかれた'}</b><i>📓 「もう離さない。」</i><em>${esc(e.card)}</em>`, 1800, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
       else if (e.k === 'buchigire') { // ブチギレおばさん: 怒りマークがあふれて、両方たおれる
         setTimeout(() => { overlayFx('cb-dsong curse', `<b>ブチギレ</b><i>💢 あんたも道連れよ！</i><em>${esc(e.target)} と相打ち</em>${Array.from({ length: 10 }, (_, i) => `<s style="--x:${(i * 37) % 100}%;--d:${(i % 5) * 0.1}s">💢</s>`).join('')}`, 1800, e.p === you ? 'top' : 'bottom'); replay(el(1 - e.p), 'hurt'); replay(el(e.p), 'hurt'); }, t); t += 1100; }
       else if (e.k === 'curse') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>道連れ</b><i>💔 一方的な愛</i><em>${esc(e.card)}</em>`, 1700, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
