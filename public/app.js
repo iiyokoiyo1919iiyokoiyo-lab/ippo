@@ -4268,7 +4268,7 @@ async function viewBattle(params) {
         t += 900;
       }
       else if (e.k === 'diary') { // あの子の日記: 紫の夜・花びら・ユミコのカットイン・日記帳がひらく
-        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.png?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員 45% 回復 + 1.5 倍こうげき</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
+        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.png?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員 45% 回復 + 1.2 倍こうげき</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
         t += 2100;
       }
       else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
