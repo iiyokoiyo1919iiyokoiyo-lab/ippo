@@ -365,8 +365,8 @@
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
       // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
-      // 2048年のユミコ (SSR・つつむ・あの子の日記 / パッシブ もう離さない): 利用者が用意したキャラクター設定画から切り出した絵 (public/cards-img/yumiko2048.jpg) を丸く切って使う
-      yumiko2048: () => `<image href="/cards-img/yumiko2048.jpg" x="4" y="2" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="${clip('yk', '<circle cx="60" cy="58" r="55"/>')}"/>`,
+      // 2048年のユミコ (SSR・つつむ・あの子の日記 / パッシブ もう離さない): 利用者が用意したキャラクター設定画から切り出した絵 (public/cards-img/yumiko2048.jpg?v=2) を丸く切って使う
+      yumiko2048: () => `<image href="/cards-img/yumiko2048.jpg?v=2" x="4" y="2" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="${clip('yk', '<circle cx="60" cy="58" r="55"/>')}"/>`,
       // ユミコ (SSR・おもい・ブチギレおばさん): 闇堕ちしたユミコ。黒と紫のオーラ・乱れたパーマ・影の落ちた顔に赤く光る目・黒い服・包丁 (刃が光る)
       yumiko: () => {
         const skin = rg('sk', [[0, '#e9cfc6'], [1, '#a98a8a']], 0.4, 0.35, 0.8);

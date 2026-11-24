@@ -3982,7 +3982,7 @@ function yumiko2048GachaFx() {
       <div class="yk-letter"><div class="yk-env">✉ 2048年のお母さんへ</div><p class="l1">今、これをみてるお母さんは2048年にいるよね。</p><p class="l2">私、お母さんとお酒を飲んで話すの、夢なんだ〜！</p></div>
       <img class="yk-photo" src="/cards-img/yumiko2048-photo.jpg" alt="">
       <div class="yk-flash"></div>
-      <div class="yk-final"><img class="yk-girl" src="/cards-img/yumiko2048-girl.jpg" alt=""><div class="yk-chara"><img src="/cards-img/yumiko2048.jpg" alt="2048年のユミコ"></div>
+      <div class="yk-final"><img class="yk-girl" src="/cards-img/yumiko2048-girl.jpg" alt=""><div class="yk-chara"><img src="/cards-img/yumiko2048.jpg?v=2" alt="2048年のユミコ"></div>
         <p class="yk-copy">ずっと、あの時のまま……</p><p class="yk-tag">超野獣祭限定 <b>SSR</b></p><p class="yk-name">2048年のユミコ</p><p class="yk-tap">タップでつづける</p></div>`;
     document.body.append(fx);
     let stage = 0; const t0 = Date.now();
@@ -4173,7 +4173,7 @@ async function viewBattle(params) {
         t += 900;
       }
       else if (e.k === 'diary') { // あの子の日記: 紫の夜・花びら・ユミコのカットイン・日記帳がひらく
-        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.jpg" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員の HP を 45% 回復</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
+        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.jpg?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員の HP を 45% 回復</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
         t += 2100;
       }
       else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
