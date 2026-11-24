@@ -17,6 +17,7 @@ const { bannerName, GACHA_NOTICES, gachaInfo } = require('../official');
 const OUT = path.join(__dirname, '..', 'public', 'banners');
 const ART = fs.readFileSync(path.join(__dirname, '..', 'public', 'cards-art.js'), 'utf8');
 const force = process.argv.includes('--force');
+const CUSTOM = new Set(['char-yumiko2048']); // 利用者が用意したバナー (作り直さない)
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null; // --only <名前>: その画像だけ作り直す
 const fmt = (t) => new Date(t).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -257,6 +258,7 @@ function gachaHtml(n) {
   for (const j of jobs) {
     const file = path.join(OUT, j.name + '.jpg');
     if (only && j.name !== only) continue;
+    if (CUSTOM.has(j.name) && only !== j.name) { console.log('手づくり (作り直さない):', j.name); continue; } // 利用者が用意したバナーは --force でも上書きしない
     if (fs.existsSync(file) && !force && !only) { console.log('あり:', j.name); continue; }
     await p.setContent(`<!doctype html><meta charset="utf-8"><style>${BASE}</style><body>${j.html}</body>`);
     await p.addScriptTag({ content: ART });
