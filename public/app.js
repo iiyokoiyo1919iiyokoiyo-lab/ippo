@@ -515,6 +515,11 @@ function photoGrid(p) {
   return `<div class="photo-grid n${n}" ${ratio ? `style="aspect-ratio:${ratio.toFixed(3)}"` : ''}>${p.images.map((im, i) =>
     `<button type="button" class="photo" data-photos="${p.images.map((x) => x.id).join(',')}" data-i="${i}" aria-label="写真 ${i + 1}/${n} を拡大"><img src="/api/images/${im.id}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>`;
 }
+// 投稿の動画 (1 本)。縦長も横長もほどほどの枠に収める
+function videoBlock(p) {
+  const v = p.videos[0], ratio = v.w && v.h ? Math.min(1.9, Math.max(0.6, v.w / v.h)) : 16 / 9;
+  return `<div class="post-video" style="aspect-ratio:${ratio.toFixed(3)}"><video src="/api/videos/${Number(v.id)}#t=0.1" controls playsinline preload="metadata"></video></div>`;
+}
 // 拡大表示 (左右の矢印・スワイプ・キーボードで移動)
 const Lightbox = (() => {
   const dlg = $('#lightbox'), img = $('.lb-img', dlg), count = $('.lb-count', dlg);
@@ -548,7 +553,7 @@ document.addEventListener('click', (e) => {
 function quoteEmbed(q) {
   if (!q || q.unavailable) return `<div class="quote-embed quote-gone">${icon('repeat', 'ic-sm')}この投稿は削除されました</div>`;
   const text = q.content ? esc(q.content.length > 180 ? q.content.slice(0, 180) + '…' : q.content) : '';
-  const photo = q.images?.length ? `<span class="quote-photo">${icon('image', 'ic-sm')}写真${q.images.length}枚</span>` : '';
+  const photo = q.images?.length ? `<span class="quote-photo">${icon('image', 'ic-sm')}写真${q.images.length}枚</span>` : q.videos?.length ? `<span class="quote-photo">${icon('video', 'ic-sm')}動画</span>` : '';
   return `<a class="quote-embed" href="#/p/${q.id}">
     <div class="quote-embed-head">${avatar(q.author, 'xs')}<b>${esc(q.author.displayName)}</b>${adminBadge(q.author)}<span class="handle">@${esc(q.author.username)}</span><span class="dot">·</span><time>${timeAgo(q.createdAt)}</time></div>
     ${text ? `<div class="quote-embed-text">${text}</div>` : ''}${photo}
@@ -587,6 +592,7 @@ function renderPost(item, { focus = false, fresh = false } = {}) {
     ${p.replyToUser ? `<div class="post-reply-to">返信先: <a href="#/u/${esc(p.replyToUser)}">@${esc(p.replyToUser)}</a></div>` : ''}
     ${p.content ? `<div class="post-text">${richText(p.content)}</div>` : ''}
     ${p.images?.length ? photoGrid(p) : ''}
+    ${p.videos?.length ? videoBlock(p) : ''}
     ${media ? `<div class="post-media">${media}</div>` : ''}
     ${p.quoted ? quoteEmbed(p.quoted) : ''}
     <footer class="post-actions">
@@ -706,6 +712,7 @@ function composeHtml({ placeholder = 'いまどうしてる？', context = '', s
       <div class="composer-images"></div>
       <div class="composer-foot">
         <label class="icon-btn composer-photo" title="写真を追加 (4枚まで)" aria-label="写真を追加">${icon('image')}<input type="file" accept="image/*" multiple hidden></label>
+        <label class="icon-btn composer-video" title="動画を追加 (1本・3分・50MBまで)" aria-label="動画を追加">${icon('video')}<input type="file" accept="video/mp4,video/quicktime,video/webm" hidden></label>
         <span class="hint">${icon('shield', 'ic-sm')}リンクは仮想ブラウザで開かれます</span>
         <span class="ring-wrap"><svg class="ring" viewBox="0 0 26 26"><circle class="track" cx="13" cy="13" r="10"/><circle class="bar" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}"/></svg><span class="ring-num"></span></span>
         <button class="btn btn-primary" type="button" disabled>${esc(submit)}</button>
@@ -723,14 +730,64 @@ function bindCompose(root, { replyTo = null, onDone, extra = {}, prefill = '', p
     imgBox.innerHTML = images.map((im) => `<div class="composer-img${im.uploading ? ' uploading' : ''}" data-key="${im.key}">
       <img src="${im.url}" alt="">${im.uploading ? '<span class="composer-img-spin"></span>' : ''}
       <button type="button" class="composer-img-x" aria-label="写真を外す">${icon('x')}</button></div>`).join('');
+    if (video) renderVideo();
     $$('.composer-img-x', imgBox).forEach((b) => b.addEventListener('click', () => {
       const key = b.closest('[data-key]').dataset.key, im = images.find((x) => x.key === key);
       images = images.filter((x) => x.key !== key);
       if (im?.id) api('/uploads/' + im.id, { method: 'DELETE' }).catch(() => {});
       URL.revokeObjectURL(im?.url); renderImages(); update();
     }));
-    $('.composer-photo', root).classList.toggle('hidden', images.length >= 4);
+    $('.composer-photo', root).classList.toggle('hidden', images.length >= 4 || !!video);
+    $('.composer-video', root).classList.toggle('hidden', images.length > 0 || !!video);
   };
+  // 添付する動画 (1 本。写真とはどちらか。先にアップロードしておく)
+  let video = null; // { id, url, uploading, pct }
+  const vidInput = $('.composer-video input', root);
+  const renderVideo = () => {
+    imgBox.querySelector('.composer-vid')?.remove();
+    if (video) {
+      const d = document.createElement('div'); d.className = 'composer-vid' + (video.uploading ? ' uploading' : '');
+      d.innerHTML = `<video src="${video.url}" muted playsinline preload="metadata"></video>${video.uploading ? `<span class="composer-vid-pct">アップロード中… ${video.pct || 0}%</span>` : ''}<button type="button" class="composer-img-x" aria-label="動画を外す">${icon('x')}</button>`;
+      $('.composer-img-x', d).addEventListener('click', () => {
+        const v = video; video = null; v.xhr?.abort();
+        if (v.id) api('/uploads/video/' + v.id, { method: 'DELETE' }).catch(() => {});
+        URL.revokeObjectURL(v.url); renderImages(); renderVideo(); update();
+      });
+      imgBox.append(d);
+    }
+    $('.composer-photo', root).classList.toggle('hidden', images.length >= 4 || !!video);
+    $('.composer-video', root).classList.toggle('hidden', images.length > 0 || !!video);
+  };
+  const videoMeta = (url) => new Promise((ok, ng) => { const v = document.createElement('video'); v.preload = 'metadata'; v.muted = true; v.onloadedmetadata = () => ok({ dur: v.duration, w: v.videoWidth, h: v.videoHeight }); v.onerror = () => ng(new Error('この動画は読み込めません')); v.src = url; });
+  vidInput.addEventListener('change', async () => {
+    const file = vidInput.files[0]; vidInput.value = '';
+    if (!file || video || images.length) return;
+    if (file.size > 50 * 1024 * 1024) return toast('動画は 50MB までです', 'error');
+    const url = URL.createObjectURL(file);
+    let meta = { dur: 0, w: 0, h: 0 };
+    try { meta = await videoMeta(url); } catch {}
+    if (meta.dur > 181) { URL.revokeObjectURL(url); return toast('動画は 3 分までです', 'error'); }
+    const v = video = { url, uploading: true, pct: 0 };
+    renderVideo(); update();
+    try {
+      const data = await new Promise((ok, ng) => {
+        const x = new XMLHttpRequest(); v.xhr = x;
+        x.open('POST', `/api/uploads/video?dur=${encodeURIComponent(meta.dur || 0)}&w=${meta.w | 0}&h=${meta.h | 0}`);
+        x.setRequestHeader('Content-Type', ['video/mp4', 'video/quicktime', 'video/webm'].includes(file.type) ? file.type : 'application/octet-stream');
+        x.upload.onprogress = (e) => { if (e.lengthComputable && video === v) { v.pct = Math.round(e.loaded / e.total * 100); const el = imgBox.querySelector('.composer-vid-pct'); if (el) el.textContent = `アップロード中… ${v.pct}%`; } };
+        x.onload = () => { let d = {}; try { d = JSON.parse(x.responseText); } catch {} x.status < 300 ? ok(d) : ng(new Error(d.error || (x.status === 413 ? '動画は 50MB までです' : '動画をアップロードできませんでした'))); };
+        x.onerror = () => ng(new Error('動画をアップロードできませんでした'));
+        x.onabort = () => ng(new Error(''));
+        x.send(file);
+      });
+      if (video !== v) { api('/uploads/video/' + data.video.id, { method: 'DELETE' }).catch(() => {}); return; }
+      v.id = data.video.id; v.uploading = false;
+    } catch (e) {
+      if (video === v) { video = null; URL.revokeObjectURL(url); }
+      if (e.message) toast(e.message, 'error');
+    }
+    renderVideo(); update();
+  });
   fileInput.addEventListener('change', async () => {
     const all = [...fileInput.files], files = all.slice(0, 4 - images.length);
     fileInput.value = '';
@@ -757,7 +814,7 @@ function bindCompose(root, { replyTo = null, onDone, extra = {}, prefill = '', p
     bar.style.strokeDashoffset = C * (1 - Math.min(1, len / MAX_LEN));
     ring.classList.toggle('warn', left <= 20 && left >= 0); ring.classList.toggle('over', left < 0); wrap.classList.toggle('over', left < 0);
     num.textContent = left <= 20 ? left : '';
-    btn.disabled = (!ta.value.trim() && !images.length) || left < 0 || images.some((im) => im.uploading);
+    btn.disabled = (!ta.value.trim() && !images.length && !video) || left < 0 || images.some((im) => im.uploading) || !!video?.uploading;
     ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.5) + 'px';
   };
   ta.addEventListener('input', update);
@@ -765,8 +822,8 @@ function bindCompose(root, { replyTo = null, onDone, extra = {}, prefill = '', p
   btn.addEventListener('click', async () => {
     btn.disabled = true; btn.classList.add('is-loading');
     try {
-      const { post } = await api('/posts', { method: 'POST', body: { ...extra, content: ta.value, replyTo, imageIds: images.map((im) => im.id) } });
-      ta.value = ''; images.forEach((im) => URL.revokeObjectURL(im.url)); images = []; renderImages(); update();
+      const { post } = await api('/posts', { method: 'POST', body: { ...extra, content: ta.value, replyTo, imageIds: images.map((im) => im.id), ...(video?.id ? { videoIds: [video.id] } : {}) } });
+      ta.value = ''; images.forEach((im) => URL.revokeObjectURL(im.url)); images = []; if (video) { URL.revokeObjectURL(video.url); video = null; } renderImages(); renderVideo(); update();
       onDone && onDone(post);
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
     btn.classList.remove('is-loading');
@@ -1235,7 +1292,7 @@ async function viewNotifications() {
   refreshBadges(true);
   const label = { reply: 'があなたの投稿にコメントしました', mention: 'があなたをメンションしました', repost: 'があなたの投稿をリポストしました', ff: 'が投稿しました' };
   const ic = { reply: 'comment', mention: 'at', repost: 'repeat', ff: 'users' };
-  const quote = (p) => p.content ? esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content) : `📷 写真${p.images?.length || ''}枚`;
+  const quote = (p) => p.content ? esc(p.content.length > 90 ? p.content.slice(0, 90) + '…' : p.content) : p.videos?.length ? '🎬 動画' : `📷 写真${p.images?.length || ''}枚`;
   const activity = data.activity.map((a) => `<a class="notif${a.at > seen.at ? ' unread' : ''}" href="#/p/${a.type === 'repost' ? a.post.id : a.post.id}">
       <span class="notif-icon ${a.type}">${icon(ic[a.type])}</span>
       <div class="notif-body"><div class="notif-text">${a.type === 'ff' ? '<span class="ff-chip">FF</span>' : ''}<b>${esc(a.user.displayName)}${adminBadge(a.user)}</b>さん${label[a.type]}</div><div class="notif-quote">${quote(a.post)}</div></div>

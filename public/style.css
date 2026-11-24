@@ -2297,3 +2297,11 @@ body.arena-open { overflow: hidden; }
 .yk-write{position:absolute;right:8%;top:10%;writing-mode:vertical-rl;font-size:clamp(26px,7vw,38px);font-weight:900;color:#f3d9ff;text-shadow:0 0 14px #b14cff,0 0 2px #fff}.yk-write span{opacity:0;animation:ykShow .2s calc(.6s + var(--i) * .17s) forwards}
 .yk-hold em{position:absolute;left:0;right:0;bottom:8%;text-align:center;font:800 14px system-ui,sans-serif;font-style:normal;color:#ffb3cf;animation:ykShow .5s 1.6s both}
 @media (prefers-reduced-motion:reduce){.yk-petal{animation:none}}
+
+/* 投稿の動画 */
+.post-video { margin-top: var(--s3); border-radius: var(--r-md); overflow: hidden; background: #000; max-height: 560px; width: 100%; display: flex; }
+.post-video video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+.composer-vid { grid-column: 1 / -1; position: relative; width: 100%; max-width: 320px; aspect-ratio: 16 / 10; border-radius: var(--r-md); overflow: hidden; background: #000; }
+.composer-vid video { width: 100%; height: 100%; object-fit: contain; }
+.composer-vid.uploading video { opacity: .5; }
+.composer-vid-pct { position: absolute; left: 8px; bottom: 8px; padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.65); color: #fff; font-size: 12px; font-weight: 700; }

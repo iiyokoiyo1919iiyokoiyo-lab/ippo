@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   // ミニゲーム (/games/) だけは IppO 自身の画面の中 (同じドメインの iframe) に表示できる。ほかのサイトには埋め込めない
   const framable = req.path.startsWith('/games/');
   res.setHeader('Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; " +
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; " +
     "frame-src 'self' https://www.youtube-nocookie.com; " +
     `frame-ancestors ${framable ? "'self'" : "'none'"}; base-uri 'none'; form-action 'self'; object-src 'none'`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -183,6 +183,7 @@ function hydrate(row, me, depth = 0) {
     liked: !!c.liked, reposted: !!c.reposted,
     community, question: !!row.question_day, quoted,
     images: ctx.imagesOf ? ctx.imagesOf(row.id) : [],
+    videos: ctx.videosOf ? ctx.videosOf(row.id) : [],
   };
 }
 const qCommunity = db.prepare('SELECT slug, name FROM communities WHERE id = ?');
@@ -217,7 +218,11 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const replyTo = req.body?.replyTo ? Number(req.body.replyTo) : null;
   const imgs = ctx.checkImages(req.user, req.body?.imageIds);
   if (imgs.error) return res.status(400).json({ error: imgs.error });
-  if (!content && !imgs.ids.length) return res.status(400).json({ error: '本文を入力するか、写真を選んでください' });
+  const vids = ctx.checkVideos ? ctx.checkVideos(req.user, req.body?.videoIds) : { ids: [] }; // 動画 (1 本・写真とはどちらか)
+  if (vids.error) return res.status(400).json({ error: vids.error });
+  if (vids.ids.length && imgs.ids.length) return res.status(400).json({ error: '写真と動画はいっしょに投稿できません' });
+  const media = imgs.ids.length + vids.ids.length;
+  if (!content && !media) return res.status(400).json({ error: '本文を入力するか、写真・動画を選んでください' });
   if ([...content].length > 280) return res.status(400).json({ error: '280文字以内で投稿してください' });
   const parent = replyTo ? qPost.get(replyTo) : null;
   if (replyTo && !parent) return res.status(404).json({ error: '返信先が見つかりません' });
@@ -229,7 +234,7 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
     if (target && target.quote_of && !target.content) target = qPost.get(target.quote_of);
     if (!target || target.repost_of) return res.status(404).json({ error: '引用する投稿が見つかりません' });
     quoteOf = target.id;
-    if (!content && !imgs.ids.length) return res.status(400).json({ error: 'ひとこと添えるか、写真を選んでください' });
+    if (!content && !media) return res.status(400).json({ error: 'ひとこと添えるか、写真・動画を選んでください' });
   }
   // コミュニティへの投稿 (返信は返信先のコミュニティを引き継ぐ)。参加者だけが投稿できる
   let communityId = parent ? parent.community_id : null;
@@ -243,6 +248,7 @@ app.post('/api/posts', requireAuth, writeLimit, (req, res) => {
   const r = db.prepare('INSERT INTO posts (user_id, content, reply_to, community_id, question_day, quote_of, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(req.user.id, content, replyTo, communityId, questionDay, quoteOf, Date.now());
   if (imgs.ids.length) ctx.attachImages(Number(r.lastInsertRowid), req.user, imgs.ids);
+  if (vids.ids.length) ctx.attachVideos(Number(r.lastInsertRowid), req.user, vids.ids);
   ctx.invalidateTrends();
   const created = qPost.get(r.lastInsertRowid);
   // FF (相互フォロー) に「投稿しました」を知らせる (返信・コミュニティ内の投稿は除く)
@@ -349,6 +355,7 @@ require('./call')(app, ctx); // 音声通話 (1 対 1・グループ。WebRTC。
 require('./avatar')(app, ctx); // プロフィールのアイコン
 require('./announce')(app, ctx); // 運営からのお知らせ
 require('./images')(app, ctx); // 投稿の写真
+require('./videos')(app, ctx); // 投稿の動画
 require('./verify')(app, ctx); // 認証マーク
 require('./horse')(app, ctx); // ミニゲーム「117万分の1 競走馬版」
 require('./race')(app, ctx); // 競走馬版: 図鑑の馬でレース (オンライン対戦)

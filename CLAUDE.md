@@ -130,6 +130,12 @@
 - 画面 (bb.js・index.html): ダークネイビー × 白の情報面 × ゴールド。下のナビ (ホーム・マイチーム・ドラフト・対戦・その他)。選手プロフィール `#player/<id>`・ニュース `#news`・記事 `#article/<id>`・トレード `#trade`・図鑑 `#zukan`・アプリとして使う `#install`。球団エンブレムはチーム名から作る SVG
 - アプリとして開く (PWA): `public/games/baseball/manifest.webmanifest` (範囲 `/games/baseball/`)・サービスワーカー `sw.js` (画面はネットワーク優先・つながらなければ `offline.html`。API・ログインはキャッシュしない)・アイコンとスプラッシュは `node tools/make_bb_icons.js`。IppO の iframe の外で開いたときはゲームの中でログインできる。オフラインのときは操作を止めて帯を出す
 
+## 投稿の動画 (videos.js)
+- 1 投稿 1 本 (写真とはどちらか)。MP4・MOV・WebM・50MB・3 分まで。投稿の画面の 🎥 ボタン → 先にアップロード (`POST /api/uploads/video`・進み具合を出す) → 投稿の `videoIds`
+- 表 `post_videos` (マイグレーション `2026-11-24-post-videos`)。ファイルはデータベースの隣の `videos/` (環境変数 `VIDEO_DIR` で変えられる)。配信 `GET /api/videos/:id` は Range 対応 (投稿前は本人だけ)
+- 撮影場所などのメタデータ: MP4 / MOV の udta・meta・uuid の箱を、大きさを変えずに中身を 0 にして free に書きかえる (再エンコードなし)。長さ・縦横は mvhd / tkhd から読む
+- 使われなかった動画・消えた投稿の動画のファイルは 10 分ごとに掃除。CSP に `media-src 'self' blob:`
+
 ## 音声通話 (call.js・push.js・public/sw.js)
 - 1 対 1 とグループ (最大 6 人。全員がおたがいに直接つなぐメッシュ) の音声通話 (WebRTC)。通話は「ルーム」(`rooms`)。合図 (かける・出る・切る・SDP・ICE・ミュート) は DM のリアルタイム接続 `/rt` で中継 (`realtime.js` が `call-` で始まるメッセージを `ctx.callMessage` に渡す。`/rt` の maxPayload は 16KB)。音声はサーバーを通らない
 - 呼べるのは、呼ぶ人に DM を送ったことがあるか、呼ぶ人をフォローしている人だけ (`canCall`)。DM の画面の右上に「📞 通話」、通話中の「＋ 呼ぶ」で最近 DM した人を足せる (`GET /api/call/candidates`)。呼び出しは 30 秒・最長 3 時間。1 対 1 の記録 (通話時間・不在着信・出られなかった) は DM の会話に残る
