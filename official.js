@@ -215,7 +215,9 @@ ${fmt(q.end)} まで ${TAG}` });
 }
 
 // ホームとゲームの画面に出す告知バナー (新キャラ・クエスト)。始まる 1 日前から予告、終わったら消える
-function banners(now = Date.now()) {
+// 先行表示: 予告の期間より前でも、ここに書いた人にだけキャラのバナーを出す (確認用。ほかの人には出ない)
+const BANNER_PREVIEW = { yumiko2048: ['RCN413'] };
+function banners(now = Date.now(), viewer = null) {
   const { CARDS, SKILLS, RELEASES, QUESTS, PICKUPS } = cards;
   const out = [];
   for (const q of QUESTS) {
@@ -234,10 +236,11 @@ function banners(now = Date.now()) {
   for (const [id, at] of Object.entries(RELEASES)) {
     const c = CARDS[id]; if (!c || !cards.RARITY[c.rarity] || cards.BULK_IDS.has(id)) continue;
     const pk = PICKUPS.find((x) => x.id === id), end = pk?.end || at + 7 * D;
-    if (now < at - D || now >= end) continue;
+    const early = now < at - D && !!viewer && (BANNER_PREVIEW[id] || []).includes(viewer); // 先行表示 (その人だけ)
+    if ((now < at - D && !early) || now >= end) continue;
     const live = now >= at;
     out.push({ id: 'char:' + id, kind: 'char', live, image: bannerUrl(bannerName('char', id)), href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
-      tag: live ? '🆕 新キャラ登場！' : `🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
+      tag: live ? '🆕 新キャラ登場！' : `${early ? '👀 先行表示 · ' : ''}🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
       title: `${c.rarity}「${c.name}」`, text: `わざ「${SKILLS[c.skill].name}」${pk ? ` · ピックアップ 1 体 ${pk.rate}%` : ''}`,
       sub: live ? (pk?.end ? `ピックアップは ${fmt(pk.end)} まで` : 'ガチャに登場中') : `${fmt(at)} ガチャに登場`, start: at, end });
   }
@@ -350,7 +353,7 @@ ${who} さんが「${quest.name}」で ${quest.boss}を討伐ッ！！
   // ---------- 告知バナー ----------
   app.get('/api/events/banners', rateLimit({ windowMs: 60_000, max: 120 }), (req, res) => {
     const u = officialId && db.prepare('SELECT username FROM users WHERE id = ?').get(officialId);
-    res.json({ banners: banners(), official: u ? u.username : null });
+    res.json({ banners: banners(Date.now(), req.user?.username || null), official: u ? u.username : null });
   });
 };
 Object.assign(module.exports, { schedule, banners, UPDATES, GACHA_NOTICES, gachaInfo, bannerName });
