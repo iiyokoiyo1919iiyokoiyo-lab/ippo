@@ -15,6 +15,7 @@ const { cleanJpeg } = require('./avatar');
 const BANNER_DIR = path.join(__dirname, 'public', 'banners');
 const bannerName = (kind, id) => `${kind}-${String(id).replace(/[^a-z0-9-]/gi, '')}`;
 const bannerFile = (name) => { const f = path.join(BANNER_DIR, name + '.jpg'); return fs.existsSync(f) ? f : null; };
+const bannerUrl = (name) => { const f = bannerFile(name); if (!f) return null; let v = 0; try { v = Math.floor(fs.statSync(f).mtimeMs / 1000); } catch {} return `/banners/${name}.jpg?v=${v}`; }; // 作り直したら URL が変わる (古い画像のキャッシュを使わない)
 
 const MIGRATION = `
 CREATE TABLE official_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -118,6 +119,13 @@ UR のあとのダブりも、LR までは枚数に数えます。これまで�
 高難易度クエストの報酬キャラ (雷神クリりん・ウォーターミッドナイト) を 25 枚集めると、LR に昇格！ 能力 +35%・虹色に輝く最強のカードに✨
 高難易度クエストは勝つたびに報酬キャラが 1 枚もらえるようになりました (レベルアップ書も 4 冊)
 図鑑とクエストの画面で「LR まで あと何枚」が見られます！ ${TAG}` },
+  // ユミコの絵を闇堕ちの姿に描き直したので、登場の投稿を新しいドパバナーで出し直す
+  { key: 'release-yumiko-repost-2026-11-24', at: Date.parse('2026-11-24T13:20:00+09:00'), until: Date.parse('2026-11-24T20:00:00+09:00'), banner: 'char-yumiko',
+    text: `🎊【ユミコのブチギレ祭】期間限定キャラ SSR「ユミコ」がガチャに登場！
+闇に堕ちたユミコが包丁を手に参戦…💢🔪
+わざ「ブチギレおばさん」相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)
+🎯 ピックアップ中は 1 体 2%！ (11/25(水) 13:15 まで・そのあと排出終了)
+ガチャはいま 1 回 33 コイン・10 回 300 コイン！ ${TAG}` },
   { key: 'gacha-price-2026-11-24', at: Date.parse('2026-11-24T13:20:00+09:00'), until: Date.parse('2026-11-25T13:20:00+09:00'),
     text: `🎰【ガチャが 3 分の 1 の値段に！】
 ぶんぼうぐバトラーズのガチャが、1 回 100 → 33 コイン・10 回 900 → 300 コインになりました！
@@ -192,14 +200,14 @@ function banners(now = Date.now()) {
   for (const q of QUESTS) {
     if (now < q.start - D || now >= q.end) continue;
     const live = now >= q.start, r = CARDS[q.reward];
-    out.push({ id: 'quest:' + q.id, kind: 'quest', live, image: bannerFile(bannerName('quest', q.id)) ? `/banners/${bannerName('quest', q.id)}.jpg` : null, href: '#/games/cards/quest', art: { id: r.id, rarity: r.rarity },
+    out.push({ id: 'quest:' + q.id, kind: 'quest', live, image: bannerUrl(bannerName('quest', q.id)), href: '#/games/cards/quest', art: { id: r.id, rarity: r.rarity },
       tag: live ? '🌠 期間限定クエスト 開催中' : `🌠 ${jstDay(q.start) === jstDay(now) ? '本日' : fmt(q.start).replace(/ .*/, '')} ${hm(q.start)} から 期間限定クエスト`,
       title: q.name, text: `クリアで ${r.rarity}「${r.name}」が仲間に！`, sub: live ? `${fmt(q.end)} まで` : `${fmt(q.start)} 開始`, start: q.start, end: q.end });
   }
   for (const g of cards.BULK_RELEASES) {
     if (now < g.at - D || now >= g.at + 7 * D) continue;
     const live = now >= g.at, top = g.ids.find((id) => CARDS[id].rarity === 'SSR') || g.ids[0];
-    out.push({ id: 'bulk:' + g.id, kind: 'char', live, image: bannerFile(bannerName('bulk', g.id)) ? `/banners/${bannerName('bulk', g.id)}.jpg` : null, href: '#/games/cards/gacha', art: { id: top, rarity: CARDS[top].rarity },
+    out.push({ id: 'bulk:' + g.id, kind: 'char', live, image: bannerUrl(bannerName('bulk', g.id)), href: '#/games/cards/gacha', art: { id: top, rarity: CARDS[top].rarity },
       tag: live ? '🎉 新キャラ大量追加！' : `🎉 ${fmt(g.at)} 新キャラ大量追加！`, title: g.name, text: `R・SR・SSR あわせて ${g.ids.length} 体がガチャに登場`, sub: live ? 'すべて恒常 · ガチャに登場中' : `${fmt(g.at)} 登場`, start: g.at, end: g.at + 7 * D });
   }
   for (const [id, at] of Object.entries(RELEASES)) {
@@ -207,7 +215,7 @@ function banners(now = Date.now()) {
     const pk = PICKUPS.find((x) => x.id === id), end = pk?.end || at + 7 * D;
     if (now < at - D || now >= end) continue;
     const live = now >= at;
-    out.push({ id: 'char:' + id, kind: 'char', live, image: bannerFile(bannerName('char', id)) ? `/banners/${bannerName('char', id)}.jpg` : null, href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
+    out.push({ id: 'char:' + id, kind: 'char', live, image: bannerUrl(bannerName('char', id)), href: '#/games/cards/gacha', art: { id, rarity: c.rarity },
       tag: live ? '🆕 新キャラ登場！' : `🆕 ${jstDay(at) === jstDay(now) ? '本日' : fmt(at).replace(/ .*/, '')} ${hm(at)} 新キャラ登場！`,
       title: `${c.rarity}「${c.name}」`, text: `わざ「${SKILLS[c.skill].name}」${pk ? ` · ピックアップ 1 体 ${pk.rate}%` : ''}`,
       sub: live ? (pk?.end ? `ピックアップは ${fmt(pk.end)} まで` : 'ガチャに登場中') : `${fmt(at)} ガチャに登場`, start: at, end });
@@ -215,7 +223,7 @@ function banners(now = Date.now()) {
   for (const n of GACHA_NOTICES) {
     if (now < n.at || now >= n.until) continue;
     const g = gachaInfo(n), name = bannerName('gacha', n.id);
-    out.push({ id: 'gacha:' + n.id, kind: 'char', live: true, href: '#/games/cards/gacha', image: bannerFile(name) ? `/banners/${name}.jpg` : null,
+    out.push({ id: 'gacha:' + n.id, kind: 'char', live: true, href: '#/games/cards/gacha', image: bannerUrl(name),
       art: { id: g.pickups[0]?.id || 'case', rarity: g.pickups[0]?.card.rarity || 'SSR' }, tag: '🎰 ガチャのお知らせ', title: g.sale ? g.sale.name : 'ガチャ',
       text: [g.sale ? `1 回 ${g.sale.pull} コイン` : '', ...g.pickups.map((p) => `${p.card.name} ${p.rate}%`)].filter(Boolean).join(' · '), sub: `${fmt(n.until)} まで`, start: n.at - 1, end: n.until });
   }
