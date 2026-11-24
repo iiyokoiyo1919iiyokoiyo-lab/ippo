@@ -4050,6 +4050,23 @@ async function viewQuest() {
 // ---------- 2048年のユミコ: 特別なガチャ演出 (出たときだけ) ----------
 //   心拍計の音 → KEEP OUT のテープ → 散る花びら → 手紙「2048年のお母さんへ」が開いて文字が浮かぶ → 母と娘のうしろ姿の写真 → 光ってユミコが登場
 //   タップで最後の場面まで飛ばし、もう一度タップでとじる (ふつうの結果の演出へ)。絵は public/cards-img/yumiko2048*.jpg
+// 血しぶき (2048年のユミコ「もう離さない」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
+function ykSplat(seed) {
+  let s = seed * 9301 + 49297; const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+  const n = 26, pts = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, k = i % 3 === 0 ? 0.95 + r() * 0.45 : 0.78 + r() * 0.16; pts.push([50 + Math.cos(a) * 30 * k, 50 + Math.sin(a) * 30 * k]); }
+  const d = 'M' + pts.map((p, i) => { const q = pts[(i + 1) % n]; return `${p[0].toFixed(1)},${p[1].toFixed(1)} Q${((p[0] + q[0]) / 2 + (r() - 0.5) * 6).toFixed(1)},${((p[1] + q[1]) / 2 + (r() - 0.5) * 6).toFixed(1)}`; }).join(' ') + ` ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}Z`;
+  const drops = Array.from({ length: 9 }, () => { const a = r() * Math.PI * 2, dist = 38 + r() * 12, rr = 1 + r() * 2.6, deg = (a * 180 / Math.PI).toFixed(0); return `<ellipse cx="${(50 + Math.cos(a) * dist).toFixed(1)}" cy="${(50 + Math.sin(a) * dist).toFixed(1)}" rx="${(rr * 1.8).toFixed(1)}" ry="${rr.toFixed(1)}" transform="rotate(${deg} ${(50 + Math.cos(a) * dist).toFixed(1)} ${(50 + Math.sin(a) * dist).toFixed(1)})"/>`; }).join('');
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><g fill="url(#ykbl)"><path d="${d}"/>${drops}</g><ellipse cx="42" cy="40" rx="9" ry="4" fill="#fff" opacity=".18" transform="rotate(-25 42 40)"/></svg>`;
+}
+function ykBloodHtml(card, word) {
+  const splats = [[18, 22, 46, 0], [70, 30, 58, 0.12], [40, 62, 52, 0.22], [82, 72, 40, 0.3], [12, 78, 36, 0.36], [55, 12, 34, 0.42], [30, 40, 30, 0.48]]
+    .map(([x, y, w, d], i) => `<i class="yk-spl" style="left:${x}%;top:${y}%;width:${w}%;--d:${d}s">${ykSplat(i + 3)}</i>`).join('');
+  const drips = Array.from({ length: 9 }, (_, i) => `<b class="yk-drip" style="left:${(i * 11.7 + 4 + (i % 3) * 3) % 100}%;--w:${3 + (i % 3) * 2}px;--l:${10 + (i * 7) % 20}%;--dd:${(i % 4) * 0.08}s"></b>`).join('');
+  return `<svg width="0" height="0" style="position:absolute"><defs><radialGradient id="ykbl" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#c3121b"/><stop offset=".6" stop-color="#7d0008"/><stop offset="1" stop-color="#3d0003"/></radialGradient></defs></svg>
+    <div class="yk-bl-sheet">${splats}<div class="yk-bl-fill"></div><div class="yk-bl-word">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div>${drips}</div>
+    <em class="yk-bl-cap">${esc(card)} は連れ去られた…</em>`;
+}
 function ykPetals(n = 18) { return Array.from({ length: n }, (_, i) => `<i class="yk-petal" style="--x:${(i * 53) % 100}%;--d:${(i % 9) * 0.45}s;--s:${0.7 + (i % 4) * 0.2};--dur:${5 + (i % 5)}s"></i>`).join(''); }
 function yumiko2048GachaFx() {
   return new Promise((resolve) => {
@@ -4255,7 +4272,15 @@ async function viewBattle(params) {
         t += 2100;
       }
       else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
-      else if (e.k === 'hold' || e.k === 'taken') { // もう離さない: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
+      else if (e.k === 'taken') { // 連れていかれた: 血が画面に飛び散る → 画面が血で埋まる → 血が流れ落ちると、相手はもういない
+        setTimeout(() => {
+          overlayFx('yk-blood', ykBloodHtml(e.card, 'ずっと一緒だよ？'), 3600);
+          const f = e.bench ? null : el(e.p);
+          if (f) setTimeout(() => f.classList.add('yk-gone'), 1250); // 血で埋まっているあいだに消す
+        }, t);
+        t += 3300;
+      }
+      else if (e.k === 'hold') { // もう離さない: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
         const word = e.k === 'hold' ? 'もう離さない。' : 'お母さんも…ずっと一緒だよ？';
         setTimeout(() => { overlayFx('yk-hold' + (e.k === 'taken' ? ' taken' : ''), `<img class="yk-dark" src="/cards-img/${e.k === 'hold' ? 'yumiko2048-dark' : 'yumiko2048-girl'}.jpg" alt=""><div class="yk-write">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div><em>${esc(e.card)}${e.k === 'hold' ? ' は連れていかれる' : ' は連れていかれた…'}</em>`, 2800); replay(el(e.p), 'hurt'); }, t);
         t += 2300;
