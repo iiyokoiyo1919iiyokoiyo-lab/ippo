@@ -34,10 +34,10 @@ const SKILLS = {
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
 // dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
 const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
-const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma' };
+const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife' };
 // レア度とレベルで強くなる: R +4% / SR +8% / SSR +12%、レベル 1 つにつき +2% (Lv15 で +28%)。
 // この強さなら、はじめのデッキでも SSR のデッキに 1〜2 割は勝てる (作戦と相性で逆転できる) ことをシミュレーションで確かめた。
 // カードの基本の強さは、同じレア度どうしの 1 対 1 で勝率がほぼ 50% になるよう調整してある
@@ -74,7 +74,8 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
-  ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 62, 16, 11, 14, 'buchigire'], // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
+  ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 44, 27, 8, 15, 'buchigire'], // HP 少なめの攻撃力お化け (2026-11-24 に変更・前は HP 62・攻撃 16・防御 11・速さ 14)。パッシブ「ナイフ」
+  // 2026-11-24 13:15 (日本時間) 登場の限定キャラ (ユミコのブチギレ祭 ピックアップ 2%・11/25 13:15 で排出終了)。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
   // ---- 2026-11-19 大量追加: R 20 体・SR 20 体・SSR 10 体 (すべて恒常。能力は既存カードと 1 対 1 で勝率 50% 前後に合わせた) ----
@@ -345,6 +346,7 @@ function resolveTurn(state, acts, rnd) {
     foe.hp -= dmg;
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
+    if (foe.hp > 0 && CARD_PASSIVE[me.id] === 'knife' && !immune(foe)) { const again = foe.poison > 0 && foe.bleed; foe.poison = POISON_TURNS; foe.bleed = true; if (!again) ev.push({ k: 'bleed', p: o, card: foe.name, by: me.name, bench }); } // パッシブ「ナイフ」: 失血 (毒と同じ)
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
@@ -374,7 +376,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'barrier') hit(p, 0.8);
       else if (me.skill === 'sweep') { // 場のカードに 1.4 倍・控えに 0.8 倍の無属性こうげき + 全員に毒
         const o = 1 - p, got = [], act0 = sides[o].active;
-        sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; got.push(c.name); } } });
+        sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; c.bleed = false; got.push(c.name); } } });
         if (got.length) ev.push({ k: 'poisoned', p: o, cards: got });
       } else if (me.skill === 'thunder') hit(p, THUNDER_POWER, { typeless: true }); // 落雷: 2.3 倍の無属性こうげき
       else if (me.skill === 'sermon') { // 説教: 相手の場のカードの攻撃力を 0.6 倍 (1 枚につき 1 回) + 味方全員の毒を治す
@@ -424,7 +426,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'venom') { // 野獣の眼光: 場のカードを毒にして怯ませる (ダメージはなし)。相手より先なら、そのターンの相手の行動を止める・後なら次のターン
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
         if (foe.hp > 0) {
-          const now = !acted.has(o); foe.poison = POISON_TURNS;
+          const now = !acted.has(o); foe.poison = POISON_TURNS; foe.bleed = false;
           if (now) stunNow.add(o); else foe.flinch = 2;
           ev.push({ k: 'poisoned', p: o, cards: [foe.name] }); ev.push({ k: 'flinched', p: o, card: foe.name, now });
         }
@@ -457,7 +459,7 @@ function resolveTurn(state, acts, rnd) {
       if (immune(c)) { c.poison--; return; } // 絶対権力: 毒も効かない
       const dmg = Math.min(c.hp, Math.max(1, Math.round(c.maxHp * POISON_RATE)));
       c.hp -= dmg; c.poison--;
-      ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active });
+      ev.push({ k: 'poison', p, card: c.name, dmg, left: c.poison, bench: i !== sides[p].active, bleed: !!c.bleed }); if (!c.poison) c.bleed = false;
       if (c.hp <= 0) { c.poison = 0; ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active }); }
     });
   });

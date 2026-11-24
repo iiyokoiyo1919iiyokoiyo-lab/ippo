@@ -76,7 +76,7 @@ function festCharRight(c, sk, { withSkill = true } = {}) {
     ${withSkill ? `    <div style="padding:${ps ? '10px 18px' : '14px 20px'};border-radius:24px;background:linear-gradient(135deg,rgba(70,10,110,.78),rgba(160,20,110,.7));border:3px solid #ffb3d9;box-shadow:0 0 24px rgba(255,140,198,.8),inset 0 0 18px rgba(255,255,255,.15);color:#fff">
       <div style="font-size:31px;color:#ffe066;text-shadow:0 0 12px rgba(255,224,102,.7)">${c.skill === 'dna' ? '🧬' : esc(c.emoji || '✨')} わざ「${esc(sk.name)}」</div>
       <div style="margin-top:4px;font-size:22px;line-height:1.45;font-weight:800">${esc(sk.desc.replace(/\s*\([^()]*\)\s*$/, ''))}</div>
-      ${cards.CARD_PASSIVE[c.id] ? `<div style="margin-top:6px;font-size:25px;color:#a5f3ff;text-shadow:0 0 12px rgba(165,243,255,.7)">💗 パッシブ「${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].name)}」</div><div style="font-size:20px;line-height:1.35;font-weight:800">${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].desc)}</div>` : ''}</div>` : ''}`;
+      ${cards.CARD_PASSIVE[c.id] ? `<div style="margin-top:6px;font-size:25px;color:#a5f3ff;text-shadow:0 0 12px rgba(165,243,255,.7)">${({ knife: '🔪', morale: '🔥' })[cards.CARD_PASSIVE[c.id]] || '💗'} パッシブ「${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].name)}」</div><div style="font-size:20px;line-height:1.35;font-weight:800">${esc(cards.PASSIVES[cards.CARD_PASSIVE[c.id]].desc)}</div>` : ''}</div>` : ''}`;
 }
 // 新キャラ
 function charHtml(id, at) {
