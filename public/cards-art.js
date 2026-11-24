@@ -365,6 +365,34 @@
         ${twinkle(104, 60, 7, '#fff')}${twinkle(12, 40, 5, '#c3fae8')}${twinkle(36, 112, 4, '#fff')}</g>`;
       },
       // 中大兄皇子 (MR・おもい・大化の改新): 硯 (すずり) の皇子。黒い冠 (纓が立つ)、笏 (しゃく) を持ち、「大化」の巻物。体は石の硯で、墨の池がある
+      // ユミコ (SSR・おもい・ブチギレおばさん): ブチギレると止まらないおばさん。赤茶のパーマ・エプロン・腕まくり・怒りマーク 💢・頭から湯気・買い物袋 (ネギ)
+      yumiko: () => {
+        const skin = rg('sk', [[0, '#ffd6c2'], [1, '#e8a183']], 0.4, 0.35, 0.8), apron = lg('ap', [[0, '#fff5f5'], [1, '#ffc9c9']]);
+        const curl = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${lg('hr' + x + '_' + y, [[0, '#c0563a'], [1, '#7a2414']])}" stroke="#5c1a0d" stroke-width="1"/>`;
+        const vein = (x, y, k) => `<g transform="translate(${x} ${y}) scale(${k})"><path d="M-6,-2 Q-2,-2 -2,-6 M2,-6 Q2,-2 6,-2 M6,2 Q2,2 2,6 M-2,6 Q-2,2 -6,2" stroke="#e03131" stroke-width="2.6" fill="none" stroke-linecap="round"/></g>`;
+        const steam = (x) => `<path d="M${x},14 C${x - 6},8 ${x + 6},4 ${x},-2" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" opacity=".85"/>`;
+        return `
+        <circle cx="60" cy="64" r="56" fill="${rg('aura', [[0, '#ffc9c9', 0.95], [0.55, '#ff6b6b', 0.45], [1, '#e03131', 0]])}"/>
+        ${Array.from({ length: 12 }, (_, i) => { const a = i * Math.PI / 6; return `<path d="M${(60 + Math.cos(a) * 30).toFixed(1)},${(64 + Math.sin(a) * 30).toFixed(1)} L${(60 + Math.cos(a + 0.12) * 58).toFixed(1)},${(64 + Math.sin(a + 0.12) * 58).toFixed(1)} L${(60 + Math.cos(a - 0.12) * 58).toFixed(1)},${(64 + Math.sin(a - 0.12) * 58).toFixed(1)}Z" fill="#ffe066" opacity=".35"/>`; }).join('')}
+        <path d="M28,118 Q24,92 40,84 Q60,76 80,84 Q96,92 92,118Z" fill="${lg('sw', [[0, '#9775fa'], [1, '#5f3dc4']])}" stroke="#3b2a85" stroke-width="2"/>
+        <path d="M42,88 Q60,82 78,88 L80,118 L40,118Z" fill="${apron}" stroke="#e03131" stroke-width="1.6"/>
+        <path d="M50,98 H70" stroke="#e03131" stroke-width="1.6"/><circle cx="60" cy="106" r="5" fill="none" stroke="#ff8787" stroke-width="1.4"/>
+        <path d="M30,96 L18,80" stroke="${skin}" stroke-width="10" stroke-linecap="round"/><path d="M30,96 L18,80" stroke="#c9825f" stroke-width="1" fill="none" opacity=".5"/>
+        <circle cx="16" cy="76" r="7" fill="${skin}" stroke="#c9825f" stroke-width="1.2"/><path d="M12,72 L20,72 M12,76 L20,76" stroke="#c9825f" stroke-width="1"/>
+        <path d="M90,96 L100,108" stroke="${skin}" stroke-width="10" stroke-linecap="round"/>
+        <path d="M94,100 L110,98 L114,120 L92,122Z" fill="${lg('bag', [[0, '#e9ecef'], [1, '#adb5bd']])}" stroke="#495057" stroke-width="1.2"/>
+        <path d="M104,98 L100,74 M108,98 L110,72" stroke="#51cf66" stroke-width="3.4" stroke-linecap="round"/><path d="M102,104 L106,98" stroke="#f8f9fa" stroke-width="5"/>
+        ${curl(38, 44, 10)}${curl(82, 44, 10)}${curl(40, 60, 8)}${curl(80, 60, 8)}${curl(46, 30, 10)}${curl(74, 30, 10)}${curl(60, 26, 11)}
+        <ellipse cx="60" cy="56" rx="21" ry="23" fill="${skin}" stroke="#c9825f" stroke-width="1.6"/>
+        <ellipse cx="60" cy="56" rx="21" ry="23" fill="#ff6b6b" opacity=".18"/>
+        ${curl(48, 36, 7)}${curl(60, 33, 7)}${curl(72, 36, 7)}
+        ${face(60, 55, { eyes: 'fierce', mouth: 'open', s: 0.8, brows: true, iris: '#7a2414' })}
+        <path d="M43,45 L53,49 M77,45 L67,49" stroke="#5c1a0d" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M45,60 Q48,62 51,60 M69,60 Q72,62 75,60" stroke="#c9825f" stroke-width="1" fill="none" opacity=".8"/>
+        ${vein(80, 36, 1.1)}${vein(40, 70, 0.8)}${vein(100, 30, 1.3)}
+        ${steam(44)}${steam(60)}${steam(76)}
+        <circle cx="39" cy="64" r="2.6" fill="#fff" stroke="#adb5bd" stroke-width=".8"/><circle cx="81" cy="64" r="2.6" fill="#fff" stroke="#adb5bd" stroke-width=".8"/>`;
+      },
       // 魔法使いすえつぐ (SSR・つつむ・DNAを取り出す): 自分を魔法少女だと思っている人型のおばさん。
       // パーマの髪にティアラ、ピンクのフリフリ衣装、ハートのステッキ。片手に抜き取った DNA (二重らせん)
       suetsugu: () => {

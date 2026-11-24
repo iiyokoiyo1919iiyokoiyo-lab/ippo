@@ -29,6 +29,7 @@ const SKILLS = {
   order: { name: '社長命令', desc: '相手の場のカードに 1.5 倍、控えのカードに 0.7 倍の無属性こうげき' },
   deathsong: { name: '死の歌声─一方的な愛─', desc: '1.2 倍のこうげき。このターンにこのわざを受けた相手が、そのターンのうちに使い手を倒すと、相手の場と控えのカードからランダムで 1 枚を道連れにする' },
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
+  buchigire: { name: 'ブチギレおばさん', desc: '相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
@@ -73,6 +74,7 @@ const CARD_LIST = [
   ['chalk', '伝説の黒板竜', '🐉', 'SSR', 'heavy', 67, 14, 12, 7, 'drain'],
   ['case', '虹色ペンケース姫', '🌈', 'SSR', 'wrap', 63, 16, 11, 15, 'barrier'],
   ['scissors', '疾風剣士ハサミ丸', '✂️', 'SSR', 'cut', 54, 15, 6.9, 17, 'sweep'], // 2026-11-18 10:25 (日本時間) 登場
+  ['yumiko', 'ユミコ', '💢', 'SSR', 'heavy', 62, 16, 11, 14, 'buchigire'], // 2026-11-24 13:15 (日本時間) 登場。ブチギレると止まらないおばさん。わざ「ブチギレおばさん」で相手の場のカードと相打ち (自分も倒れる)。体は弱め
   ['suetsugu', '魔法使いすえつぐ', '🩷', 'SSR', 'wrap', 44.64, 20.09, 8.04, 16, 'dna'], // 2026-11-23 8:00 (日本時間) 登場の限定キャラ (毎週月曜のIppO祭 ピックアップ 2%)。自分を魔法少女だと思っている人型のおばさん。Lv1 で HP 200・攻撃 90・防御 36・速さ 16 (×SSR 1.12×STAT_SCALE 4)。わざ封じとセントラルドグマが強いので、能力を下げた (HP 200・攻撃 90・速さ 16) (はじめは HP 270・攻撃 95・防御 45・速さ 18 で約 74%)
   ['tadokoro', 'タドコロ', '🎒', 'SSR', 'heavy', 74, 20, 14, 12, 'venom'], // 2026-11-19 8:35 (日本時間) 登場 (ピックアップ 2%)。パッシブ「士気」
   // ---- 2026-11-19 大量追加: R 20 体・SR 20 体・SSR 10 体 (すべて恒常。能力は既存カードと 1 対 1 で勝率 50% 前後に合わせた) ----
@@ -140,7 +142,7 @@ const CARDS = Object.fromEntries(CARD_LIST.map(([id, name, emoji, rarity, type, 
 const BY_RARITY = Object.fromEntries(Object.keys(RARITY).map((r) => [r, CARD_LIST.filter((c) => c[3] === r).map((c) => c[0])]));
 // ---------- 新キャラの登場日時 (この時刻より前は、ガチャにも図鑑にも出さない。端末にも送らない) ----------
 // テストのときは環境変数 CB_RELEASE_<ID> (ミリ秒の時刻) で上書きできる
-const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), ando: Date.parse('2026-11-22T12:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
+const RELEASES = { scissors: Date.parse('2026-11-18T10:25:00+09:00'), star: Date.parse('2026-11-18T08:00:00+09:00'), tadokoro: Date.parse('2026-11-19T08:35:00+09:00'), raijin: Date.parse('2026-11-19T08:00:00+09:00'), watermid: Date.parse('2026-11-20T08:00:00+09:00'), nakanoooe: Date.parse('2026-11-20T23:30:00+09:00'), yhime: Date.parse('2026-11-22T08:00:00+09:00'), ando: Date.parse('2026-11-22T12:00:00+09:00'), suetsugu: Date.parse('2026-11-23T08:00:00+09:00'), yumiko: Date.parse('2026-11-24T13:15:00+09:00') }; // 疾風剣士ハサミ丸: 2026 年 11 月 18 日 午前 10 時 25 分 (日本時間)
 // まとめて追加したキャラ (1 体ずつではなく、まとめて 1 回だけお知らせする)
 const BULK_RELEASES = [
   { id: 'mega-2026-11', name: '新キャラ 50 体 大量追加', at: Date.parse('2026-11-19T23:30:00+09:00'), ids: ["crayon", "cutter", "sharpener", "binder", "envelope", "stamp", "inkpad", "clipboard", "highlighter", "brush", "palette", "calc", "notecard", "masking", "ballpen", "punch", "bookmark", "lead", "dust", "tapecut", "fudebako", "drafting", "colors", "sketch", "magnet", "whiteboard", "abacus", "inkbottle", "quill", "label", "gluestick", "calendar", "lamp", "clock", "setsquare", "origami", "seal", "diary", "sensu", "gem", "rainbowpen", "meteorruler", "sumiryu", "crystal", "gyokuji", "phoenix", "galaxy", "raimei", "hyoketsu", "sakura"] },
@@ -404,6 +406,14 @@ function resolveTurn(state, acts, rnd) {
         hit(p, DEATHSONG_POWER);
         if (foe.hp > 0 && me.hp > 0) { loved.set(foe, me); ev.push({ k: 'deathsong', p, card: me.name, target: foe.name }); }
       }
+      else if (me.skill === 'buchigire') { // ブチギレおばさん: 相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)
+        const o = 1 - p, foe = sides[o].cards[sides[o].active];
+        if (foe.hp > 0) {
+          foe.hp = 0; foe.poison = 0; me.hp = 0; me.poison = 0;
+          ev.push({ k: 'buchigire', p, card: me.name, target: foe.name });
+          ev.push({ k: 'ko', p: o, card: foe.name }); ev.push({ k: 'ko', p, card: me.name });
+        }
+      }
       else if (me.skill === 'dna') { // DNAを取り出す: 相手の場のカードのわざを、そのバトル中ずっと封じる → 1.8 倍のこうげき
         // 先に封じる (絶対権力もここで崩れるので、DNA のこうげきからダメージが通る)
         const o = 1 - p, foe = sides[o].cards[sides[o].active];
@@ -618,7 +628,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order', 'buchigire'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;

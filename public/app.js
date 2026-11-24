@@ -4016,6 +4016,7 @@ async function viewBattle(params) {
     : e.k === 'immune' ? `👔 ${e.p === you ? '' : '相手の'}${e.card}の絶対権力！ ダメージを受けない`
     : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
+    : e.k === 'buchigire' ? `💢 ${name(e.p, e.card)}がブチギレた！ ${e.p === you ? '相手の' : ''}${e.target}を道連れにして、${e.card}も倒れた…！`
     : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
     : e.k === 'taika' ? `📜 大化の改新！ ${e.p === you ? '味方' : '相手'}の${e.fixed.length || e.meteor ? `${e.fixed.map((x) => `${x.card}の${x.what.join('・')}`).join('、')}${e.meteor ? `${e.fixed.length ? '、' : ''}流星` : ''}が取りのぞかれた` : '状態異常はなかった (こうげきだけ)'}`
@@ -4139,6 +4140,8 @@ async function viewBattle(params) {
         }, t);
         t += 900;
       }
+      else if (e.k === 'buchigire') { // ブチギレおばさん: 怒りマークがあふれて、両方たおれる
+        setTimeout(() => { overlayFx('cb-dsong curse', `<b>ブチギレ</b><i>💢 あんたも道連れよ！</i><em>${esc(e.target)} と相打ち</em>${Array.from({ length: 10 }, (_, i) => `<s style="--x:${(i * 37) % 100}%;--d:${(i % 5) * 0.1}s">💢</s>`).join('')}`, 1800, e.p === you ? 'top' : 'bottom'); replay(el(1 - e.p), 'hurt'); replay(el(e.p), 'hurt'); }, t); t += 1100; }
       else if (e.k === 'curse') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>道連れ</b><i>💔 一方的な愛</i><em>${esc(e.card)}</em>`, 1700, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
       else if (e.k === 'sealed') { // DNAを取り出す: ピンクの魔法陣から二重らせんが抜き取られる
         setTimeout(() => {
