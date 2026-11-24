@@ -777,9 +777,9 @@ const REWARD = { easy: { win: 20, lose: 5 }, cpu: { win: 30, lose: 10 }, oni: { 
 // シミュレーションで boost (能力の倍率) を決めた (tools/tune_oni.js)。CPU は先を読む強い CPU
 // お試しバトル: 登場前・登場中のキャラを Lv18 で試せる CPU 戦 (報酬・記録なし)。until まで。mates はいっしょに入る 2 体
 const TRIALS = [
-  { id: 'yumiko2048', until: Date.parse('2026-11-30T14:59:00+09:00'), mates: ['gold', 'chalk'], level: 18 },
+  { id: 'yumiko2048', until: Date.parse('2026-11-30T14:59:00+09:00'), mates: ['gold', 'chalk'], level: 18, users: ['RCN413'] }, // users: この人たちだけ (書かなければ全員)
 ];
-const trialsNow = (now = Date.now()) => TRIALS.filter((t) => now < t.until && CARDS[t.id]);
+const trialsNow = (username = null, now = Date.now()) => TRIALS.filter((t) => now < t.until && CARDS[t.id] && (!t.users || (!!username && t.users.includes(username))));
 const ONI_DECKS = [
   { id: 'shippu', name: '疾風忍軍', emoji: '🌪️', text: '素早さで押し切る忍びの軍団', cards: [['scissors', 20], ['pin', 20], ['tape', 20]], boost: 0.943 },
   { id: 'hoshi', name: '星降る夜の騎士団', emoji: '🌠', text: '流星で削ってから回復で粘る', cards: [['star', 20], ['leaf', 20], ['case', 20]], boost: 1.054 },
@@ -894,7 +894,7 @@ function install(app, ctx) {
     newBulk: BULK_RELEASES.filter((g) => Date.now() >= g.at && Date.now() - g.at < NEW_DAYS * 86400_000).map((g) => ({ id: g.id, name: g.name, at: g.at, ids: g.ids, count: Object.fromEntries(['R', 'SR', 'SSR'].map((r) => [r, g.ids.filter((id) => CARDS[id].rarity === r).length])) })),
     ...(() => { const x = ratesNow(); return { rates: x.rates, perCard: x.perCard }; })(),
     pickups: pickupsNow().map((x) => ({ name: x.name, id: x.id, rate: x.rate, end: x.end })),
-    trials: trialsNow().map((t) => ({ id: t.id, name: CARDS[t.id].name })),
+    trials: trialsNow(req.user?.username).map((t) => ({ id: t.id, name: CARDS[t.id].name })),
     rateUps: rateUpsNow().map((x) => ({ name: x.name, ids: x.ids.filter((id) => isReleased(id)), mult: x.mult, end: x.end })), types: TYPES, beats: BEATS,
     urPromote: UR_PROMOTE, lrPromote: { copies: LR_PROMOTE.copies, bonus: Math.round((LR_PROMOTE.mult - 1) * 100) }, fesLr: { copies: FES_LR.copies, ids: FES_LIMITED.filter((id) => isReleased(id)) }, urDupScrolls: UR_DUP_SCROLLS, scrollReward: SCROLL_REWARD, hardQuestScrolls: HARD_QUEST_SCROLLS, coinsPerScroll: COINS_PER_SCROLL, scrollMinTurns: SCROLL_MIN_TURNS, pullCost: pricesNow().pull, tenCost: pricesNow().ten, sale: pricesNow().sale, pity: PITY, urBonus: Math.round((UR_MULT - 1) * 100), horseUrChance: HORSE_UR_CHANCE, levelBonus: LEVEL_BONUS, rarityBonus: Object.fromEntries(Object.entries({ ...RARITY, ...EXTRA_RARITY }).map(([k, v]) => [k, Math.round((v.mult - 1) * 100)])), dailyCoins: DAILY_COINS, maxLevel: MAX_LEVEL, dupMaxLevel: DUP_MAX_LEVEL, highLevelCost: HIGH_LEVEL_COST, reward: REWARD, rewardsPerDay: REWARDS_PER_DAY,
   }));
@@ -911,7 +911,7 @@ function install(app, ctx) {
     res.json({ stories: list });
   });
   // 鬼難のデッキ (CPU が使う 5 種類)
-  app.get('/api/cards/trials', (req, res) => res.json({ trials: trialsNow().map((t) => ({ id: t.id, until: t.until, level: t.level, release: RELEASES[t.id] || null,
+  app.get('/api/cards/trials', (req, res) => res.json({ trials: trialsNow(req.user?.username).map((t) => ({ id: t.id, until: t.until, level: t.level, release: RELEASES[t.id] || null,
     cards: [t.id, ...t.mates].map((id) => ({ ...statsOf(id, t.level), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc, fes: isFes(id),
       ...(CARD_PASSIVE[id] ? { passiveName: PASSIVES[CARD_PASSIVE[id]].name, passiveDesc: PASSIVES[CARD_PASSIVE[id]].desc } : {}) })) })) }));
   app.get('/api/cards/oni', (req, res) => res.json({ reward: REWARD.oni, decks: ONI_DECKS.map((d) => ({ id: d.id, name: d.name, emoji: d.emoji, text: d.text, boost: d.boost,
@@ -1328,7 +1328,7 @@ function install(app, ctx) {
         leave(uid);
         if (m.mode === 'cpu') return startBattle('cpu', [uid, null]);
         if (m.mode === 'trial') { // お試しバトル: Lv18 のお試しデッキ vs 先を読む CPU (ランダムな SSR・MR 3 体・Lv18)
-          const tr = trialsNow().find((x) => x.id === String(m.deck || ''));
+          const tr = trialsNow(userView(uid)?.username).find((x) => x.id === String(m.deck || ''));
           const trialCard = (id) => ({ ...statsOf(id, tr.level), skillName: SKILLS[CARDS[id].skill].name, skillDesc: SKILLS[CARDS[id].skill].desc }); // 登場前のキャラは図鑑にないので、わざの名前もここで渡す
           if (!tr) return send(uid, { t: 'error', msg: 'このお試しバトルは終わりました' });
           const foePool = CARD_LIST.filter((c) => ['SSR', 'MR'].includes(c[3]) && c[0] !== tr.id && !tr.mates.includes(c[0]) && isReleased(c[0])).map((c) => c[0]);
