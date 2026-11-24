@@ -2251,3 +2251,49 @@ body.arena-open { overflow: hidden; }
 .cb-clear-bonus{margin:8px auto;padding:10px 12px;border-radius:14px;background:linear-gradient(135deg,#fff3c4,#ffd8a8);color:#5c3b00;font-size:14px;line-height:1.7;text-align:center;max-width:360px}
 
 .cb-story-warn{display:inline-block;margin:2px 0;padding:1px 8px;border-radius:6px;background:#fff0f0;color:#c92a2a;font-size:11.5px;font-weight:800;font-family:system-ui,sans-serif}
+
+/* ---------- 2048年のユミコ: ガチャと必殺技の特別な演出 ---------- */
+.yk-fx{position:fixed;inset:0;z-index:300;overflow:hidden;background:radial-gradient(circle at 50% 45%,#2b0f45 0%,#12061f 60%,#05020a 100%);color:#fff;font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;animation:ykIn .4s}
+.yk-fx.out{animation:ykOut .45s forwards}
+@keyframes ykIn{from{opacity:0}}@keyframes ykOut{to{opacity:0}}
+.yk-ecg{position:absolute;left:0;right:0;top:44%;text-align:center;animation:ykFadeOut .5s 1.3s forwards}.yk-ecg svg{width:100%;height:60px}.yk-ecg path{fill:none;stroke:#ff6b9d;stroke-width:2.5;stroke-dasharray:900;stroke-dashoffset:900;animation:ykDraw 1.1s linear forwards;filter:drop-shadow(0 0 6px #ff6b9d)}
+.yk-ecg span{display:block;font-family:system-ui,sans-serif;font-weight:800;letter-spacing:.3em;color:#ffb3cf;font-size:14px;animation:ykBlink .25s 4 alternate}
+@keyframes ykDraw{to{stroke-dashoffset:0}}@keyframes ykBlink{to{opacity:.2}}@keyframes ykFadeOut{to{opacity:0;visibility:hidden}}
+.yk-tape{position:absolute;left:-20%;width:140%;padding:6px 0;background:repeating-linear-gradient(90deg,#f5c518 0 40px,#e0a800 40px 80px);color:#1a1300;font:900 18px/1 system-ui,sans-serif;letter-spacing:.2em;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.6);opacity:0}
+.yk-tape.t1{top:16%;transform:rotate(-12deg) translateX(-110%);animation:ykTape .6s .9s forwards}.yk-tape.t2{bottom:14%;transform:rotate(9deg) translateX(110%);animation:ykTape2 .6s 1.1s forwards}
+@keyframes ykTape{to{opacity:.9;transform:rotate(-12deg) translateX(0)}}@keyframes ykTape2{to{opacity:.9;transform:rotate(9deg) translateX(0)}}
+.yk-petals{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.yk-petal{position:absolute;top:-8%;left:var(--x);width:14px;height:11px;border-radius:70% 0 70% 0;background:linear-gradient(135deg,#ffd6ec,#e599f7);opacity:.85;transform:scale(var(--s));animation:ykFall var(--dur) var(--d) linear infinite}
+@keyframes ykFall{0%{transform:translate(0,0) rotate(0) scale(var(--s))}100%{transform:translate(-60px,115vh) rotate(540deg) scale(var(--s))}}
+.yk-fx .yk-petals{opacity:0;animation:ykShow .8s 1.3s forwards}@keyframes ykShow{to{opacity:1}}
+.yk-letter{position:absolute;left:50%;top:50%;width:min(86vw,420px);transform:translate(-50%,-40%) scale(.8);opacity:0;text-align:center;animation:ykLetter .8s 1.6s cubic-bezier(.2,1.2,.3,1) forwards,ykFadeOut .5s 4.4s forwards}
+@keyframes ykLetter{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.yk-env{display:inline-block;padding:14px 22px;border-radius:8px;background:linear-gradient(160deg,#fff6fb,#f3d9ff);color:#5b2a86;font-size:20px;font-weight:900;box-shadow:0 0 0 2px #f3c4ff,0 0 40px rgba(230,150,255,.8)}
+.yk-letter p{margin:14px 0 0;font-size:17px;line-height:1.6;text-shadow:0 0 12px rgba(230,150,255,.9);opacity:0}.yk-letter .l1{animation:ykShow .9s 2.4s forwards}.yk-letter .l2{animation:ykShow .9s 3.3s forwards}
+.yk-photo{position:absolute;left:50%;top:50%;width:min(70vw,320px);transform:translate(-50%,-50%) rotate(-14deg) scale(.6);opacity:0;border:8px solid #fff;border-bottom-width:24px;box-shadow:0 20px 40px rgba(0,0,0,.6);animation:ykPhoto .9s 4.4s cubic-bezier(.2,1.2,.3,1) forwards,ykFadeOut .4s 6.1s forwards}
+@keyframes ykPhoto{to{opacity:1;transform:translate(-50%,-50%) rotate(-5deg) scale(1)}}
+.yk-flash{position:absolute;inset:0;background:#fff;opacity:0;animation:ykFlash .7s 6.2s forwards;pointer-events:none}@keyframes ykFlash{30%{opacity:.95}100%{opacity:0}}
+.yk-final{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;animation:ykShow .6s 6.4s forwards}
+.yk-girl{position:absolute;right:-6%;top:2%;width:min(62vw,340px);opacity:.38;-webkit-mask-image:radial-gradient(circle,#000 35%,transparent 70%);mask-image:radial-gradient(circle,#000 35%,transparent 70%);animation:ykGhost 4s ease-in-out infinite}
+@keyframes ykGhost{50%{opacity:.18;transform:translateY(6px)}}
+.yk-chara{position:relative;width:min(66vw,300px);aspect-ratio:1;border-radius:50%;overflow:hidden;box-shadow:0 0 0 4px #f3c4ff,0 0 60px rgba(200,120,255,.9);animation:ykZoom .9s 6.4s cubic-bezier(.2,1.2,.3,1) both}.yk-chara img{width:100%;height:100%;object-fit:cover;display:block}
+@keyframes ykZoom{from{transform:scale(1.5);filter:brightness(2)}}
+.yk-copy{margin:18px 0 4px;font-size:20px;text-shadow:0 0 14px #c77dff}.yk-tag{margin:6px 0 0;font:900 14px system-ui,sans-serif;letter-spacing:.1em;color:#ffe8a3}.yk-tag b{background:linear-gradient(90deg,#fff,#e5dbff,#ffd6f5);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:18px}
+.yk-name{margin:2px 0 0;font-size:34px;font-weight:900;background:linear-gradient(180deg,#fff,#e599f7);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 #4a1a6b)}
+.yk-tap{margin-top:16px;font:700 12px system-ui,sans-serif;color:#d0bfff;animation:ykBlink .8s 7.6s infinite alternate;opacity:.9}
+.yk-fx.skip .yk-ecg,.yk-fx.skip .yk-tape,.yk-fx.skip .yk-letter,.yk-fx.skip .yk-photo{display:none}.yk-fx.skip .yk-final,.yk-fx.skip .yk-petals{animation:none;opacity:1}.yk-fx.skip .yk-chara{animation:none}.yk-fx.skip .yk-flash{animation:ykFlash .5s forwards}
+/* 必殺技 (バトルの上にかぶせる) */
+.yk-sk,.yk-hold{z-index:120;overflow:hidden;pointer-events:none;border-radius:16px;font-family:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;color:#fff}
+.yk-sk{background:radial-gradient(circle at 30% 50%,#5a1e8c,#14061f 75%);animation:ykIn .3s,ykOut .4s 2.2s forwards}
+.yk-cut{position:absolute;left:-8%;top:50%;width:46%;max-width:240px;aspect-ratio:1;border-radius:50%;overflow:hidden;transform:translate(-40%,-50%);box-shadow:0 0 0 3px #f3c4ff,0 0 40px rgba(200,120,255,.9);animation:ykCut .6s cubic-bezier(.2,1.2,.3,1) forwards}.yk-cut img{width:100%;height:100%;object-fit:cover}
+@keyframes ykCut{to{transform:translate(16%,-50%)}}
+.yk-sk-t{position:absolute;right:5%;top:22%;max-width:52%;text-align:right;animation:ykSlideIn .5s .2s both}.yk-sk-t small{display:block;font:800 12px system-ui,sans-serif;color:#ffe8a3;letter-spacing:.2em}.yk-sk-t b{display:block;font-size:clamp(22px,6vw,38px);white-space:nowrap;text-shadow:0 0 16px #e599f7}.yk-sk-t em{display:block;font:700 13px system-ui,sans-serif;font-style:normal;color:#ffd6f5;margin-top:4px}
+@keyframes ykSlideIn{from{opacity:0;transform:translateX(30px)}}
+.yk-page{position:absolute;right:8%;bottom:14%;padding:10px 14px;border-radius:6px;background:#fff6fb;color:#5b2a86;font-size:14px;line-height:1.6;transform:rotate(3deg);box-shadow:0 8px 20px rgba(0,0,0,.4);animation:ykShow .5s .7s both}
+.yk-sk.full .yk-env.big{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%);font-size:22px;animation:ykLetter .7s cubic-bezier(.2,1.2,.3,1) both}.yk-sk.full .yk-sk-t{left:0;right:0;top:auto;bottom:18%;text-align:center}
+.yk-hold{background:radial-gradient(circle at 50% 50%,rgba(40,8,50,.94),rgba(5,0,8,.98));animation:ykIn .5s,ykOut .5s 2.3s forwards}
+.yk-dark{position:absolute;left:50%;top:50%;height:100%;transform:translate(-50%,-50%);opacity:0;-webkit-mask-image:radial-gradient(ellipse,#000 40%,transparent 72%);mask-image:radial-gradient(ellipse,#000 40%,transparent 72%);animation:ykShow 1s .1s forwards}
+.yk-hold.taken .yk-dark{filter:saturate(.6) brightness(.8)}
+.yk-write{position:absolute;right:8%;top:10%;writing-mode:vertical-rl;font-size:clamp(26px,7vw,38px);font-weight:900;color:#f3d9ff;text-shadow:0 0 14px #b14cff,0 0 2px #fff}.yk-write span{opacity:0;animation:ykShow .2s calc(.6s + var(--i) * .17s) forwards}
+.yk-hold em{position:absolute;left:0;right:0;bottom:8%;text-align:center;font:800 14px system-ui,sans-serif;font-style:normal;color:#ffb3cf;animation:ykShow .5s 1.6s both}
+@media (prefers-reduced-motion:reduce){.yk-petal{animation:none}}

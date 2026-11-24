@@ -3700,7 +3700,7 @@ async function viewGacha() {
           <li>コインはお金では買えません</li></ul></section>`;
     $$('[data-n]', root).forEach((b) => b.addEventListener('click', async () => {
       $$('[data-n]', root).forEach((x) => { x.disabled = true; });
-      try { const r = await api('/cards/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); mine = r; render(r.results); }
+      try { const r = await api('/cards/gacha', { method: 'POST', body: { n: Number(b.dataset.n) } }); mine = r; if (r.results.some((c) => c.id === 'yumiko2048') && !matchMedia('(prefers-reduced-motion: reduce)').matches) await yumiko2048GachaFx(); render(r.results); } // 2048年のユミコが出たら特別な演出から
       catch (e) { toast(e.message, 'error'); render(); }
     }));
     if (!results) return;
@@ -3968,6 +3968,32 @@ async function viewQuest() {
   $('#cbq-login')?.addEventListener('click', () => openAuth());
 }
 
+
+// ---------- 2048年のユミコ: 特別なガチャ演出 (出たときだけ) ----------
+//   心拍計の音 → KEEP OUT のテープ → 散る花びら → 手紙「2048年のお母さんへ」が開いて文字が浮かぶ → 母と娘のうしろ姿の写真 → 光ってユミコが登場
+//   タップで最後の場面まで飛ばし、もう一度タップでとじる (ふつうの結果の演出へ)。絵は public/cards-img/yumiko2048*.jpg
+function ykPetals(n = 18) { return Array.from({ length: n }, (_, i) => `<i class="yk-petal" style="--x:${(i * 53) % 100}%;--d:${(i % 9) * 0.45}s;--s:${0.7 + (i % 4) * 0.2};--dur:${5 + (i % 5)}s"></i>`).join(''); }
+function yumiko2048GachaFx() {
+  return new Promise((resolve) => {
+    const fx = document.createElement('div'); fx.className = 'yk-fx';
+    fx.innerHTML = `<div class="yk-ecg"><svg viewBox="0 0 400 60" preserveAspectRatio="none"><path d="M0,30 H120 L135,8 L150,52 L162,30 H230 L245,4 L262,56 L274,30 H400"/></svg><span>ピピピピ…</span></div>
+      <div class="yk-tape t1">KEEP OUT KEEP OUT KEEP OUT KEEP OUT KEEP OUT</div><div class="yk-tape t2">KEEP OUT KEEP OUT KEEP OUT KEEP OUT KEEP OUT</div>
+      <div class="yk-petals">${ykPetals()}</div>
+      <div class="yk-letter"><div class="yk-env">✉ 2048年のお母さんへ</div><p class="l1">今、これをみてるお母さんは2048年にいるよね。</p><p class="l2">私、お母さんとお酒を飲んで話すの、夢なんだ〜！</p></div>
+      <img class="yk-photo" src="/cards-img/yumiko2048-photo.jpg" alt="">
+      <div class="yk-flash"></div>
+      <div class="yk-final"><img class="yk-girl" src="/cards-img/yumiko2048-girl.jpg" alt=""><div class="yk-chara"><img src="/cards-img/yumiko2048.jpg" alt="2048年のユミコ"></div>
+        <p class="yk-copy">ずっと、あの時のまま……</p><p class="yk-tag">超野獣祭限定 <b>SSR</b></p><p class="yk-name">2048年のユミコ</p><p class="yk-tap">タップでつづける</p></div>`;
+    document.body.append(fx);
+    let stage = 0; const t0 = Date.now();
+    const close = () => { if (stage === 2) return; stage = 2; fx.classList.add('out'); setTimeout(() => { fx.remove(); resolve(); }, 450); };
+    const toFinal = () => { stage = 1; fx.classList.add('skip'); };
+    fx.addEventListener('click', () => { if (Date.now() - t0 < 600) return; if (stage === 0 && Date.now() - t0 < 6300) toFinal(); else close(); });
+    setTimeout(() => { if (stage === 0) stage = 1; }, 6300);
+    setTimeout(close, 12000);
+  });
+}
+
 // ---------- サイドストーリー (限定キャラ・MR) ----------
 //   第 1 話はカードを持っていると、第 2 話は Lv10、第 3 話は Lv20 か昇格 (UR / LR) で読める。読めない話の本文はサーバーが送らない
 async function viewCardStories() {
@@ -4146,8 +4172,16 @@ async function viewBattle(params) {
         }, t);
         t += 900;
       }
-      else if (e.k === 'diary' || e.k === 'diaryfull') { setTimeout(() => { overlayFx('cb-dna' + (e.p === you ? '' : ' on-me'), e.k === 'diary' ? `<b>あの子の日記</b><i>📓 名探偵の日記ちょう</i><em>味方全員 回復</em>` : `<b>2048年のお母さんへ</b><i>✉️ お母さんとお酒を飲むのが夢なんだ</i><em>HP 全回復</em>`, 1700, e.p === you ? 'bottom' : 'top'); }, t); t += 900; }
-      else if (e.k === 'hold' || e.k === 'taken') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>${e.k === 'hold' ? 'もう離さない' : '連れていかれた'}</b><i>📓 「もう離さない。」</i><em>${esc(e.card)}</em>`, 1800, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
+      else if (e.k === 'diary') { // あの子の日記: 紫の夜・花びら・ユミコのカットイン・日記帳がひらく
+        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.jpg" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員の HP を 45% 回復</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
+        t += 2100;
+      }
+      else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
+      else if (e.k === 'hold' || e.k === 'taken') { // もう離さない: 画面が暗く沈み、うつむいたユミコと女の子のかげ・知らない筆跡の文字が 1 字ずつ書かれる
+        const word = e.k === 'hold' ? 'もう離さない。' : 'お母さんも…ずっと一緒だよ？';
+        setTimeout(() => { overlayFx('yk-hold' + (e.k === 'taken' ? ' taken' : ''), `<img class="yk-dark" src="/cards-img/${e.k === 'hold' ? 'yumiko2048-dark' : 'yumiko2048-girl'}.jpg" alt=""><div class="yk-write">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div><em>${esc(e.card)}${e.k === 'hold' ? ' は連れていかれる' : ' は連れていかれた…'}</em>`, 2800); replay(el(e.p), 'hurt'); }, t);
+        t += 2300;
+      }
       else if (e.k === 'buchigire') { // ブチギレおばさん: 怒りマークがあふれて、両方たおれる
         setTimeout(() => { overlayFx('cb-dsong curse', `<b>ブチギレ</b><i>💢 あんたも道連れよ！</i><em>${esc(e.target)} と相打ち</em>${Array.from({ length: 10 }, (_, i) => `<s style="--x:${(i * 37) % 100}%;--d:${(i % 5) * 0.1}s">💢</s>`).join('')}`, 1800, e.p === you ? 'top' : 'bottom'); replay(el(1 - e.p), 'hurt'); replay(el(e.p), 'hurt'); }, t); t += 1100; }
       else if (e.k === 'curse') { setTimeout(() => { overlayFx('cb-dsong curse', `<b>道連れ</b><i>💔 一方的な愛</i><em>${esc(e.card)}</em>`, 1700, e.p === you ? 'bottom' : 'top'); replay(el(e.p), 'hurt'); }, t); t += 1000; }
