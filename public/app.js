@@ -4048,7 +4048,7 @@ async function viewQuest() {
 
 
 // ---------- 2048年のユミコ: 特別なガチャ演出 (出たときだけ) ----------
-//   心拍計の音 → KEEP OUT のテープ → 散る花びら → 手紙「2048年のお母さんへ」が開いて文字が浮かぶ → 母と娘のうしろ姿の写真 → 光ってユミコが登場
+//   心拍計の音 → KEEP OUT のテープ → 散る花びら → 母と娘のうしろ姿の写真 → 光ってユミコが登場
 //   タップで最後の場面まで飛ばし、もう一度タップでとじる (ふつうの結果の演出へ)。絵は public/cards-img/yumiko2048*.jpg
 // 血しぶき (2048年のユミコ「もう離さない」で連れていかれるとき): ぎざぎざの血だまり + 飛び散ったしずく の SVG
 function ykSplat(seed) {
@@ -4074,7 +4074,6 @@ function yumiko2048GachaFx() {
     fx.innerHTML = `<div class="yk-ecg"><svg viewBox="0 0 400 60" preserveAspectRatio="none"><path d="M0,30 H120 L135,8 L150,52 L162,30 H230 L245,4 L262,56 L274,30 H400"/></svg><span>ピピピピ…</span></div>
       <div class="yk-tape t1">KEEP OUT KEEP OUT KEEP OUT KEEP OUT KEEP OUT</div><div class="yk-tape t2">KEEP OUT KEEP OUT KEEP OUT KEEP OUT KEEP OUT</div>
       <div class="yk-petals">${ykPetals()}</div>
-      <div class="yk-letter"><div class="yk-env">✉ 2048年のお母さんへ</div><p class="l1">今、これをみてるお母さんは2048年にいるよね。</p><p class="l2">私、お母さんとお酒を飲んで話すの、夢なんだ〜！</p></div>
       <img class="yk-photo" src="/cards-img/yumiko2048-photo.jpg" alt="">
       <div class="yk-flash"></div>
       <div class="yk-final"><div class="yk-chara"><img src="/cards-img/yumiko2048.jpg?v=2" alt="2048年のユミコ"></div>
@@ -4138,7 +4137,7 @@ async function viewBattle(params) {
     : e.k === 'tyrantdown' ? `🧬💥 DNA を取り出されて、${e.p === you ? '' : '相手の'}${e.card}は絶対権力を失った！ ダメージが通るようになった`
     : e.k === 'deathsong' ? `🎤💀 ${name(e.p, e.card)}の死の歌声─一方的な愛─！ ${e.p === you ? '相手の' : ''}${e.target}は呪われた… (このターンに${e.p === you ? '' : '相手の'}${e.card}を倒すと道連れ)`
     : e.k === 'diary' ? `📓 ${name(e.p, e.card)}のあの子の日記！ ${e.p === you ? '味方' : '相手'}全員の HP が 35% 回復して、状態異常が治った`
-    : e.k === 'diaryfull' ? `✉️「2048年のお母さんへ」… ${e.card}の HP が全回復した！`
+    : e.k === 'diaryfull' ? `📓 ${e.card}の HP が全回復した！`
     : e.k === 'hold' ? `📓 こっちにおいで… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (このターンの終わりに倒れる)`
     : e.k === 'takenwait' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれる… (あと${e.left}ターン)`
     : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「こっちにおいで。」`
@@ -4268,10 +4267,10 @@ async function viewBattle(params) {
         t += 900;
       }
       else if (e.k === 'diary') { // あの子の日記: 紫の夜・花びら・ユミコのカットイン・日記帳がひらく
-        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.png?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員 35% 回復 + 1.2 倍こうげき</em></div><div class="yk-page">2038年7月3日<br>今日はお母さんが…</div>`, 2600), t);
+        setTimeout(() => overlayFx('yk-sk', `<div class="yk-petals">${ykPetals(12)}</div><div class="yk-cut"><img src="/cards-img/yumiko2048.png?v=2" alt=""></div><div class="yk-sk-t"><small>わざ</small><b>あの子の日記</b><em>📓 味方全員 35% 回復 + 1.2 倍こうげき</em></div>`, 2600), t);
         t += 2100;
       }
-      else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-env big">✉ 2048年のお母さんへ</div><div class="yk-sk-t"><b>HP 全回復</b><em>お母さんとお酒を飲んで話すの、夢なんだ〜！</em></div>`, 2200), t); t += 1700; }
+      else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-sk-t"><b>HP 全回復</b></div>`, 2200), t); t += 1700; }
       else if (e.k === 'taken') { // 連れていかれた: 血が画面に飛び散る → 画面が血で埋まる → 血が流れ落ちると、相手はもういない
         setTimeout(() => {
           overlayFx('yk-blood', ykBloodHtml(e.card, 'ずっと一緒だよ？'), 3600);
