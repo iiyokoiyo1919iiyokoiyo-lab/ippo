@@ -35,7 +35,7 @@ const SKILLS = {
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
 // dogma = セントラルドグマ: このカードが控えで生きているあいだ、ターンの終わりに生きている味方全員の HP を最大 HP の 10% 回復
-const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '倒した相手を連れていく: そのターンの終わりに倒れる (ガード・バリア・絶対権力に関係なく)' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
+const PASSIVES = { morale: { name: '士気', desc: 'たおれると、生き残っている味方の士気が上がり、攻撃 1.4 倍・防御 1.3 倍' }, hold: { name: 'もう離さない', desc: '自分を倒した相手を 50% で連れていく: そのターンの終わりに倒れる (ガード・バリア・絶対権力に関係なく)' }, knife: { name: 'ナイフ', desc: 'こうげきやわざでダメージを与えた相手を失血させる (毒と同じ: 毎ターン最大 HP の 8%・3 ターン)' }, dogma: { name: 'セントラルドグマ', desc: '控えで生きているあいだ、毎ターン味方全員の HP を最大 HP の 10% 回復' } };
 const DOGMA_RATE = 0.1;
 const MORALE_ATK = 1.4, MORALE_DEF = 1.3;
 const CARD_PASSIVE = { tadokoro: 'morale', suetsugu: 'dogma', yumiko: 'knife', yumiko2048: 'hold' };
@@ -271,6 +271,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 }
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
+const HOLD_CHANCE = 0.5; // 2048年のユミコのパッシブ「もう離さない」: 倒した相手を連れていく確率
 const DIARY = { heal: 0.35, full: 0.4, fullMax: 1, power: 1.2 }; // 2048年のユミコの「あの子の日記」(ぶっ壊れ)
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
 const SWEEP_ACTIVE = 1.4, SWEEP_BENCH = 0.8; // 疾風斬り: 場のカードに 1.4 倍、控えに 0.8 倍
@@ -351,7 +352,7 @@ function resolveTurn(state, acts, rnd) {
     const wasLoved = foe.hp <= 0 && loved.get(me) === foe; // 一方的な愛: 歌を受けた me が、歌った foe をこのターンに倒した
     ev.push({ k: 'hit', p, card: me.name, target: foe.name, dmg, ...(tyr ? { tyrantPierce: true } : {}), eff: tm > 1 ? 'good' : tm < 1 ? 'bad' : '', guarded: !opt.pierce && g < 1, bench, typeless: !!opt.typeless });
     if (foe.hp > 0 && CARD_PASSIVE[me.id] === 'knife' && !immune(foe)) { const again = foe.poison > 0 && foe.bleed; foe.poison = POISON_TURNS; foe.bleed = true; if (!again) ev.push({ k: 'bleed', p: o, card: foe.name, by: me.name, bench }); } // パッシブ「ナイフ」: 失血 (毒と同じ)
-    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0)) { me.taken = 1; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
+    if (foe.hp <= 0 && foe.passive === 'hold' && me.hp > 0 && !(me.taken > 0) && rnd() < HOLD_CHANCE) { me.taken = 1; ev.push({ k: 'hold', p, card: me.name, by: foe.name }); } // パッシブ「もう離さない」: 倒した相手に「連れていかれる」印
     if (foe.hp <= 0) ev.push({ k: 'ko', p: o, card: foe.name, bench });
     if (wasLoved) { // 道連れ: 倒した側 (p) の場と控えの生きているカードから、ランダムで 1 枚を倒す
       loved.delete(me);
