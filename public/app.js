@@ -4059,12 +4059,12 @@ function ykSplat(seed) {
   const drops = Array.from({ length: 9 }, () => { const a = r() * Math.PI * 2, dist = 38 + r() * 12, rr = 1 + r() * 2.6, deg = (a * 180 / Math.PI).toFixed(0); return `<ellipse cx="${(50 + Math.cos(a) * dist).toFixed(1)}" cy="${(50 + Math.sin(a) * dist).toFixed(1)}" rx="${(rr * 1.8).toFixed(1)}" ry="${rr.toFixed(1)}" transform="rotate(${deg} ${(50 + Math.cos(a) * dist).toFixed(1)} ${(50 + Math.sin(a) * dist).toFixed(1)})"/>`; }).join('');
   return `<svg viewBox="0 0 100 100" aria-hidden="true"><g fill="url(#ykbl)"><path d="${d}"/>${drops}</g><ellipse cx="42" cy="40" rx="9" ry="4" fill="#fff" opacity=".18" transform="rotate(-25 42 40)"/></svg>`;
 }
-function ykBloodHtml(card, word) {
+function ykBloodHtml(card, word, dmg = 0) {
   const splats = [[18, 22, 46, 0], [70, 30, 58, 0.12], [40, 62, 52, 0.22], [82, 72, 40, 0.3], [12, 78, 36, 0.36], [55, 12, 34, 0.42], [30, 40, 30, 0.48]]
     .map(([x, y, w, d], i) => `<i class="yk-spl" style="left:${x}%;top:${y}%;width:${w}%;--d:${d}s">${ykSplat(i + 3)}</i>`).join('');
   const drips = Array.from({ length: 9 }, (_, i) => `<b class="yk-drip" style="left:${(i * 11.7 + 4 + (i % 3) * 3) % 100}%;--w:${3 + (i % 3) * 2}px;--l:${10 + (i * 7) % 20}%;--dd:${(i % 4) * 0.08}s"></b>`).join('');
   return `<svg width="0" height="0" style="position:absolute"><defs><radialGradient id="ykbl" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#c3121b"/><stop offset=".6" stop-color="#7d0008"/><stop offset="1" stop-color="#3d0003"/></radialGradient></defs></svg>
-    <div class="yk-bl-sheet">${splats}<div class="yk-bl-fill"></div><div class="yk-bl-word">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div>${drips}</div>
+    <div class="yk-bl-sheet">${splats}<div class="yk-bl-fill"></div><div class="yk-bl-word">${[...word].map((ch, i) => `<span style="--i:${i}">${esc(ch)}</span>`).join('')}</div>${dmg ? `<div class="yk-bl-dmg">-${Number(dmg).toLocaleString()}</div>` : ''}${drips}</div>
     <em class="yk-bl-cap">${esc(card)} は連れ去られた…</em>`;
 }
 function ykPetals(n = 18) { return Array.from({ length: n }, (_, i) => `<i class="yk-petal" style="--x:${(i * 53) % 100}%;--d:${(i % 9) * 0.45}s;--s:${0.7 + (i % 4) * 0.2};--dur:${5 + (i % 5)}s"></i>`).join(''); }
@@ -4124,6 +4124,7 @@ async function viewBattle(params) {
   const box = () => $('#cbb');
   let fromBoard = !!board || params.get('from') === 'board';
   let items = null, coins = 0; // ボスクエストのアイテム (コインで買ってその場で使う)
+  let animUntil = 0, pendingState = null; // 演出が終わる時刻 (pendingState: 連れていかれる演出のあとに見せる本当の状態) (これより前に試合が終わっても、結果は演出のあとに出す)
   let ws = null, you = 0, players = [], state = null, deadline = 0, tick = 0, chosen = false, picking = false, closedByUs = false, log = [], ended = false;
   const name = (p, card) => `${p === you ? '' : '相手の'}${card}`;
   const evText = (e) => e.k === 'item' ? (e.item === 'tea' ? `${e.p === you ? 'あなた' : '相手'}は🧋アイスティーを使った！` : `${e.p === you ? 'あなた' : '相手'}は${e.item === 'elixir' ? '💖' : '🧪'}${e.name}を使った！ ${e.card}の HP が ${e.amount} 回復`)
@@ -4140,7 +4141,7 @@ async function viewBattle(params) {
     : e.k === 'diaryfull' ? `📓 ${e.card}の HP が全回復した！`
     : e.k === 'hold' ? `📓 こっちにおいで… ${e.p === you ? '' : '相手の'}${e.card}は${e.by}に連れていかれる (このターンの終わりに倒れる)`
     : e.k === 'takenwait' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれる… (あと${e.left}ターン)`
-    : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}は連れていかれた…「こっちにおいで。」`
+    : e.k === 'taken' ? `📓 ${e.p === you ? '' : '相手の'}${e.card}に ${Number(e.dmg) || ''} のダメージ！ 連れていかれた…「こっちにおいで。」`
     : e.k === 'buchigire' ? `💢 ${name(e.p, e.card)}がブチギレた！ ${e.p === you ? '相手の' : ''}${e.target}を道連れにして、${e.card}も倒れた…！`
     : e.k === 'curse' ? `💔 一方的な愛… ${e.p === you ? '' : '相手の'}${e.card}が${e.by}の道連れになった！`
     : e.k === 'sealed' ? `🧬 ${name(e.p === 0 ? 1 : 0, e.by)}が${e.p === you ? '' : '相手の'}${e.card}の DNA を取り出した！ ${e.again ? '(もう封じられている)' : 'このバトル中、わざが使えない'}`
@@ -4273,9 +4274,12 @@ async function viewBattle(params) {
       else if (e.k === 'diaryfull') { setTimeout(() => overlayFx('yk-sk full', `<div class="yk-petals">${ykPetals(10)}</div><div class="yk-sk-t"><b>HP 全回復</b></div>`, 2200), t); t += 1700; }
       else if (e.k === 'taken') { // 連れていかれた: 血が画面に飛び散る → 画面が血で埋まる → 血が流れ落ちると、相手はもういない
         setTimeout(() => {
-          overlayFx('yk-blood', ykBloodHtml(e.card, 'ずっと一緒だよ？'), 3600);
-          const f = e.bench ? null : el(e.p);
-          if (f) setTimeout(() => f.classList.add('yk-gone'), 1250); // 血で埋まっているあいだに消す
+          overlayFx('yk-blood', ykBloodHtml(e.card, 'ずっと一緒だよ？', e.dmg), 3600);
+          setTimeout(() => { // 血で埋まっているあいだに 300% のダメージ → 倒れた状態にして、カードを消す
+            if (pendingState) { state = pendingState; pendingState = null; render(); }
+            const f = e.bench ? null : el(e.p);
+            if (f) f.classList.add('yk-gone');
+          }, 1500);
         }, t);
         t += 3300;
       }
@@ -4325,6 +4329,7 @@ async function viewBattle(params) {
         t += 120;
       }
     });
+    animUntil = Date.now() + t + 400; // この演出が終わるまで、対戦の結果は出さない
   }
   function choose(a) { if (chosen || ended) return; chosen = true; wsSend({ t: 'act', ...a }); render(); }
   function waiting(msg, extra = '') {
@@ -4374,10 +4379,20 @@ async function viewBattle(params) {
       if (m.t === 'coins') { coins = m.coins; return; }
       if (m.t === 'itemError') { chosen = false; picking = false; toast(m.msg, 'error'); render(); return; }
       if (m.t === 'opponentReady') { const t = $('#cb-timer'); if (t && !chosen) t.textContent += ' · 相手は決めました'; return; }
-      if (m.t === 'result') { m.events.forEach((e) => { const s = evText(e); if (s) log.push(s); }); state = m.state; render(); animate(m.events); return; }
+      if (m.t === 'result') {
+        m.events.forEach((e) => { const s = evText(e); if (s) log.push(s); });
+        // 連れていかれたカードは、演出が終わるまで倒れる前の HP のまま見せる (演出の中でダメージを与えて倒す)
+        const taken = m.events.filter((e) => e.k === 'taken' && Number.isInteger(e.i));
+        if (taken.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          const shown = JSON.parse(JSON.stringify(m.state));
+          taken.forEach((e) => { const c = shown.sides[e.p]?.cards[e.i]; if (c) c.hp = e.hpBefore; });
+          state = shown; pendingState = m.state;
+        } else state = m.state;
+        render(); animate(m.events); return;
+      }
       if (m.t === 'opponentLeft') { log.push(`相手の接続が切れました。${Math.round(m.ms / 1000)}秒もどらなければ、あなたの勝ちです`); render(); return; }
       if (m.t === 'opponentBack') { log.push('相手がもどってきました'); render(); return; }
-      if (m.t === 'end') return end(m);
+      if (m.t === 'end') { const wait = animUntil - Date.now(); if (wait > 0) { setTimeout(() => end(m), wait); return; } return end(m); }
     };
     ws.onclose = () => { if (!closedByUs && !ended && box()) { log.push('接続が切れました。つなぎ直しています…'); setTimeout(() => { if (box() && !ended) connect(); }, 1500); } };
   }

@@ -271,6 +271,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 }
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
+const TAKEN_DMG = 3; // 連れていかれたカードが受けるダメージ (最大 HP の 300%)
 const HOLD_CHANCE = 0.5; // 2048年のユミコのパッシブ「もう離さない」: 倒した相手を連れていく確率
 const DIARY = { heal: 0.35, full: 0.4, fullMax: 1, power: 1.2 }; // 2048年のユミコの「あの子の日記」(ぶっ壊れ)
 const TURN_LIMIT = 30, SKILL_CD = 2; // わざを使うと、次の 2 ターンは使えない
@@ -481,8 +482,9 @@ function resolveTurn(state, acts, rnd) {
     if (!(c.taken > 0) || c.hp <= 0) return;
     c.taken--;
     if (c.taken > 0) return ev.push({ k: 'takenwait', p, card: c.name, left: c.taken, bench: i !== sides[p].active });
+    const hpBefore = c.hp, dmg = Math.round(c.maxHp * TAKEN_DMG); // 演出のあとに最大 HP の 300% のダメージ (かならず倒れる)
     c.hp = 0; c.poison = 0;
-    ev.push({ k: 'taken', p, card: c.name, bench: i !== sides[p].active }); ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active });
+    ev.push({ k: 'taken', p, card: c.name, i, hpBefore, dmg, bench: i !== sides[p].active }); ev.push({ k: 'ko', p, card: c.name, bench: i !== sides[p].active });
   }));
   // 4.4 パッシブ「セントラルドグマ」: 控えで生きているあいだ、味方全員 (生きているカード) の HP を最大 HP の 10% 回復 (控えに何枚いても 1 回だけ)
   [0, 1].forEach((p) => {
