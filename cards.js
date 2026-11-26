@@ -759,7 +759,7 @@ const QUESTS = [
     enemy: [['ando', 20], ['gyokuji', 20], ['rainbowpen', 20]],
     titles: { 1: '社長室最速クリア👔', 2: '社長室準最速クリア👔' },
     start: Date.parse('2026-11-22T12:00:00+09:00'), end: Date.parse('2026-11-26T12:00:00+09:00') },
-  { id: 'keshigon-2026', name: 'ケシゴン要塞', boss: '要塞消しゴム ケシゴン', emoji: '🧱', reward: 'keshigon', bg: 'yousai', hard: true, boost: 2, // 仮 (tune_oni quest:keshigon-2026 の結果で更新する)
+  { id: 'keshigon-2026', name: 'ケシゴン要塞', boss: '要塞消しゴム ケシゴン', emoji: '🧱', reward: 'keshigon', bg: 'yousai', hard: true, boost: 2.076, // tune_oni quest:keshigon-2026 (2026-11-27 測定: Lv18 の SSR・MR で勝率 28.8%)
     timeupLose: true,
     award: '動かざる要塞、ついに崩れる…！🧱🧱🧱',
     hint: '🗡️ ふつうの攻撃はほぼ通らない！ 「つらぬく」・毒・流星で削れ',
