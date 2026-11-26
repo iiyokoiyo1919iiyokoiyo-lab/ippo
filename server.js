@@ -366,6 +366,7 @@ require('./poker')(app, ctx);
 require('./monster')(app, ctx);
 require('./arena')(app, ctx);
 require('./baseball')(app, ctx); // ミニゲーム「IppO ベースボール」(マイチーム・ドラフト・リアルタイム対戦)
+require('./bounce')(app, ctx); // ミニゲーム「PROJECT BOUNCE」(ひっぱって弾くアクション RPG・4 人協力。いまはテスターだけ)
 require('./treasure')(app, ctx); // ミニゲーム「宝探し」(キャンパスの宝箱をみんなで探す・3D・戦いなし) // ミニゲーム「シティバトル」(街を舞台にした 3D の撃ち合い・オンライン) // ミニゲーム「ブリードモンスターズ」(配合・育成・コマンドバトル・セリ。コインはぶんぼうぐバトラーズと共用) // ミニゲーム「レート戦ポーカー」(1 対 1 のテキサスホールデム。お金・コインは賭けない)
 
 // ---------- ダイレクトメッセージ ----------
@@ -454,7 +455,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname !== '/vb' && u.pathname !== '/pw' && u.pathname !== '/rt' && u.pathname !== '/cb' && u.pathname !== '/pk' && u.pathname !== '/rc' && u.pathname !== '/mb' && u.pathname !== '/ab' && u.pathname !== '/tr' && u.pathname !== '/bb') return socket.destroy();
+  if (u.pathname !== '/vb' && u.pathname !== '/bn' && u.pathname !== '/pw' && u.pathname !== '/rt' && u.pathname !== '/cb' && u.pathname !== '/pk' && u.pathname !== '/rc' && u.pathname !== '/mb' && u.pathname !== '/ab' && u.pathname !== '/tr' && u.pathname !== '/bb') return socket.destroy();
   // CSRF 的な他サイトからの接続を拒否
   const origin = req.headers.origin;
   if (origin && new URL(origin).host !== req.headers.host) return socket.destroy();
@@ -483,6 +484,12 @@ server.on('upgrade', (req, socket, head) => {
     const mbUser = userFromReq(req);
     if (!mbUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
     return ctx.monUpgrade(req, socket, head, mbUser);
+  }
+  // PROJECT BOUNCE のルーム・協力プレイ。本人確認が必要 (テスターだけ)
+  if (u.pathname === '/bn') {
+    const bnUser = userFromReq(req);
+    if (!bnUser) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); return socket.destroy(); }
+    return ctx.bounceUpgrade(req, socket, head, bnUser);
   }
   // IppO ベースボールのリアルタイム対戦。本人確認が必要
   if (u.pathname === '/bb') {

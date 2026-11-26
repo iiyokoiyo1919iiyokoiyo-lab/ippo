@@ -2894,6 +2894,7 @@ function route() {
   if (h === '/arena') { setActiveNav('games'); return viewArena(); }
   if (h === '/treasure') { setActiveNav('games'); return viewTreasure(); }
   if (h === '/baseball') { setActiveNav('games'); return viewBaseball(); }
+  if (h === '/bounce' || h.startsWith('/bounce?')) { setActiveNav('games'); return viewBounce(new URLSearchParams(h.split('?')[1] || '').get('room')); }
   if (h === '/horse/race') { setActiveNav('games'); return viewRace(); }
   if (h === '/games') { setActiveNav('games'); return viewGames(); }
   if (h === '/games/math') { setActiveNav('games'); return viewMath(); }
@@ -3189,6 +3190,28 @@ window.addEventListener('message', (e) => {
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-baseball' && e.data.type === 'login') openAuth();
   if (e.data && typeof e.data === 'object' && e.data.source === 'ippo-baseball' && e.data.type === 'exit') location.hash = '#/games';
 });
+// PROJECT BOUNCE (/games/bounce/ を iframe で開く。画面いっぱい)。いまはテスターだけ
+async function viewBounce(roomId) {
+  let ok = false; try { ok = (await api('/bn-access', { noAuthPrompt: true })).ok; } catch {}
+  if (!ok) { main.innerHTML = pageHead({ title: 'PROJECT BOUNCE', sub: 'ミニゲーム', back: '#/games' }) + `<div class="content">${emptyState({ icon: 'sparkle', title: 'ただいま準備中です', text: 'もうしばらくお待ちください' })}</div>`; return; }
+  main.innerHTML = pageHead({ title: 'PROJECT BOUNCE', sub: 'ミニゲーム', back: '#/games' }) + '<div class="horse-wrap"></div>';
+  $('#bounce-frame')?.remove();
+  const frame = document.createElement('iframe'); frame.className = 'horse-frame arena-full'; frame.id = 'bounce-frame'; frame.src = '/games/bounce/' + (roomId && /^\d{6}$/.test(roomId) ? '#join/' + roomId : ''); frame.title = 'PROJECT BOUNCE'; frame.allow = 'fullscreen';
+  document.body.append(frame); document.body.classList.add('arena-open'); window.scrollTo(0, 0);
+  viewCleanup = () => { frame.remove(); document.body.classList.remove('arena-open'); };
+}
+window.addEventListener('message', (e) => {
+  const f = $('#bounce-frame');
+  if (!f || e.source !== f.contentWindow || e.origin !== location.origin || !e.data || typeof e.data !== 'object' || e.data.source !== 'ippo-bounce') return;
+  if (e.data.type === 'login') openAuth();
+  if (e.data.type === 'exit') location.hash = '#/games';
+});
+// PROJECT BOUNCE: フレンド (相互フォロー) からのルームへの招待
+RT.on((m) => {
+  if (m.t !== 'bn-invite' || !/^\d{6}$/.test(String(m.room))) return;
+  toast(`🌠 ${m.name}さんが PROJECT BOUNCE のルーム (${m.stage}) に招待しています。ゲームを開いてルーム ID ${m.room} で参加できます`);
+  if (location.hash !== '#/bounce') { const go = confirm(`${m.name}さんから PROJECT BOUNCE の招待です (${m.stage})。いま参加しますか？`); if (go) location.hash = '#/bounce?room=' + m.room; }
+});
 // 宝探し (/games/treasure/ を iframe で開く。シティバトルと同じく画面いっぱい)
 async function viewTreasure() {
   let st = null; try { st = await api('/treasure/status', { noAuthPrompt: true }); } catch {}
@@ -3253,6 +3276,10 @@ function viewGames() {
       <span class="game-card-art md-art" aria-hidden="true">${'<i>7</i><i>+</i><i>5</i>'}</span>
       <span class="game-card-body"><b>暗算ダッシュ</b><span>60秒で何問とける？ 連続正解でボーナス。今日・今週・これまでのランキングで競おう</span>
         <span class="chip chip-accent">${icon('trend', 'ic-sm')}ランキングつき</span></span>${icon('chevron', 'chev')}</a>
+    <a class="card game-card game-card-new" href="#/bounce" id="bn-game" style="display:none">
+      <span class="game-card-art mb-art" aria-hidden="true">🌠</span>
+      <span class="game-card-body"><b>PROJECT BOUNCE <span class="chip chip-accent" style="font-size:10px">テスト中</span></b><span>キャラを引っぱって弾くアクション RPG。最大 4 人の協力プレイ・ガチャ・育成。初回限定 UR「アストレア」登場</span>
+        <span class="chip chip-accent">🌠 協力プレイ</span></span>${icon('chevron', 'chev')}</a>
     <a class="card game-card game-card-new" href="#/baseball" id="bb-game" style="display:none">
       <span class="game-card-art mb-art" aria-hidden="true">⚾</span>
       <span class="game-card-body"><b>IppO ベースボール <span class="chip chip-accent" style="font-size:10px">NEW</span></b><span>自分だけのチームを作って、毎時の自動試合でリーグ昇格をめざす。毎朝のドラフト会議・ガチャで選手を集めて、3D のリアルタイム対戦も</span>
@@ -3281,7 +3308,8 @@ function viewGames() {
   loadEventBanners();
   // ブリードモンスターズはテスト中 (テスターにだけ一覧に出す)
   if (me) api('/mon/access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#mon-game')) $('#mon-game').style.display = ''; }).catch(() => {});
-  if (me) api('/bb-access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#bb-game')) $('#bb-game').style.display = ''; }).catch(() => {}); // IppO ベースボール: しばらくはテスターだけ
+  if (me) api('/bb-access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#bb-game')) $('#bb-game').style.display = ''; }).catch(() => {});
+  if (me) api('/bn-access', { noAuthPrompt: true }).then((r) => { if (r.ok && $('#bn-game')) $('#bn-game').style.display = ''; }).catch(() => {}); // PROJECT BOUNCE: テスターだけ // IppO ベースボール: しばらくはテスターだけ
 }
 
 // =====================================================================

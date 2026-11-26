@@ -132,6 +132,15 @@
 - 画面 (bb.js・index.html): ダークネイビー × 白の情報面 × ゴールド。下のナビ (ホーム・マイチーム・ドラフト・対戦・その他)。選手プロフィール `#player/<id>`・ニュース `#news`・記事 `#article/<id>`・トレード `#trade`・図鑑 `#zukan`・アプリとして使う `#install`。球団エンブレムはチーム名から作る SVG
 - アプリとして開く (PWA): `public/games/baseball/manifest.webmanifest` (範囲 `/games/baseball/`)・サービスワーカー `sw.js` (画面はネットワーク優先・つながらなければ `offline.html`。API・ログインはキャッシュしない)・アイコンとスプラッシュは `node tools/make_bb_icons.js`。IppO の iframe の外で開いたときはゲームの中でログインできる。オフラインのときは操作を止めて帯を出す
 
+## PROJECT BOUNCE (bounce.js・public/games/bounce/)
+- 引っぱって弾くアクション RPG (最大 4 人協力)。IppO の中の iframe (`#/bounce` → `/games/bounce/`)。いまはテスターだけ (環境変数 `BN_TESTERS`・未設定なら RCN413・`*` で全員。ほかの人は API 403・`/bn` も 403・ゲーム一覧にも出ない)
+- 設定ファイル `public/games/bounce/bn-data.js` (サーバーとブラウザで共通): キャラ `CHARS` (HP・攻撃・スピード・連携コンボ・必殺技・アビリティ)・連携コンボ `COMBOS`・必殺技 `SPECIALS`・アビリティ `ABILITIES`・敵 `ENEMIES`・ステージ `STAGES` (5 モード)・ガチャ `GACHA`・ショップ・ログインボーナス・ミッション・実績。数値はここで調整する
+- 戦闘の計算 `bn-core.js` (サーバーとブラウザで共通・Matter.js は使わず自前の円の物理。乱数は状態の種から作るので同じ入力なら同じ結果): サーバーが 1 回のショットを止まるまで計算して、フレーム (1/30 秒ごとの位置) と出来事を全員に配る。ブラウザは再生するだけ (不正できない・マルチで全員が同じ画面)
+- 連携コンボ・必殺技の威力は攻撃力に比例 (`ratio` = 今の攻撃力 ÷ Lv1 の攻撃力)。アストレア (`limited_astraea_001`・UR 光): 連携コンボ「星界崩壊・オービタルレイ」(敵全体・敵の数で分配・ボス ×1.5・30% で星蝕 = 受けるダメージ +30%)・必殺技「天地創造・アカシックゼロ」(敵全体に大ダメージ・味方の攻撃 +30% 3 ターン・HP 20% 回復。背景が宇宙・星の魔法陣・流れ星・光の爆発)・アビリティ 星神の加護/運命干渉/星界共鳴。ユミコ (`yumiko`・IppO のユミコと同じ ID): 連携コンボ「ABC」(雷・威力 18000 × 攻撃力の比)・必殺技「アカシックレコード」(スピードアップ・貫通・全ギミック対応。`duration` ショット後に反射にもどる)
+- ギミックは共通のしくみ (`bn-core.js` の `GIMMICK_RULES`・`immuneSet`/`isImmune`): 対応 (`immune`) に `'*'` があれば、今後足すギミックにも自動で対応する。新しいギミックは `GIMMICK_RULES` と `GIMMICK_TYPES` に足す
+- サーバー `bounce.js`: 表 `bn_players`・`bn_units`・`bn_items`・`bn_gacha_log`・`bn_clears`・`bn_missions`・`bn_battles`・`bn_config` (マイグレーション `2026-11-27-bounce`)。ガチャはサーバーが決める (天井 100 回でピックアップ・10 連は SR 以上 1 体・重複は限界突破 → 最大なら星のかけら)。排出率は管理者が画面 (`#admin`) から変えられる (`POST /api/bn/admin/rates`)
+- WebSocket `/bn`: ソロ (`solo`・自分の編成 4 体)・ルーム (`create` パスワード可・`join` 6 けたの ID・`random` 同じクエストの公開ルーム・`ready`・`unit` 担当キャラ・`start` はホストだけ・`invite` は IppO の相互フォローに通知 `bn-invite`)。マルチはひとり 1 体。自分の番は 40 秒 (過ぎたら自動で撃つ)・切れたら 90 秒待って再接続 (戻ると続きから)・待っても戻らなければキャラは自動で動く。撃てるのは今の番のキャラの持ち主だけ・入力の範囲もサーバーが確かめる
+
 ## 投稿の動画 (videos.js)
 - 1 投稿 1 本 (写真とはどちらか)。MP4・MOV・WebM・50MB・3 分まで。投稿の画面の 🎥 ボタン → 先にアップロード (`POST /api/uploads/video`・進み具合を出す) → 投稿の `videoIds`
 - 表 `post_videos` (マイグレーション `2026-11-24-post-videos`)。ファイルはデータベースの隣の `videos/` (環境変数 `VIDEO_DIR` で変えられる)。配信 `GET /api/videos/:id` は Range 対応 (投稿前は本人だけ)
