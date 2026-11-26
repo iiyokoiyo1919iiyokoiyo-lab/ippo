@@ -141,7 +141,7 @@ function hardQuestHtml(q, r) {
     <div style="position:absolute;left:600px;top:120px;width:580px">
       <div class="stroke" style="--sw:14px;--sc:#3b1d00;font-size:100px;line-height:1.1;color:#ffe066;text-shadow:0 0 34px #fab005;white-space:nowrap">${esc(q.name)}</div>
       <div style="margin-top:18px;font-size:36px;color:#fff;text-shadow:0 3px 0 #1b1035">クリアで <span style="color:#ff8fd8;font-size:54px;text-shadow:0 0 16px #ff6bd6,0 3px 0 #1b1035">${esc(r.rarity)}</span> ${esc(r.name)} GET!!</div>
-      <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">${sc ? '👔 絶対権力 = すえつぐの DNA を取り出すまでダメージ無効！' : ys ? '💀 死の歌声 = 受けたターンに Y を倒すと 1 枚道連れ！' : water ? '📢 説教 = 相手の攻撃 0.6 倍・毒を治す！' : taika ? '📜 大化の改新 = 1.2 倍こうげき・味方の状態異常とデバフを全部解除！' : `⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！`}</div>
+      <div style="margin-top:12px;font-size:28px;color:#ffd43b;font-weight:900;text-shadow:0 3px 0 #1b1035">${q.bg === 'yousai' ? '🧱 体力・防御けた外れ！ 30 ターンで崩せ' : sc ? '👔 絶対権力 = すえつぐの DNA を取り出すまでダメージ無効！' : ys ? '💀 死の歌声 = 受けたターンに Y を倒すと 1 枚道連れ！' : water ? '📢 説教 = 相手の攻撃 0.6 倍・毒を治す！' : taika ? '📜 大化の改新 = 1.2 倍こうげき・味方の状態異常とデバフを全部解除！' : `⚡ 落雷 = どんな相性でも ${cards.THUNDER_POWER} 倍！`}</div>
       ${q.hint ? `<div style="margin-top:10px;display:inline-block;padding:6px 16px;border-radius:14px;background:linear-gradient(90deg,#fff3bf,#ffc078);font-size:26px;color:#7a3e00;font-weight:900">${esc(q.hint)}</div><br>` : ''}
       <div style="margin-top:12px;display:inline-block;padding:8px 16px;border-radius:14px;background:rgba(11,7,32,.75);font-size:22px;color:#fff3bf;font-weight:700">敵: ${q.enemy.map(([id, lv]) => `${esc(cards.CARDS[id].name)} Lv${lv}`).join('・')}</div>
     </div>

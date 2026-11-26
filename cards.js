@@ -31,6 +31,7 @@ const SKILLS = {
   thunder: { name: '落雷', desc: '相手の場のカードに雷を落とす: 2.3 倍の無属性こうげき (相性に関係なく同じダメージ)' },
   diary: { name: 'あの子の日記', desc: '味方全員の HP を 35% 回復して状態異常を治し、相手の場のカードに 1.2 倍のこうげき。HP 40% 以下なら自分は全回復 (バトルで 1 回だけ)' },
   buchigire: { name: 'ブチギレおばさん', desc: '相手の場のカードを道連れにして、自分も倒れる (ガード・バリア・絶対権力に関係なく)' },
+  ironwall: { name: '鉄壁', desc: 'このターンのダメージを 0 にして、HP を 12% 回復する' },
   sweep: { name: '疾風斬り', desc: '相手の場のカードに 1.4 倍、控えのカードに 0.8 倍の無属性こうげき + 全員に毒 (毎ターン最大 HP の 8%・3 ターン)' },
 };
 // パッシブ (いつでも働く力)。morale = 士気: このカードが倒れると、生き残っている味方の攻撃 1.4 倍・防御 1.3 倍 (1 回だけ)
@@ -136,6 +137,7 @@ const CARD_LIST = [
   ['raijin', '雷神クリりん', '⚡', 'MR', 'cut', 62, 14, 10, 19, 'thunder'], // MR: 高難易度クエスト「雷神降臨」のクリア報酬 (2026-11-19 8:00 から)
   ['nakanoooe', '中大兄皇子', '👑', 'MR', 'heavy', 92, 16, 18, 8, 'taika'],
   ['yhime', 'Y', '🎤', 'MR', 'wrap', 84, 17, 12, 14, 'deathsong'],
+  ['keshigon', '要塞消しゴム ケシゴン', '🧱', 'MR', 'heavy', 230, 3, 40, 2, 'ironwall'], // MR: 高難易度クエスト「ケシゴン要塞」(2026-11-27 8:00〜) のクリア報酬。体力と防御がけた外れ・攻撃はほぼ 0
   ['ando', 'プレジデントあんどう', '👔', 'MR', 'heavy', 96, 18, 15, 9, 'order'], // MR: 高難易度クエスト「社長室の決戦」のクリア報酬 (2026-11-22 12:00 から)。社長の万年筆。クエストのボスのときだけ「絶対権力」 // MR: 高難易度クエスト「Y降臨」のクリア報酬 (2026-11-22 8:00 から)。歌姫にあこがれる歌のへたなマイク。わざ「死の歌声─一方的な愛─」 // MR: 高難易度クエスト「大化の改新」のクリア報酬 (2026-11-20 23:30 から)。硯 (すずり) の皇子。かたくて攻撃もそこそこ
 ];
 // ガチャに出ないレア度 (クエストの報酬など) の能力の倍率
@@ -271,6 +273,7 @@ function pull(n, pity, rnd = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32, now =
 }
 
 // ---------- 対戦の判定 (同じ入力なら同じ結果になる純粋な関数。乱数は外から渡す) ----------
+const IRONWALL_HEAL = 0.12; // ケシゴンのわざ「鉄壁」の回復
 const TAKEN_DMG = 3; // 連れていかれたカードが受けるダメージ (最大 HP の 300%)
 const HOLD_CHANCE = 0.5; // 2048年のユミコのパッシブ「もう離さない」: 倒した相手を連れていく確率
 const DIARY = { heal: 0.35, full: 0.4, fullMax: 1, power: 1.2 }; // 2048年のユミコの「あの子の日記」(ぶっ壊れ)
@@ -329,7 +332,7 @@ function resolveTurn(state, acts, rnd) {
   });
   // 2. ガード・バリア
   const skillOf = (p) => act[p].a === 'skill' ? sides[p].cards[sides[p].active].skill : null;
-  const guard = [0, 1].map((p) => act[p].a === 'guard' ? 0.4 : skillOf(p) === 'barrier' ? 0 : skillOf(p) === 'heal' ? 0.5 : 1);
+  const guard = [0, 1].map((p) => act[p].a === 'guard' ? 0.4 : skillOf(p) === 'barrier' || skillOf(p) === 'ironwall' ? 0 : skillOf(p) === 'heal' ? 0.5 : 1);
   // 3. 素早い順に行動 (同じなら乱数)
   const order = [0, 1].sort((x, y) => {
     const a = sides[x].cards[sides[x].active].spd, b = sides[y].cards[sides[y].active].spd;
@@ -381,6 +384,7 @@ function resolveTurn(state, acts, rnd) {
       else if (me.skill === 'drain') { const d = hit(p, 1.2); const h = Math.min(me.maxHp - me.hp, Math.round(d / 2)); me.hp += h; if (h) ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'heal') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * 0.45)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); }
       else if (me.skill === 'barrier') hit(p, 0.8);
+      else if (me.skill === 'ironwall') { const h = Math.min(me.maxHp - me.hp, Math.round(me.maxHp * IRONWALL_HEAL)); me.hp += h; ev.push({ k: 'heal', p, card: me.name, amount: h }); } // 鉄壁: ダメージ 0 (ガードの表) + 12% 回復
       else if (me.skill === 'sweep') { // 場のカードに 1.4 倍・控えに 0.8 倍の無属性こうげき + 全員に毒
         const o = 1 - p, got = [], act0 = sides[o].active;
         sides[o].cards.forEach((c, i) => { if (c.hp > 0) { hit(p, i === act0 ? SWEEP_ACTIVE : SWEEP_BENCH, { target: i, typeless: true }); if (c.hp > 0) { c.poison = POISON_TURNS; c.bleed = false; got.push(c.name); } } });
@@ -654,7 +658,7 @@ function monCardBase(m) {
   return { rarity, limited, type: MONCARD_TYPE[m.type] || 'cut', skill: MONCARD_SKILL[m.type] || 'power', hp: st('hp'), atk: st('atk'), def: st('def'), spd: st('spd') };
 }
 // キャラ専用のわざ (馬には付けない): 疾風斬り = 疾風剣士ハサミ丸、スターライトマーチ = 星キャンディー
-const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order', 'buchigire', 'diary'];
+const EXCLUSIVE_SKILLS = ['sweep', 'starlight', 'venom', 'thunder', 'sermon', 'taika', 'dna', 'deathsong', 'order', 'buchigire', 'diary', 'ironwall'];
 // すでに専用わざが付いてしまった馬は、ふつうのわざ (ランダム) に付け直す (起動時に 1 回だけ。能力はそのまま)
 const HORSE_SKILL_FIX = `UPDATE card_horses SET skill = CASE abs(random()) % 5 WHEN 0 THEN 'power' WHEN 1 THEN 'pierce' WHEN 2 THEN 'drain' WHEN 3 THEN 'heal' ELSE 'barrier' END
   WHERE skill IN ('sweep', 'starlight');`;
@@ -755,6 +759,16 @@ const QUESTS = [
     enemy: [['ando', 20], ['gyokuji', 20], ['rainbowpen', 20]],
     titles: { 1: '社長室最速クリア👔', 2: '社長室準最速クリア👔' },
     start: Date.parse('2026-11-22T12:00:00+09:00'), end: Date.parse('2026-11-26T12:00:00+09:00') },
+  { id: 'keshigon-2026', name: 'ケシゴン要塞', boss: '要塞消しゴム ケシゴン', emoji: '🧱', reward: 'keshigon', bg: 'yousai', hard: true, boost: 2, // 仮 (tune_oni quest:keshigon-2026 の結果で更新する)
+    timeupLose: true,
+    award: '動かざる要塞、ついに崩れる…！🧱🧱🧱',
+    hint: '🗡️ ふつうの攻撃はほぼ通らない！ 「つらぬく」・毒・流星で削れ',
+    pr: 'ボスの要塞消しゴム ケシゴンは、体力も防御もけた外れ。こうげきはほとんどしてこないけれど、ふつうの攻撃ではびくともしない…！ 30 ターンで倒しきれなければ負け。防御を無視する「つらぬく」や毒・流星で削りきれ！',
+    text: '文房具の国のはずれにそびえる、巨大な消しゴムの要塞「ケシゴン」。何百年も動かず、どんな攻撃も消してしまう。30 ターン以内に崩せなければ負け。勝てば MR「要塞消しゴム ケシゴン」が仲間に！',
+    tip: 'ケシゴンは防御がけた外れなので、ふつうのこうげきはほとんど効かない。防御を無視するわざ「つらぬく」(流星定規・氷結万年筆)、毒 (タドコロ・疾風斬り)、失血 (ユミコ)、流星 (星キャンディー) で削るのが近道。わざ「鉄壁」でダメージを 0 にして回復してくるので、鉄壁の次のターンが攻めどき。30 ターンで倒せないと負け',
+    enemy: [['keshigon', 20], ['gyokuji', 20], ['chalk', 20]],
+    titles: { 1: '要塞最速攻略🧱', 2: '要塞準最速攻略🧱' },
+    start: Date.parse('2026-11-27T08:00:00+09:00'), end: Date.parse('2026-12-01T08:00:00+09:00') },
 ];
 if (Number(process.env.CB_QUEST_START)) Object.assign(QUESTS[0], { start: Number(process.env.CB_QUEST_START), end: Number(process.env.CB_QUEST_END) || QUESTS[0].end });
 // テスト用: CB_QUEST_<ID>_START / _END (ID は大文字、- は _)

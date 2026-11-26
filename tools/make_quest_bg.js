@@ -183,8 +183,31 @@ ${Array.from({ length: 5 }, (_, i) => `<rect x="${f(i * 120 - 4)}" y="0" width="
 </svg>`;
 }
 
+// ケシゴン要塞: 夕暮れの丘にそびえる、白い消しゴムの城壁 (青いスリーブの帯・ぎざぎざの胸壁)。消しかすが舞う
+function yousai() {
+  const r = rng(4120);
+  const crumbs = Array.from({ length: 40 }, () => `<rect x="${f(r() * W)}" y="${f(r() * 560)}" width="${f(4 + r() * 8)}" height="${f(3 + r() * 5)}" rx="2" fill="#f1f3f5" opacity="${f(0.3 + r() * 0.5)}" transform="rotate(${f(r() * 180)})"/>`).join('');
+  const merlons = Array.from({ length: 9 }, (_, i) => `<rect x="${f(40 + i * 60)}" y="300" width="36" height="40" fill="#f8f9fa" stroke="#adb5bd" stroke-width="2"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2f6b"/><stop offset=".55" stop-color="#e8590c"/><stop offset="1" stop-color="#ffd8a8"/></linearGradient>
+<linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ced4da"/></linearGradient>
+<linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c940d"/><stop offset="1" stop-color="#2b3a0a"/></linearGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#sky)"/>
+<circle cx="120" cy="140" r="54" fill="#fff3bf" opacity=".85"/>
+${crumbs}
+<rect x="30" y="338" width="540" height="300" fill="url(#wall)" stroke="#adb5bd" stroke-width="3"/>
+${merlons}
+<rect x="30" y="420" width="540" height="70" fill="#1c7ed6"/><rect x="30" y="420" width="540" height="10" fill="#4dabf7"/>
+<text x="300" y="468" text-anchor="middle" font-size="34" font-weight="900" fill="#fff" font-family="sans-serif" letter-spacing="6">KESHIGON</text>
+<path d="M250,640 V560 Q300,520 350,560 V640Z" fill="#495057"/>
+<path d="M0,640 Q150,600 300,630 T${W},620 V${H} H0Z" fill="url(#hill)"/>
+</svg>`;
+}
+
 fs.mkdirSync(OUT, { recursive: true });
-for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika, ystage, shachou })) {
+for (const [name, fn] of Object.entries({ 'raijin-night': raijinNight, starlight, suishinya, taika, ystage, shachou, yousai })) {
   const svg = fn(); fs.writeFileSync(path.join(OUT, name + '.svg'), svg);
   console.log('作った:', `public/bg/${name}.svg`, svg.length, 'bytes');
 }

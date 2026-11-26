@@ -444,6 +444,19 @@
       },
       // プレジデントあんどう (MR・おもい・社長命令): 黒と金の高級万年筆の社長。七三分けにサングラス、金のネクタイ、
       // うしろに金の後光と上がりつづけるグラフ。片手に「決裁」のはんこ
+      // 要塞消しゴム ケシゴン (MR・おもい・鉄壁): 大きな白い消しゴムの城。青いスリーブ・ぎざぎざの胸壁・どっしりした顔
+      keshigon: () => `
+        <ellipse cx="60" cy="110" rx="48" ry="7" fill="#000" opacity=".18"/>
+        <rect x="16" y="36" width="88" height="72" rx="8" fill="${lg('kgw', [[0, '#ffffff'], [1, '#ced4da']])}" stroke="#868e96" stroke-width="2"/>
+        ${[0, 1, 2, 3, 4].map((i) => `<rect x="${18 + i * 18}" y="24" width="12" height="16" rx="2" fill="#f8f9fa" stroke="#868e96" stroke-width="1.6"/>`).join('')}
+        <rect x="16" y="70" width="88" height="24" fill="${lg('kgb', [[0, '#4dabf7'], [1, '#1864ab']])}"/>
+        <path d="M16,70 H104" stroke="#a5d8ff" stroke-width="2"/>
+        <text x="60" y="87" text-anchor="middle" font-size="11" font-weight="900" fill="#fff" font-family="sans-serif" letter-spacing="1">KESHI</text>
+        <path d="M34,50 L46,54 M86,50 L74,54" stroke="#343a40" stroke-width="3.2" stroke-linecap="round"/>
+        <circle cx="42" cy="58" r="3.6" fill="#343a40"/><circle cx="78" cy="58" r="3.6" fill="#343a40"/>
+        <path d="M52,65 H68" stroke="#495057" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M24,104 l4,-6 M96,104 l-4,-6 M60,40 l0,6" stroke="#adb5bd" stroke-width="1.4"/>
+        ${twinkle(12, 20, 3, '#fff')}${twinkle(108, 30, 2.6, '#d0ebff')}`,
       ando: () => {
         const black = lg('pb', [[0, '#495057'], [0.45, '#212529'], [1, '#000']], 1, 0), gold = lg('pg', [[0, '#fff3bf'], [0.5, '#fab005'], [1, '#e67700']], 1, 0);
         return `
