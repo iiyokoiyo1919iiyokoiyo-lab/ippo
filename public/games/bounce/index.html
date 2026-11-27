@@ -103,6 +103,41 @@ canvas.field{display:block;max-width:100%;max-height:100%;border-radius:14px;box
 .gfx .flash{position:absolute;inset:0;background:#fff;animation:fl 1s forwards;pointer-events:none}@keyframes fl{to{opacity:0}}
 .gfx .bolt{position:absolute;top:0;width:8px;height:60vh;background:linear-gradient(#fff,#ffe066,transparent);filter:drop-shadow(0 0 14px #ffe066);animation:fl .5s infinite}
 .loading{text-align:center;padding:60px 0;color:var(--sub)}
+/* 戦闘画面 (リニューアル): 上の情報バー・フィールド・下のバー */
+.battle{background:#0a0818;gap:0}
+.bt-top{width:100%;max-width:520px;display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 6px) 10px 4px}
+.bt-q{flex:1;min-width:0}.bt-q b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bt-q small{font-size:10px;color:var(--gold);letter-spacing:.05em}
+.bt-c{text-align:center;line-height:1.1}.bt-c b{display:block;font-size:14px;font-weight:900;letter-spacing:.08em;background:var(--goldg);-webkit-background-clip:text;background-clip:text;color:transparent}.bt-c small{font-size:10px;color:var(--sub)}
+.bt-menu{flex:none;width:38px;height:38px;border-radius:12px;background:linear-gradient(#2b2560,#1a1640);border:1px solid rgba(255,255,255,.18);font-size:20px;font-weight:900;color:#fff;margin-left:8px}
+.bt-bars{width:100%;max-width:520px;padding:0 10px 4px;display:flex;flex-direction:column;gap:4px}
+.bt-hpbar{position:relative;height:16px;border-radius:9px;background:#120e2a;border:1.5px solid rgba(255,255,255,.25);overflow:hidden;box-shadow:inset 0 2px 4px rgba(0,0,0,.6)}
+.bt-hpbar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(#8ce99a,#2f9e44);transition:width .35s}.bt-hpbar i.mid{background:linear-gradient(#ffe066,#f08c00)}.bt-hpbar i.low{background:linear-gradient(#ff8787,#c92a2a)}
+.bt-hpbar s{position:absolute;inset:0 auto 0 0;background:rgba(116,192,252,.55);text-decoration:none}
+.bt-hpbar span{position:absolute;right:8px;top:0;font-size:10.5px;font-weight:900;line-height:13px;text-shadow:0 1px 2px #000}
+.bt-boss[hidden]{display:none}.bt-boss{display:flex;align-items:center;gap:6px}.bt-boss em{font-style:normal;font-size:11px;font-weight:900;color:#ff8787;white-space:nowrap}
+.bt-bossbar{flex:1;height:10px;border-radius:6px;background:#2a0a12;border:1.5px solid #ff8787;overflow:hidden}.bt-bossbar i{display:block;height:100%;background:linear-gradient(#ff6b6b,#a61e1e);transition:width .35s}
+.bt-order{display:flex;gap:4px;font-size:10px;color:var(--sub);overflow:hidden;white-space:nowrap}.bt-order span{padding:1px 6px;border-radius:9px;background:rgba(255,255,255,.06)}.bt-order span.cur{background:var(--goldg);color:#3b2200;font-weight:900}
+.bwrap{flex:1;padding:0 6px}
+canvas.field{border-radius:12px;box-shadow:0 0 0 2px rgba(0,0,0,.6),0 0 0 3px rgba(255,212,59,.35),0 10px 30px rgba(0,0,0,.6)}
+.bt-ticker{position:absolute;left:50%;top:8px;transform:translateX(-50%);max-width:86%;padding:3px 10px;border-radius:9px;background:rgba(10,8,24,.62);font-size:11px;font-weight:800;opacity:0;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-ticker.on{animation:tick 2.4s forwards}@keyframes tick{0%{opacity:0}8%,75%{opacity:1}100%{opacity:0}}
+.bmsg.on{animation:popin .3s cubic-bezier(.2,1.5,.4,1)}@keyframes popin{from{transform:scale(.6);opacity:0}}
+.bt-bot{width:100%;max-width:520px;display:grid;grid-template-columns:72px 1fr 76px;gap:6px;align-items:stretch;padding:6px 8px calc(env(safe-area-inset-bottom) + 8px);background:linear-gradient(#1c1640,#0e0b24);border-top:2px solid rgba(255,212,59,.45)}
+.bt-thp{display:flex;flex-direction:column;justify-content:center;padding:4px 6px;border-radius:10px;background:rgba(0,0,0,.35);line-height:1.15}.bt-thp small{font-size:9.5px;color:var(--sub);font-weight:800}.bt-thp b{font-size:14px;font-weight:900;color:#8ce99a}
+.bt-mini{height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin:2px 0}.bt-mini i{display:block;height:100%;background:#51cf66;transition:width .35s}
+.bt-faces{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.bt-face{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;border:2px solid var(--ac);background:#120d2e;padding:0;box-shadow:0 2px 0 rgba(0,0,0,.4)}
+.bt-face svg{width:100%;height:125%;display:block;margin-top:-6%}
+.bt-face em{position:absolute;left:2px;top:2px;min-width:20px;height:20px;border-radius:50%;background:#1a1033;border:1.5px solid var(--ac);font-style:normal;font-size:11px;font-weight:900;line-height:17px;text-align:center;color:#fff}
+.bt-face i{position:absolute;right:2px;bottom:1px;font-style:normal;font-size:12px}
+.bt-face.sp em{background:var(--goldg);color:#3b2200;border-color:#fff3bf;animation:pulse 1.2s infinite}
+.bt-face.cur{border-color:#fff3bf;box-shadow:0 0 12px rgba(255,236,153,.8);transform:translateY(-3px)}
+.bt-side{display:flex;flex-direction:column;gap:5px}
+.bt-speed{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;background:rgba(0,0,0,.35);line-height:1.1}.bt-speed small{font-size:9.5px;color:var(--sub)}.bt-speed b{font-size:17px;font-weight:900}
+.bt-side .spbtn{width:auto;min-height:40px;font-size:11px;padding:2px}.bt-side .spbtn small{display:block;font-size:8.5px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bt-sheet{position:absolute;inset:0;z-index:5;background:rgba(5,3,15,.7);display:flex;align-items:flex-end;justify-content:center;padding:12px}
+.bt-sheet .card{width:100%;max-width:460px;background:#1a1540;max-height:70vh;overflow:auto}
+.bt-log{max-height:40vh;overflow:auto;font-size:12px;color:var(--sub)}.bt-log p{margin:0;padding:3px 0;border-bottom:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -112,9 +147,10 @@ canvas.field{display:block;max-width:100%;max-height:100%;border-radius:14px;box
   <a href="#home" data-n="home"><b>🏠</b>ホーム</a><a href="#quests" data-n="quests"><b>⚔️</b>クエスト</a><a href="#lobby" data-n="lobby"><b>👥</b>マルチ</a><a href="#gacha" data-n="gacha"><b>✨</b>ガチャ</a><a href="#units" data-n="units"><b>🃏</b>キャラ</a>
 </nav>
 <script src="/cards-art.js"></script>
-<script src="bn-data.js"></script>
-<script src="bn-core.js"></script>
-<script src="bn-art.js"></script>
-<script src="bn.js"></script>
+<script src="bn-data.js?v=3"></script>
+<script src="bn-core.js?v=3"></script>
+<script src="bn-art.js?v=3"></script>
+<script src="bn-field.js?v=3"></script>
+<script src="bn.js?v=3"></script>
 </body>
 </html>

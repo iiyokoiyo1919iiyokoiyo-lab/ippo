@@ -105,6 +105,7 @@
   //   キャラは immune (対応) を持つと、そのギミックを無視できる。'*' はすべてのギミック (今後ふえるものも) に対応
   const GIMMICK_TYPES = { gravity: '重力ゾーン', damage_floor: 'ダメージ床', warp: 'ワープ', block: 'ブロック', slow_wall: '減速壁' };
 
+  // 敵の絵は bn-field.js の ENEMY_ART (id ごと)。img: 'img/xxx.png' を書けば画像に差しかえられる
   // 敵。attack: { every: 何ターンごと, kind: 'hit' | 'laser' | 'curse', power } (curse は次のショットを遅くする状態異常)
   const ENEMIES = {
     slime_f: { name: 'ほのおスライム', attr: 'fire', hp: 30000, r: 26, attack: { every: 3, kind: 'hit', power: 1200 } },
@@ -127,24 +128,25 @@
     grav: (x, y, w, h) => ({ type: 'gravity', x, y, w, h }), floor: (x, y, w, h, power = 2500) => ({ type: 'damage_floor', x, y, w, h, power }),
     warp: (x, y, tx, ty) => ({ type: 'warp', x, y, r: 18, tx, ty }), block: (x, y, w, h) => ({ type: 'block', x, y, w, h }), slow: (x, y, w, h) => ({ type: 'slow_wall', x, y, w, h }),
   };
+  // bg: 戦闘フィールドの見た目 (bn-field.js の THEMES: meadow / cave / volcano / abyss / void / starlit / sand)。bgImage: 'img/xxx.jpg' を書けば画像に差しかえ
   // mode: story / raid / hard / event / material。stamina: 消費スタミナ。reward: クリア報酬 (gems・coins・exp・items)。drops: 素材 (確率)
   const STAGES = [
-    { id: 's1-1', mode: 'story', name: '1-1 はじまりの草原', stamina: 5, diff: 1, reward: { gems: 5, coins: 500, exp: 300 }, drops: [['exp_s', 0.6]],
+    { id: 's1-1', bg: 'meadow', mode: 'story', name: '1-1 はじまりの草原', stamina: 5, diff: 1, reward: { gems: 5, coins: 500, exp: 300 }, drops: [['exp_s', 0.6]],
       waves: [[['slime_g', 120, 140], ['slime_g', 240, 140]], [['slime_f', 180, 120], ['slime_w', 90, 220], ['slime_g', 270, 220]]] },
-    { id: 's1-2', mode: 'story', name: '1-2 ふしぎな洞くつ', stamina: 6, diff: 2, reward: { gems: 5, coins: 700, exp: 450 }, drops: [['exp_s', 0.7], ['crystal_wood_s', 0.3]],
+    { id: 's1-2', bg: 'cave', mode: 'story', name: '1-2 ふしぎな洞くつ', stamina: 6, diff: 2, reward: { gems: 5, coins: 700, exp: 450 }, drops: [['exp_s', 0.7], ['crystal_wood_s', 0.3]],
       g: [G.grav(110, 250, 140, 90)], waves: [[['bat_d', 100, 150], ['bat_d', 260, 150]], [['golem', 180, 140], ['slime_g', 80, 260], ['slime_g', 280, 260]]] },
-    { id: 's1-3', mode: 'story', name: '1-3 炎の門番', stamina: 8, diff: 3, reward: { gems: 10, coins: 1000, exp: 700 }, drops: [['crystal_fire_s', 0.5]],
+    { id: 's1-3', bg: 'volcano', mode: 'story', name: '1-3 炎の門番', stamina: 8, diff: 3, reward: { gems: 10, coins: 1000, exp: 700 }, drops: [['crystal_fire_s', 0.5]],
       g: [G.floor(0, 300, 360, 40, 1200), G.block(150, 210, 60, 20)], waves: [[['slime_f', 100, 140], ['slime_f', 260, 140]], [['dragon_f', 180, 150]]] },
-    { id: 'raid-leviathan', mode: 'raid', name: 'ボスレイド 深淵リヴァイア', stamina: 15, diff: 6, reward: { gems: 20, coins: 3000, exp: 1800 }, drops: [['crystal_water_l', 0.4], ['skill_book', 0.3]],
+    { id: 'raid-leviathan', bg: 'abyss', mode: 'raid', name: 'ボスレイド 深淵リヴァイア', stamina: 15, diff: 6, reward: { gems: 20, coins: 3000, exp: 1800 }, drops: [['crystal_water_l', 0.4], ['skill_book', 0.3]],
       g: [G.warp(60, 360, 300, 200), G.warp(300, 360, 60, 200), G.grav(130, 260, 100, 80)], waves: [[['leviathan', 180, 150]]] },
-    { id: 'hard-void', mode: 'hard', name: '高難易度 虚無の玉座', stamina: 25, diff: 9, reward: { gems: 50, coins: 8000, exp: 4000 }, drops: [['crystal_dark_l', 0.5], ['skill_book', 0.5]],
+    { id: 'hard-void', bg: 'void', mode: 'hard', name: '高難易度 虚無の玉座', stamina: 25, diff: 9, reward: { gems: 50, coins: 8000, exp: 4000 }, drops: [['crystal_dark_l', 0.5], ['skill_book', 0.5]],
       g: [G.slow(0, 0, 8, 600), G.slow(352, 0, 8, 600), G.floor(0, 260, 360, 30, 6000), G.block(60, 330, 80, 18), G.block(220, 330, 80, 18), G.warp(40, 200, 320, 420), G.grav(120, 200, 120, 60)],
       waves: [[['knight_d', 100, 160], ['knight_d', 260, 160]], [['void_king', 180, 150], ['bat_d', 70, 260], ['bat_d', 290, 260]]] },
-    { id: 'event-star', mode: 'event', name: 'イベント 星降る夜', stamina: 10, diff: 4, reward: { gems: 30, coins: 2000, exp: 1200 }, drops: [['star_shard', 0.8], ['crystal_light_s', 0.5]],
+    { id: 'event-star', bg: 'starlit', mode: 'event', name: 'イベント 星降る夜', stamina: 10, diff: 4, reward: { gems: 30, coins: 2000, exp: 1200 }, drops: [['star_shard', 0.8], ['crystal_light_s', 0.5]],
       g: [G.grav(60, 220, 80, 80), G.grav(220, 220, 80, 80)], waves: [[['wisp_l', 90, 150], ['wisp_l', 270, 150], ['bat_d', 180, 250]], [['knight_d', 180, 150], ['wisp_l', 80, 260], ['wisp_l', 280, 260]]] },
-    { id: 'mat-gold', mode: 'material', name: '素材 ゴールドラッシュ', stamina: 8, diff: 2, reward: { gems: 0, coins: 5000, exp: 2500 }, drops: [['exp_l', 0.8], ['exp_s', 1]],
+    { id: 'mat-gold', bg: 'sand', mode: 'material', name: '素材 ゴールドラッシュ', stamina: 8, diff: 2, reward: { gems: 0, coins: 5000, exp: 2500 }, drops: [['exp_l', 0.8], ['exp_s', 1]],
       waves: [[['gold_slime', 120, 160], ['gold_slime', 240, 160], ['gold_slime', 180, 260]]] },
-    { id: 'mat-crystal', mode: 'material', name: '素材 結晶の洞', stamina: 8, diff: 3, reward: { gems: 0, coins: 1500, exp: 600 },
+    { id: 'mat-crystal', bg: 'cave', mode: 'material', name: '素材 結晶の洞', stamina: 8, diff: 3, reward: { gems: 0, coins: 1500, exp: 600 },
       drops: [['crystal_fire_s', 0.5], ['crystal_water_s', 0.5], ['crystal_wood_s', 0.5], ['crystal_light_s', 0.5], ['crystal_dark_s', 0.5]],
       g: [G.slow(0, 280, 120, 14), G.slow(240, 280, 120, 14)], waves: [[['slime_f', 80, 150], ['slime_w', 180, 150], ['slime_g', 280, 150]], [['golem', 180, 160]]] },
   ];

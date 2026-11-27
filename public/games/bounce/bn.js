@@ -255,46 +255,88 @@
   }
 
   // =====================================================================
-  // 戦闘画面 (キャンバス)。サーバーから来たフレーム・出来事を再生する
+  // 戦闘画面。サーバーから来たフレーム・出来事を再生する (計算はサーバー。ここは見せ方だけ)
+  //   上: クエスト名・難しさ / バトル番号・ターン / メニュー → チームの HP → (ボス戦) ボスの HP → 行動順
+  //   まん中: フィールド (bn-field.js の地面・ギミック・敵の絵・キャラのボール絵)
+  //   下: チームの HP / 4 体の顔 (必殺技までのターン・状態。タップで詳しく) / ターン・必殺技
   // =====================================================================
+  const F = window.BNField;
+  const BALL = CORE.UNIT_R * 1.18; // 見た目のボールの半径 (当たり判定は CORE.UNIT_R のまま)
   function openBattle(state, rm, resumed) {
     room = rm;
+    const st = D.STAGES.find((s) => s.id === state.stage);
     const el = document.createElement('div'); el.className = 'battle';
-    el.innerHTML = `<div class="bhud"><div class="row"><b style="font-size:13px;flex:1" id="b-stage"></b><span class="pill" id="b-wave"></span><button class="pill" id="b-giveup">あきらめる</button></div>
-      <div class="hp"><s id="b-bar" style="width:0"></s><i id="b-hp"></i></div><div class="row"><span class="sub" id="b-hpt"></span><span class="sub" style="margin-left:auto" id="b-timer"></span></div><div class="order" id="b-order"></div></div>
-      <div class="bwrap"><canvas class="field" id="b-cv"></canvas><div class="bmsg" id="b-msg"></div></div>
-      <div class="bbot"><div class="blog" id="b-log"></div><button class="spbtn" id="b-sp">必殺技</button></div>`;
+    el.innerHTML = `<div class="bt-top">
+        <div class="bt-q"><b>${esc(st.name)}</b><small>${esc(D.MODES[st.mode])} ${'★'.repeat(Math.min(10, st.diff))}</small></div>
+        <div class="bt-c"><b id="b-wave"></b><small id="b-turn"></small></div>
+        <button class="bt-menu" id="b-menu" aria-label="メニュー">≡</button></div>
+      <div class="bt-bars"><div class="bt-hpbar"><i id="b-hp"></i><s id="b-bar"></s><span id="b-hpt"></span></div>
+        <div class="bt-boss" id="b-boss" hidden><em id="b-bossn"></em><div class="bt-bossbar"><i id="b-bosshp"></i></div></div>
+        <div class="bt-order" id="b-order"></div></div>
+      <div class="bwrap"><canvas class="field" id="b-cv"></canvas><div class="bt-ticker" id="b-tick"></div><div class="bmsg" id="b-msg"></div></div>
+      <div class="bt-bot"><div class="bt-thp"><small>HP</small><b id="b-hpn"></b><div class="bt-mini"><i id="b-hpm"></i></div><small id="b-timer"></small></div>
+        <div class="bt-faces" id="b-faces"></div>
+        <div class="bt-side"><div class="bt-speed"><small>ターン</small><b id="b-tnum"></b></div><button class="spbtn" id="b-sp">必殺技</button></div></div>`;
     document.body.append(el);
-    battle = { el, state, cv: $('#b-cv', el), anim: null, fx: [], log: [], disp: null, special: false, myTurn: false, deadline: 0, cosmos: 0, playing: false, pend: [] };
+    battle = { el, state, st, cv: $('#b-cv', el), anim: null, fx: [], log: [], disp: null, special: false, myTurn: false, deadline: 0, cosmos: 0, playing: false, pend: [], hit: {}, dying: [] };
     battle.disp = JSON.parse(JSON.stringify(state));
-    $('#b-stage', el).textContent = D.STAGES.find((s) => s.id === state.stage).name;
-    $('#b-giveup', el).addEventListener('click', () => { if (confirm('ルームを抜けますか？ (マルチではあなたのキャラは自動で動きます)')) { wsSend({ t: 'leave' }); closeBattle(); } });
-    $('#b-sp', el).addEventListener('click', () => { const u = battle.disp.units[battle.disp.current]; if (!battle.myTurn || u.spLeft > 0) return; battle.special = !battle.special; drawHud(); });
+    $('#b-menu', el).addEventListener('click', openMenu);
+    $('#b-sp', el).addEventListener('click', toggleSpecial);
     fit(); window.addEventListener('resize', fit);
     bindAim();
     drawHud(); loop();
     log(resumed ? '戦闘にもどりました' : 'バトル開始！ 引っぱって離すと発射');
   }
+  function toggleSpecial() { const u = battle.disp.units[battle.disp.current]; if (!battle.myTurn || u.spLeft > 0) return; battle.special = !battle.special; drawHud(); battleMsg(battle.special ? `必殺技「${D.SPECIALS[u.special].name}」を撃つ準備` : '必殺技をやめた', 900); }
+  function openMenu() {
+    const m = document.createElement('div'); m.className = 'bt-sheet';
+    m.innerHTML = `<div class="card"><h3>メニュー</h3><div class="bt-log">${battle.log.map((x) => `<p>${esc(x)}</p>`).join('') || '<p class="sub">まだ記録はありません</p>'}</div>
+      <div class="grid2" style="margin-top:10px"><button class="btn" data-close>閉じる</button><button class="btn pink" data-giveup>あきらめる</button></div></div>`;
+    battle.el.append(m);
+    m.addEventListener('click', (e) => { if (e.target === m || e.target.closest('[data-close]')) m.remove(); if (e.target.closest('[data-giveup]') && confirm('ルームを抜けますか？ (マルチではあなたのキャラは自動で動きます)')) { wsSend({ t: 'leave' }); closeBattle(); } });
+  }
+  function openUnitInfo(i) {
+    const u = battle.disp.units[i]; if (!u) return; const c = D.CHAR[u.char], cb = D.COMBOS[u.combo], sp = D.SPECIALS[u.special];
+    const m = document.createElement('div'); m.className = 'bt-sheet';
+    m.innerHTML = `<div class="card"><div class="row"><span style="width:64px">${unitTile(u.char)}</span><div style="flex:1"><b>${esc(u.name)}</b><div class="sub">${D.ATTRS[u.attr].icon}${D.ATTRS[u.attr].name} · ${u.shot === 'pierce' ? '貫通' : '反射'}${u.immuneAll ? ' · 全ギミック対応中' : ''}</div><div class="sub">${room && !room.solo ? `担当: ${esc(memberName(u.owner))}` : ''}</div></div></div>
+      <div class="kv" style="margin-top:8px"><b>攻撃力</b><span>${fmt(u.atk)}${u.atk !== u.baseAtk ? ` <span class="sub">(×${(u.atk / u.baseAtk).toFixed(2)})</span>` : ''}</span><b>スピード</b><span>${u.spd}</span><b>必殺技</b><span>${esc(sp.name)} · ${u.spLeft > 0 ? `あと ${u.spLeft} ターン` : '使える！'}</span><b>連携コンボ</b><span>${esc(cb.name)}</span>
+      <b>バフ</b><span>${u.buffs.length ? u.buffs.map((b) => `攻撃 +${Math.round(b.rate * 100)}% (${b.turns})`).join('・') : 'なし'}</span><b>状態</b><span>${u.status?.slow ? '🐌 のろい (次のショットが遅い)' : 'ふつう'}</span></div>
+      ${c.abilities.length ? `<div class="sub" style="margin-top:8px">${c.abilities.map((a) => esc(D.ABILITIES[a].name)).join('・')}</div>` : ''}<button class="btn block" data-close style="margin-top:10px">閉じる</button></div>`;
+    battle.el.append(m); m.addEventListener('click', (e) => { if (e.target === m || e.target.closest('[data-close]')) m.remove(); });
+  }
   function closeBattle() { if (!battle) return; cancelAnimationFrame(battle.raf); battle.el.remove(); battle = null; window.removeEventListener('resize', fit); route(); }
-  function fit() { if (!battle) return; const cv = battle.cv, wrap = cv.parentElement, s = Math.min(wrap.clientWidth / D.W, wrap.clientHeight / D.H), dpr = Math.min(2, devicePixelRatio || 1); cv.style.width = D.W * s + 'px'; cv.style.height = D.H * s + 'px'; cv.width = D.W * dpr; cv.height = D.H * dpr; battle.scale = s; battle.dpr = dpr; }
-  const log = (t) => { if (!battle) return; battle.log.unshift(t); battle.log.length = Math.min(battle.log.length, 30); $('#b-log').innerHTML = battle.log.slice(0, 4).map((x) => `<p>${esc(x)}</p>`).join(''); };
-  function battleMsg(t, ms = 1400) { if (!battle) return; const m = $('#b-msg'); m.textContent = t; clearTimeout(battle.msgT); battle.msgT = setTimeout(() => { m.textContent = ''; }, ms); }
+  function fit() {
+    if (!battle) return; const cv = battle.cv, wrap = cv.parentElement, s = Math.min(wrap.clientWidth / D.W, wrap.clientHeight / D.H), dpr = Math.min(2, devicePixelRatio || 1);
+    cv.style.width = D.W * s + 'px'; cv.style.height = D.H * s + 'px'; cv.width = Math.round(D.W * s * dpr); cv.height = Math.round(D.H * s * dpr); battle.scale = s; battle.dpr = dpr * s;
+    battle.ground = F.field(battle.st, Math.min(3, Math.ceil(s * dpr)));
+  }
+  const log = (t) => { if (!battle) return; battle.log.unshift(t); battle.log.length = Math.min(battle.log.length, 40); const k = $('#b-tick'); if (k) { k.textContent = t; k.classList.remove('on'); void k.offsetWidth; k.classList.add('on'); } };
+  function battleMsg(t, ms = 1400) { if (!battle) return; const m = $('#b-msg'); m.textContent = t; m.classList.remove('on'); void m.offsetWidth; m.classList.add('on'); clearTimeout(battle.msgT); battle.msgT = setTimeout(() => { m.textContent = ''; }, ms); }
   function drawHud() {
     if (!battle) return;
-    const s = battle.disp, el = battle.el, cur = s.units[s.current];
-    $('#b-wave', el).textContent = `バトル ${s.wave + 1}/${D.STAGES.find((x) => x.id === s.stage).waves.length} · ${s.turn + 1} ターン`;
-    $('#b-hp', el).style.width = `${s.teamHp / s.teamMax * 100}%`; $('#b-bar', el).style.width = `${Math.min(100, s.barrier / s.teamMax * 100)}%`;
-    $('#b-hpt', el).textContent = `HP ${fmt(s.teamHp)} / ${fmt(s.teamMax)}${s.barrier ? ` · 🛡${fmt(s.barrier)}` : ''}`;
-    $('#b-order', el).innerHTML = s.units.map((u, i) => `<span class="${i === s.current ? 'cur' : ''}" title="${esc(u.name)}">${A.svg(u.char)}<em>${u.spLeft > 0 ? u.spLeft : 'SP!'}</em></span>`).join('');
+    const s = battle.disp, el = battle.el, cur = s.units[s.current], nW = battle.st.waves.length;
+    $('#b-wave', el).textContent = `BATTLE ${s.wave + 1}/${nW}`; $('#b-turn', el).textContent = s.enemies.some((e) => e.boss && e.hp > 0) ? 'BOSS' : `${s.turn + 1} ターン目`;
+    const pct = Math.max(0, s.teamHp / s.teamMax * 100);
+    $('#b-hp', el).style.width = pct + '%'; $('#b-hp', el).className = pct < 25 ? 'low' : pct < 55 ? 'mid' : '';
+    $('#b-bar', el).style.width = `${Math.min(100, s.barrier / s.teamMax * 100)}%`;
+    $('#b-hpt', el).textContent = `${fmt(s.teamHp)} / ${fmt(s.teamMax)}${s.barrier ? ` 🛡${fmt(s.barrier)}` : ''}`;
+    $('#b-hpn', el).textContent = fmt(s.teamHp); $('#b-hpm', el).style.width = pct + '%'; $('#b-tnum', el).textContent = s.turn + 1;
+    const boss = s.enemies.find((e) => e.boss && e.hp > 0);
+    $('#b-boss', el).hidden = !boss; if (boss) { $('#b-bossn', el).textContent = `${D.ATTRS[boss.attr].icon} ${boss.name}`; $('#b-bosshp', el).style.width = `${boss.hp / boss.maxHp * 100}%`; }
+    // 行動順 (今の番から)
+    $('#b-order', el).innerHTML = s.units.map((_, k) => s.units[(s.current + k) % s.units.length]).map((u, k) => `<span class="${k === 0 ? 'cur' : ''}">${k === 0 ? '▶ ' : ''}${esc(u.name)}</span>`).join('');
+    // 下の顔 (必殺技までのターン・状態)
+    $('#b-faces', el).innerHTML = s.units.map((u, i) => `<button class="bt-face ${i === s.current ? 'cur' : ''} ${u.spLeft <= 0 ? 'sp' : ''}" data-f="${i}" style="--ac:${D.ATTRS[u.attr].color}">${A.svg(u.char)}<em>${u.spLeft > 0 ? u.spLeft : 'SS'}</em>${u.status?.slow ? '<i>🐌</i>' : u.buffs.length ? '<i>⬆</i>' : ''}</button>`).join('');
+    $$('#b-faces [data-f]', el).forEach((b) => b.addEventListener('click', () => { const i = Number(b.dataset.f); if (i === s.current && battle.myTurn && s.units[i].spLeft <= 0) return toggleSpecial(); openUnitInfo(i); }));
     const sp = $('#b-sp', el), spec = D.SPECIALS[cur.special];
     sp.className = 'spbtn' + (battle.myTurn && cur.spLeft <= 0 ? (battle.special ? ' on' : ' ready') : '');
-    sp.innerHTML = `必殺技<br><small>${esc(spec.name)}</small><br>${cur.spLeft > 0 ? `あと ${cur.spLeft}` : battle.special ? '発動する！' : 'つかえる'}`;
+    sp.innerHTML = `<small>${esc(spec.name)}</small>${cur.spLeft > 0 ? `あと ${cur.spLeft}` : battle.special ? '発動！' : '必殺技'}`;
   }
   function battleTurn(m) {
     battle.turnMsg = m;
     const apply = () => {
       const u = battle.disp.units[m.current];
-      battle.myTurn = !m.auto && u.owner === myUid() ; battle.deadline = m.deadline; battle.special = false;
+      battle.myTurn = !m.auto && u.owner === myUid(); battle.deadline = m.deadline; battle.special = false;
       drawHud();
       battleMsg(battle.myTurn ? 'あなたの番！' : m.auto ? `${u.name} (自動)` : `${memberName(u.owner)} の番`, 1000);
     };
@@ -303,35 +345,35 @@
   const myUid = () => room?.members.find((x) => x.username === me.me.username)?.uid;
   const memberName = (uid) => room?.members.find((x) => x.uid === uid)?.name || '';
 
-  // ねらう: どこを触っても引っぱれる (自分の番だけ)。引っぱった向きの逆へ飛ぶ
+  // ねらう: キャラ (か、フィールドのどこか) を触って引っぱる。引っぱった向きの逆へ飛ぶ
   function bindAim() {
     const cv = battle.cv; let start = null;
     const pos = (e) => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / battle.scale, y: (e.clientY - r.top) / battle.scale }; };
-    cv.addEventListener('pointerdown', (e) => { if (!battle?.myTurn || battle.playing) return; start = pos(e); battle.aim = null; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointerdown', (e) => { if (!battle?.myTurn || battle.playing) return; start = pos(e); battle.aim = { dx: 0, dy: 0 }; battle.grab = performance.now(); cv.setPointerCapture(e.pointerId); });
     cv.addEventListener('pointermove', (e) => { if (!start) return; const p = pos(e); battle.aim = { dx: (start.x - p.x) / 160, dy: (start.y - p.y) / 160 }; });
     const up = () => {
       if (!start) return; start = null;
-      const a = battle.aim; battle.aim = null;
+      const a = battle.aim; battle.aim = null; battle.grab = 0;
       if (!a || Math.hypot(a.dx, a.dy) < 0.12) return;
       const l = Math.min(1, Math.hypot(a.dx, a.dy)), d = Math.hypot(a.dx, a.dy);
       wsSend({ t: 'shoot', dx: a.dx / d * l, dy: a.dy / d * l, special: battle.special });
       battle.myTurn = false; drawHud();
     };
-    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', () => { start = null; battle.aim = null; });
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', () => { start = null; battle.aim = null; battle.grab = 0; });
   }
 
   // サーバーの結果を再生 (フレーム = 1/30 秒)
   function battleShot(m) {
     battle.playing = true;
-    const evs = m.events.slice(), u = battle.disp.units[m.unit];
-    battle.anim = { unit: m.unit, frames: m.frames, i: 0, t0: performance.now(), evs, final: m.state, trail: [] };
+    const u = battle.disp.units[m.unit];
+    battle.anim = { unit: m.unit, frames: m.frames, i: 0, t0: performance.now(), evs: m.events.slice(), final: m.state, trail: [] };
     if (m.auto) log(`${u.name} が自動で発射`);
   }
   function stepAnim(now) {
     const a = battle.anim; if (!a) return;
     const i = Math.min(a.frames.length - 1, Math.floor((now - a.t0) / (1000 / 30)));
     while (a.i <= i) { a.evs.filter((e) => e.f === a.i).forEach(onEvent); a.i++; }
-    const p = a.frames[i], u = battle.disp.units[a.unit]; u.x = p[0]; u.y = p[1]; a.trail.push([p[0], p[1]]); if (a.trail.length > 14) a.trail.shift();
+    const p = a.frames[i], u = battle.disp.units[a.unit]; u.x = p[0]; u.y = p[1]; a.trail.push([p[0], p[1]]); if (a.trail.length > 18) a.trail.shift();
     if (i >= a.frames.length - 1) {
       a.evs.filter((e) => e.f >= a.frames.length).forEach(onEvent);
       battle.anim = null; battle.disp = JSON.parse(JSON.stringify(a.final)); battle.cosmos = 0;
@@ -342,9 +384,12 @@
   function onEvent(e) {
     const s = battle.disp, fx = battle.fx, now = performance.now();
     const E = (k) => s.enemies.find((x) => x.key === k);
-    if (e.k === 'dmg') { const en = E(e.e); if (en) { en.hp = e.hp; fx.push({ t: now, kind: 'num', x: en.x + (Math.random() - 0.5) * 30, y: en.y - en.r, text: fmt(e.dmg), big: e.dmg >= 30000, thunder: e.thunder }); if (e.thunder) fx.push({ t: now, kind: 'thunder', x: en.x, y: en.y }); if (e.from) fx.push({ t: now, kind: 'homing', x: e.from[0], y: e.from[1], tx: en.x, ty: en.y }); } }
-    else if (e.k === 'kill') { const en = E(e.e); if (en) fx.push({ t: now, kind: 'burst', x: en.x, y: en.y, r: en.r }); log(`${en?.name || '敵'} をたおした！`); }
-    else if (e.k === 'combo') { const cb = D.COMBOS[e.id]; fx.push({ t: now, kind: 'combo_' + e.kind, x: e.x, y: e.y, cb }); log(`連携コンボ「${e.name}」！`); }
+    if (e.k === 'dmg') { const en = E(e.e); if (en) { en.hp = e.hp; battle.hit[en.key] = now;
+        fx.push({ t: now, kind: 'num', x: en.x + (Math.random() - 0.5) * 30, y: en.y - en.r * 0.6, text: fmt(e.dmg), big: e.dmg >= 30000, thunder: e.thunder });
+        if (e.hit !== undefined) { const u = s.units[e.hit]; const ang = Math.atan2(u.y - en.y, u.x - en.x); fx.push({ t: now, kind: 'spark', x: en.x + Math.cos(ang) * en.r, y: en.y + Math.sin(ang) * en.r, col: D.ATTRS[u.attr].color }); }
+        if (e.thunder) fx.push({ t: now, kind: 'thunder', x: en.x, y: en.y }); if (e.from) fx.push({ t: now, kind: 'homing', x: e.from[0], y: e.from[1], tx: en.x, ty: en.y }); } }
+    else if (e.k === 'kill') { const en = E(e.e); if (en) { battle.dying.push({ t: now, en: { ...en } }); fx.push({ t: now, kind: 'burst', x: en.x, y: en.y, r: en.r }); } log(`${en?.name || '敵'} をたおした！`); }
+    else if (e.k === 'combo') { const cb = D.COMBOS[e.id]; fx.push({ t: now, kind: 'combo_' + e.kind, x: e.x, y: e.y, cb }); fx.push({ t: now, kind: 'touch', x: e.x, y: e.y }); log(`連携コンボ「${e.name}」！`); }
     else if (e.k === 'special') { log(`必殺技「${e.name}」！`); battleMsg(e.name, 1800); if (e.type === 'akashic_zero') { battle.cosmos = now; fx.push({ t: now, kind: 'zero' }); } if (e.type === 'akashic_record') fx.push({ t: now, kind: 'record', u: e.u }); if (e.type === 'meteor') fx.push({ t: now, kind: 'meteor' }); }
     else if (e.k === 'mode') { log(e.end ? '貫通・全ギミック対応がおわり、反射にもどった' : '貫通タイプ・全ギミック対応に変化！'); }
     else if (e.k === 'heal') { s.teamHp = e.hp; fx.push({ t: now, kind: 'heal' }); log(`HP が ${fmt(e.amount)} 回復`); }
@@ -356,8 +401,8 @@
     else if (e.k === 'status') log(e.end ? 'のろいがとけた' : `${s.units[e.u]?.name} はのろわれた (次のショットが遅くなる)`);
     else if (e.k === 'resist') log(`${s.units[e.u]?.name} は運命干渉でのろいを防いだ！`);
     else if (e.k === 'eclipse') { const en = E(e.e); if (en) en.eclipse = 2; log('星蝕！ 受けるダメージが増える'); }
-    else if (e.k === 'gimmick') { if (e.type === 'warp') fx.push({ t: now, kind: 'warp', x: e.to[0], y: e.to[1] }); }
-    else if (e.k === 'wave') { s.enemies = e.enemies; s.wave = e.wave; battleMsg(`バトル ${e.wave + 1}`); }
+    else if (e.k === 'gimmick') { if (e.type === 'warp') fx.push({ t: now, kind: 'warp', x: e.to[0], y: e.to[1] }); if (e.hit) { const u = s.units[battle.anim?.unit]; if (u) fx.push({ t: now, kind: 'spark', x: u.x, y: u.y, col: e.type === 'slow_wall' ? '#74c0fc' : '#ced4da' }); } }
+    else if (e.k === 'wave') { s.enemies = e.enemies; s.wave = e.wave; battleMsg(`BATTLE ${e.wave + 1}`); }
     else if (e.k === 'over') battleMsg(e.result === 'win' ? 'クリア！' : '全滅…', 3000);
     drawHud();
   }
@@ -371,78 +416,97 @@
     draw(now);
     if (battle.deadline) { const left = Math.max(0, Math.ceil((battle.deadline - Date.now()) / 1000)); const t = $('#b-timer'); if (t) t.textContent = battle.playing ? '' : `⏱ ${left}`; }
   }
+  // 予想の軌道 (外の壁ではね返る直線。強さで長さが変わる)
+  function guidePath(x, y, dx, dy, len) {
+    const pts = [[x, y]]; let px = x, py = y, vx = dx, vy = dy, left = len, R = CORE.UNIT_R;
+    for (let k = 0; k < 4 && left > 0; k++) {
+      const tx = vx > 0 ? (D.W - R - px) / vx : vx < 0 ? (R - px) / vx : Infinity, ty = vy > 0 ? (D.H - R - py) / vy : vy < 0 ? (R - py) / vy : Infinity, t = Math.min(tx, ty, left);
+      px += vx * t; py += vy * t; left -= t; pts.push([px, py]); if (t === tx) vx = -vx; if (t === ty) vy = -vy;
+    }
+    return pts;
+  }
   function draw(now) {
     const b = battle, s = b.disp, c = b.cv.getContext('2d'); c.setTransform(b.dpr, 0, 0, b.dpr, 0, 0);
-    // 背景 (アカシックゼロのあいだは宇宙)
+    // 地面 (アカシックゼロのあいだは宇宙に変わる)
     const cos = b.cosmos && now - b.cosmos < 2600;
-    const g = c.createLinearGradient(0, 0, 0, D.H);
-    if (cos) { g.addColorStop(0, '#05030f'); g.addColorStop(1, '#1b0f4a'); } else { g.addColorStop(0, '#1d1650'); g.addColorStop(1, '#0d0a2a'); }
-    c.fillStyle = g; c.fillRect(0, 0, D.W, D.H);
-    if (cos) { for (let i = 0; i < 80; i++) { c.fillStyle = `rgba(255,255,255,${0.3 + (i % 5) * 0.14})`; c.fillRect((i * 97) % D.W, (i * 53 + now / 20) % D.H, 1.6, 1.6); } }
-    else { c.strokeStyle = 'rgba(255,255,255,.04)'; for (let x = 0; x < D.W; x += 30) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, D.H); c.stroke(); } }
+    if (b.ground) c.drawImage(b.ground, 0, 0, D.W, D.H);
+    if (cos) { const k = Math.min(1, (now - b.cosmos) / 400) * (now - b.cosmos > 2200 ? Math.max(0, (2600 - (now - b.cosmos)) / 400) : 1); const g = c.createRadialGradient(D.W / 2, D.H * 0.35, 10, D.W / 2, D.H * 0.4, D.H); g.addColorStop(0, `rgba(59,42,122,${k})`); g.addColorStop(1, `rgba(5,3,15,${k})`); c.fillStyle = g; c.fillRect(0, 0, D.W, D.H); for (let i = 0; i < 90; i++) { c.fillStyle = `rgba(255,255,255,${(0.3 + (i % 5) * 0.14) * k})`; c.fillRect((i * 97) % D.W, (i * 53 + now / 20) % D.H, 1.6, 1.6); } }
     // ギミック
-    for (const gm of s.gimmicks) {
-      if (gm.type === 'gravity') { c.fillStyle = 'rgba(151,117,250,.18)'; c.fillRect(gm.x, gm.y, gm.w, gm.h); c.strokeStyle = 'rgba(151,117,250,.6)'; c.setLineDash([5, 4]); c.strokeRect(gm.x, gm.y, gm.w, gm.h); c.setLineDash([]); label(c, '重力', gm.x + gm.w / 2, gm.y + gm.h / 2, '#d0bfff'); }
-      else if (gm.type === 'damage_floor') { c.fillStyle = 'rgba(255,80,80,.22)'; c.fillRect(gm.x, gm.y, gm.w, gm.h); c.strokeStyle = 'rgba(255,107,107,.7)'; for (let x = gm.x; x < gm.x + gm.w; x += 14) { c.beginPath(); c.moveTo(x, gm.y + gm.h); c.lineTo(x + 8, gm.y); c.stroke(); } }
-      else if (gm.type === 'warp') { c.strokeStyle = `hsl(${(now / 8) % 360},90%,70%)`; c.lineWidth = 3; c.beginPath(); c.arc(gm.x, gm.y, gm.r, 0, 7); c.stroke(); c.lineWidth = 1; c.fillStyle = 'rgba(99,230,190,.25)'; c.beginPath(); c.arc(gm.tx, gm.ty, 10, 0, 7); c.fill(); }
-      else if (gm.type === 'block') { c.fillStyle = '#495057'; c.fillRect(gm.x, gm.y, gm.w, gm.h); c.strokeStyle = '#868e96'; c.strokeRect(gm.x, gm.y, gm.w, gm.h); }
-      else if (gm.type === 'slow_wall') { c.fillStyle = 'rgba(77,171,247,.55)'; c.fillRect(gm.x, gm.y, gm.w, gm.h); }
-    }
-    // 敵
+    for (const gm of s.gimmicks) F.drawGimmick(c, gm, now);
+    // 敵 (影 → 絵 → 属性・HP・行動ターン)
     for (const e of s.enemies) {
       if (e.hp <= 0) continue;
-      const col = D.ATTRS[e.attr].color;
-      const rg = c.createRadialGradient(e.x - e.r * 0.3, e.y - e.r * 0.3, 2, e.x, e.y, e.r); rg.addColorStop(0, '#fff'); rg.addColorStop(0.35, col); rg.addColorStop(1, '#1b1446');
-      c.fillStyle = rg; c.beginPath(); c.arc(e.x, e.y, e.r, 0, 7); c.fill();
-      if (e.boss) { c.strokeStyle = '#ffd43b'; c.lineWidth = 3; c.stroke(); c.lineWidth = 1; }
-      if (e.eclipse > 0) { c.strokeStyle = 'rgba(177,151,252,.9)'; c.setLineDash([3, 3]); c.beginPath(); c.arc(e.x, e.y, e.r + 5, 0, 7); c.stroke(); c.setLineDash([]); }
-      c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(e.x - e.r, e.y + e.r + 4, e.r * 2, 5); c.fillStyle = '#ff6b6b'; c.fillRect(e.x - e.r, e.y + e.r + 4, e.r * 2 * e.hp / e.maxHp, 5);
-      label(c, String(e.cd), e.x + e.r * 0.75, e.y - e.r * 0.75, e.cd <= 1 ? '#ff6b6b' : '#fff', 13, '#000');
-      label(c, e.name, e.x, e.y + e.r + 17, '#e9ecef', 9);
+      const im = F.enemyImage(e.id), hitT = b.hit[e.key] && now - b.hit[e.key] < 260 ? (now - b.hit[e.key]) / 260 : 0;
+      const sx = hitT ? Math.sin(hitT * 40) * 4 * (1 - hitT) : 0, bob = Math.sin(now / 500 + e.key) * 1.6, size = e.r * (e.boss ? 2.6 : 2.4);
+      c.fillStyle = 'rgba(0,0,0,.32)'; c.beginPath(); c.ellipse(e.x, e.y + e.r * 0.85, e.r * 0.95, e.r * 0.3, 0, 0, 7); c.fill();
+      if (e.cd <= 1) { const p = 0.5 + Math.sin(now / 120) * 0.5; c.strokeStyle = `rgba(255,60,60,${0.4 + p * 0.5})`; c.lineWidth = 3; c.beginPath(); c.arc(e.x, e.y, e.r + 6 + p * 3, 0, 7); c.stroke(); c.lineWidth = 1; } // 攻撃の予告
+      if (F.ready(im)) { c.drawImage(im, e.x - size / 2 + sx, e.y - size / 2 + bob, size, size); if (hitT) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.6 * (1 - hitT); c.drawImage(im, e.x - size / 2 + sx, e.y - size / 2 + bob, size, size); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; } }
+      if (e.eclipse > 0) { c.strokeStyle = 'rgba(177,151,252,.9)'; c.setLineDash([3, 3]); c.beginPath(); c.arc(e.x, e.y, e.r + 4, 0, 7); c.stroke(); c.setLineDash([]); label(c, '蝕', e.x - e.r, e.y - e.r * 0.2, '#d0bfff', 10, '#000'); }
+      // 頭上の HP バー
+      if (!e.boss) { const bw = e.r * 1.8, by = e.y - size / 2 - 4 + bob; c.fillStyle = 'rgba(0,0,0,.65)'; roundRect(c, e.x - bw / 2 - 1, by - 1, bw + 2, 6, 3); c.fill(); c.fillStyle = e.hp / e.maxHp < 0.3 ? '#ff6b6b' : '#ffd43b'; roundRect(c, e.x - bw / 2, by, bw * e.hp / e.maxHp, 4, 2); c.fill(); }
+      // 属性のしるし・行動までのターン
+      c.fillStyle = D.ATTRS[e.attr].color; c.beginPath(); c.arc(e.x - e.r * 0.85, e.y + e.r * 0.65, 7, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.stroke(); label(c, D.ATTRS[e.attr].icon, e.x - e.r * 0.85, e.y + e.r * 0.66, '#fff', 8);
+      label(c, String(e.cd), e.x + e.r * 0.8, e.y - e.r * 0.7, e.cd <= 1 ? '#ff6b6b' : '#fff', e.cd <= 1 ? 17 : 15, '#1a1033');
     }
-    // 味方
+    // 撃破の消滅 (光りながら小さくなる)
+    b.dying = b.dying.filter((d) => now - d.t < 600);
+    for (const d of b.dying) { const k = (now - d.t) / 600, im = F.enemyImage(d.en.id), size = d.en.r * 2.4 * (1 - k * 0.6); if (F.ready(im)) { c.globalAlpha = 1 - k; c.globalCompositeOperation = 'lighter'; c.drawImage(im, d.en.x - size / 2, d.en.y - size / 2 - k * 20, size, size); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; } }
+    // 味方 (影・軌跡・ボール絵・属性のふち・選ばれた光)
     const cur = s.units[s.current];
     s.units.forEach((u, i) => {
       const col = D.ATTRS[u.attr].color, isCur = i === s.current && !b.anim, moving = b.anim && b.anim.unit === i;
-      if (moving && b.anim.trail.length) { c.strokeStyle = u.shot === 'pierce' ? 'rgba(255,212,59,.7)' : 'rgba(255,255,255,.35)'; c.lineWidth = 6; c.beginPath(); b.anim.trail.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); c.lineWidth = 1; }
-      c.fillStyle = col; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R, 0, 7); c.fill();
-      c.fillStyle = '#120d2e'; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R - 3, 0, 7); c.fill();
-      const spr = A.sprite(u.char);
-      if (spr) { c.save(); c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R - 2, 0, 7); c.clip(); c.drawImage(spr, u.x - CORE.UNIT_R * 1.25, u.y - CORE.UNIT_R * 1.3, CORE.UNIT_R * 2.5, CORE.UNIT_R * 2.5); c.restore(); }
-      else label(c, (A.RACE_ICON[D.CHAR[u.char].race] || D.ATTRS[u.attr].icon), u.x, u.y + 1, '#fff', 17);
-      if (isCur) { c.strokeStyle = '#ffd43b'; c.lineWidth = 3; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R + 4 + Math.sin(now / 200) * 2, 0, 7); c.stroke(); c.lineWidth = 1; }
-      if (u.immuneAll || (moving && u.shot === 'pierce')) { c.strokeStyle = 'rgba(255,212,59,.8)'; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R + 8, 0, 7); c.stroke(); }
-      if (u.status?.slow) label(c, '🐌', u.x + 16, u.y - 16, '#fff', 12);
+      if (moving && b.anim.trail.length > 1) { const tr = b.anim.trail; for (let k = 1; k < tr.length; k++) { c.strokeStyle = F.hexA(u.shot === 'pierce' ? '#ffd43b' : col, k / tr.length * 0.7); c.lineWidth = BALL * 1.4 * k / tr.length; c.lineCap = 'round'; c.beginPath(); c.moveTo(tr[k - 1][0], tr[k - 1][1]); c.lineTo(tr[k][0], tr[k][1]); c.stroke(); } c.lineWidth = 1; }
+      c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(u.x + 2, u.y + BALL * 0.9, BALL * 0.85, BALL * 0.3, 0, 0, 7); c.fill();
+      if (isCur) { const p = 0.6 + Math.sin(now / 180) * 0.4, gl = c.createRadialGradient(u.x, u.y, BALL * 0.8, u.x, u.y, BALL * 1.9); gl.addColorStop(0, `rgba(255,236,153,${0.7 * p})`); gl.addColorStop(1, 'rgba(255,236,153,0)'); c.fillStyle = gl; c.beginPath(); c.arc(u.x, u.y, BALL * 1.9, 0, 7); c.fill(); }
+      // ボール絵
+      const im = F.unitImage(u.char);
+      c.save(); c.beginPath(); c.arc(u.x, u.y, BALL - 2, 0, 7); c.clip(); c.fillStyle = '#120d2e'; c.fillRect(u.x - BALL, u.y - BALL, BALL * 2, BALL * 2);
+      if (F.ready(im)) { if (D.CHAR[u.char].sprite) c.drawImage(im, u.x - BALL * 1.3, u.y - BALL * 1.35, BALL * 2.6, BALL * 2.6); else { const w = BALL * 2.7, h = w * 1.25; c.drawImage(im, u.x - w / 2, u.y - h * 0.33, w, h); } }
+      const sh = c.createRadialGradient(u.x - BALL * 0.4, u.y - BALL * 0.5, 1, u.x, u.y, BALL); sh.addColorStop(0, 'rgba(255,255,255,.35)'); sh.addColorStop(0.5, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(0,0,0,.35)'); c.fillStyle = sh; c.fillRect(u.x - BALL, u.y - BALL, BALL * 2, BALL * 2);
+      c.restore();
+      c.shadowColor = col; c.shadowBlur = isCur ? 16 : 8; c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.arc(u.x, u.y, BALL - 1, 0, 7); c.stroke(); c.shadowBlur = 0; c.lineWidth = 1;
+      if (isCur) { c.strokeStyle = '#fff3bf'; c.lineWidth = 2; c.beginPath(); c.arc(u.x, u.y, BALL + 3 + Math.sin(now / 200) * 1.5, 0, 7); c.stroke(); c.lineWidth = 1; }
+      if (u.immuneAll || (moving && u.shot === 'pierce')) { c.strokeStyle = `rgba(255,212,59,${0.6 + Math.sin(now / 90) * 0.3})`; c.lineWidth = 2; c.setLineDash([4, 3]); c.beginPath(); c.arc(u.x, u.y, BALL + 7, now / 300, now / 300 + 6.3); c.stroke(); c.setLineDash([]); c.lineWidth = 1; }
+      if (u.status?.slow) label(c, '🐌', u.x + BALL * 0.8, u.y - BALL * 0.8, '#fff', 12);
+      if (u.spLeft <= 0 && !moving) label(c, 'SS', u.x, u.y + BALL + 8, '#ffd43b', 9, '#1a1033');
     });
-    // ねらい (引っぱった向きの逆に矢印・強さ)
-    if (b.aim && cur) { const l = Math.min(1, Math.hypot(b.aim.dx, b.aim.dy)), d = Math.hypot(b.aim.dx, b.aim.dy) || 1, ex = cur.x + b.aim.dx / d * (40 + l * 120), ey = cur.y + b.aim.dy / d * (40 + l * 120);
-      c.strokeStyle = `hsl(${50 - l * 50},100%,60%)`; c.lineWidth = 5; c.setLineDash([10, 6]); c.beginPath(); c.moveTo(cur.x, cur.y); c.lineTo(ex, ey); c.stroke(); c.setLineDash([]); c.lineWidth = 1; label(c, `${Math.round(l * 100)}%`, cur.x, cur.y - 34, '#fff', 13, '#000'); }
+    // ねらい: 予想の軌道 (壁ではね返る点線)・強さの輪
+    if (b.aim && cur && Math.hypot(b.aim.dx, b.aim.dy) > 0.05) {
+      const l = Math.min(1, Math.hypot(b.aim.dx, b.aim.dy)), d = Math.hypot(b.aim.dx, b.aim.dy) || 1, pts = guidePath(cur.x, cur.y, b.aim.dx / d, b.aim.dy / d, 60 + l * 260);
+      c.strokeStyle = `hsla(${50 - l * 45},100%,62%,.95)`; c.lineWidth = 4; c.setLineDash([2, 9]); c.lineCap = 'round'; c.lineDashOffset = -now / 30; c.beginPath(); pts.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); c.setLineDash([]); c.lineDashOffset = 0;
+      const [lx, ly] = pts[pts.length - 1], [px, py] = pts[pts.length - 2], an = Math.atan2(ly - py, lx - px); c.fillStyle = c.strokeStyle; c.beginPath(); c.moveTo(lx + Math.cos(an) * 8, ly + Math.sin(an) * 8); c.lineTo(lx + Math.cos(an + 2.5) * 8, ly + Math.sin(an + 2.5) * 8); c.lineTo(lx + Math.cos(an - 2.5) * 8, ly + Math.sin(an - 2.5) * 8); c.fill();
+      c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 5; c.beginPath(); c.arc(cur.x, cur.y, BALL + 10, 0, 7); c.stroke(); c.strokeStyle = `hsl(${50 - l * 45},100%,60%)`; c.lineWidth = 4; c.beginPath(); c.arc(cur.x, cur.y, BALL + 10, -Math.PI / 2, -Math.PI / 2 + l * Math.PI * 2); c.stroke(); c.lineWidth = 1;
+      label(c, `${Math.round(l * 100)}%`, cur.x, cur.y - BALL - 22, '#fff', 13, '#000');
+    }
     // 演出
     b.fx = b.fx.filter((f) => now - f.t < 1400);
     for (const f of b.fx) {
       const t = (now - f.t) / 1000;
-      if (f.kind === 'num') { c.globalAlpha = Math.max(0, 1 - t); label(c, f.text, f.x, f.y - t * 40, f.thunder ? '#ffe066' : f.big ? '#ffd43b' : '#fff', f.big ? 20 : 15, '#000'); c.globalAlpha = 1; }
-      else if (f.kind === 'burst') { c.strokeStyle = `rgba(255,255,255,${1 - t})`; c.lineWidth = 4; c.beginPath(); c.arc(f.x, f.y, f.r + t * 80, 0, 7); c.stroke(); c.lineWidth = 1; }
-      else if (f.kind === 'combo_laser') { if (t < 0.5) { c.fillStyle = `rgba(116,192,252,${0.8 - t})`; c.fillRect(0, f.y - f.cb.width / 2, D.W, f.cb.width); } }
-      else if (f.kind === 'combo_explode') { if (t < 0.6) { c.fillStyle = `rgba(255,146,43,${0.6 - t})`; c.beginPath(); c.arc(f.x, f.y, f.cb.radius * Math.min(1, t * 4), 0, 7); c.fill(); } }
-      else if (f.kind === 'combo_nova') { if (t < 0.5) { c.strokeStyle = `rgba(255,255,255,${0.9 - t * 1.5})`; c.lineWidth = f.cb.width / 2; for (let d = 0; d < 8; d++) { const ang = d * Math.PI / 4; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(f.x + Math.cos(ang) * 700, f.y + Math.sin(ang) * 700); c.stroke(); } c.lineWidth = 1; } }
-      else if (f.kind === 'homing') { if (t < 0.35) { const k = t / 0.35; c.fillStyle = '#ffe066'; c.beginPath(); c.arc(f.x + (f.tx - f.x) * k, f.y + (f.ty - f.y) * k - Math.sin(k * Math.PI) * 50, 5, 0, 7); c.fill(); } }
-      else if (f.kind === 'combo_orbital') { if (t < 0.9) { s.enemies.filter((e) => e.hp > 0).forEach((e, k) => { c.strokeStyle = `rgba(255,243,191,${0.9 - t})`; c.lineWidth = 6; c.beginPath(); c.moveTo(D.W / 2 + Math.cos(now / 300 + k) * 140, -10); c.lineTo(e.x, e.y); c.stroke(); }); c.lineWidth = 1; for (let k = 0; k < 10; k++) label(c, '✦', (k * 41 + t * 200) % D.W, (k * 67) % 200, `rgba(255,224,102,${1 - t})`, 14); } }
+      if (f.kind === 'num') { c.globalAlpha = Math.max(0, 1 - t); const sc = t < 0.12 ? 1.4 - t * 3 : 1; label(c, f.text, f.x, f.y - t * 40, f.thunder ? '#ffe066' : f.big ? '#ffd43b' : '#fff', (f.big ? 20 : 15) * sc, '#1a1033'); c.globalAlpha = 1; }
+      else if (f.kind === 'spark') { if (t < 0.35) { const k = t / 0.35; c.strokeStyle = F.hexA(f.col.length === 7 ? f.col : '#ffffff', 1 - k); c.lineWidth = 2.5; for (let a = 0; a < 8; a++) { const an = a * Math.PI / 4 + 0.3; c.beginPath(); c.moveTo(f.x + Math.cos(an) * (4 + k * 10), f.y + Math.sin(an) * (4 + k * 10)); c.lineTo(f.x + Math.cos(an) * (10 + k * 20), f.y + Math.sin(an) * (10 + k * 20)); c.stroke(); } c.fillStyle = `rgba(255,255,255,${0.9 - k})`; c.beginPath(); c.arc(f.x, f.y, 7 * (1 - k) + 2, 0, 7); c.fill(); c.lineWidth = 1; } }
+      else if (f.kind === 'touch') { if (t < 0.5) { c.strokeStyle = `rgba(255,243,191,${1 - t * 2})`; c.lineWidth = 3; c.beginPath(); c.arc(f.x, f.y, BALL + t * 50, 0, 7); c.stroke(); c.lineWidth = 1; } }
+      else if (f.kind === 'burst') { c.strokeStyle = `rgba(255,255,255,${1 - t})`; c.lineWidth = 4; c.beginPath(); c.arc(f.x, f.y, f.r + t * 80, 0, 7); c.stroke(); for (let k = 0; k < 10; k++) { const an = k * 0.63; c.fillStyle = `rgba(255,236,153,${1 - t})`; c.beginPath(); c.arc(f.x + Math.cos(an) * t * 90, f.y + Math.sin(an) * t * 90, 3, 0, 7); c.fill(); } c.lineWidth = 1; }
+      else if (f.kind === 'combo_laser') { if (t < 0.5) { c.shadowColor = '#74c0fc'; c.shadowBlur = 16; c.fillStyle = `rgba(165,216,255,${0.85 - t * 1.5})`; c.fillRect(0, f.y - f.cb.width / 2, D.W, f.cb.width); c.fillStyle = `rgba(255,255,255,${0.9 - t * 1.6})`; c.fillRect(0, f.y - f.cb.width / 6, D.W, f.cb.width / 3); c.shadowBlur = 0; } }
+      else if (f.kind === 'combo_explode') { if (t < 0.6) { const g = c.createRadialGradient(f.x, f.y, 2, f.x, f.y, f.cb.radius * Math.min(1, t * 4)); g.addColorStop(0, `rgba(255,255,200,${0.9 - t})`); g.addColorStop(0.5, `rgba(255,146,43,${0.7 - t})`); g.addColorStop(1, 'rgba(255,80,0,0)'); c.fillStyle = g; c.beginPath(); c.arc(f.x, f.y, f.cb.radius * Math.min(1, t * 4), 0, 7); c.fill(); } }
+      else if (f.kind === 'combo_nova') { if (t < 0.5) { c.strokeStyle = `rgba(255,255,255,${0.9 - t * 1.5})`; c.lineWidth = f.cb.width / 2; c.shadowColor = '#fff'; c.shadowBlur = 10; for (let d = 0; d < 8; d++) { const ang = d * Math.PI / 4; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(f.x + Math.cos(ang) * 700, f.y + Math.sin(ang) * 700); c.stroke(); } c.shadowBlur = 0; c.lineWidth = 1; } }
+      else if (f.kind === 'homing') { if (t < 0.35) { const k = t / 0.35; c.fillStyle = '#ffe066'; c.shadowColor = '#ffd43b'; c.shadowBlur = 10; c.beginPath(); c.arc(f.x + (f.tx - f.x) * k, f.y + (f.ty - f.y) * k - Math.sin(k * Math.PI) * 50, 5, 0, 7); c.fill(); c.shadowBlur = 0; } }
+      else if (f.kind === 'combo_orbital') { if (t < 0.9) { s.enemies.filter((e) => e.hp > 0).forEach((e, k) => { c.strokeStyle = `rgba(255,243,191,${0.9 - t})`; c.lineWidth = 6; c.shadowColor = '#ffd43b'; c.shadowBlur = 14; c.beginPath(); c.moveTo(D.W / 2 + Math.cos(now / 300 + k) * 140, -10); c.lineTo(e.x, e.y); c.stroke(); c.shadowBlur = 0; }); c.lineWidth = 1; for (let k = 0; k < 10; k++) label(c, '✦', (k * 41 + t * 200) % D.W, (k * 67) % 200, `rgba(255,224,102,${1 - t})`, 14); } }
       else if (f.kind === 'thunder') { if (t < 0.45) { c.strokeStyle = `rgba(255,236,153,${1 - t * 2})`; c.lineWidth = 5; c.shadowColor = '#ffe066'; c.shadowBlur = 18; c.beginPath(); let x = f.x + 30, y = -10; c.moveTo(x, y); const fall = Math.min(1, t * 6); while (y < f.y * fall) { y += 34; x += (y / 34 % 2 ? -1 : 1) * 16; c.lineTo(x, Math.min(y, f.y)); } c.stroke(); c.shadowBlur = 0; c.lineWidth = 1; if (fall >= 1) { c.fillStyle = `rgba(255,255,255,${0.8 - t})`; c.beginPath(); c.arc(f.x, f.y, 30 + t * 60, 0, 7); c.fill(); } } }
       else if (f.kind === 'combo_heal' || f.kind === 'heal') { if (t < 0.8) for (let k = 0; k < 8; k++) label(c, '✚', (k * 47) % D.W, D.H - 40 - t * 120 - (k % 3) * 20, `rgba(105,219,124,${1 - t})`, 16); }
       else if (f.kind === 'combo_barrier') { if (t < 0.8) { c.strokeStyle = `rgba(116,192,252,${1 - t})`; c.lineWidth = 4; c.beginPath(); c.arc(f.x, f.y, 30 + t * 60, 0, 7); c.stroke(); c.lineWidth = 1; } }
       else if (f.kind === 'hurt') { if (t < 0.3) { c.fillStyle = `rgba(255,0,0,${0.3 - t})`; c.fillRect(0, 0, D.W, D.H); } }
-      else if (f.kind === 'eatk') { if (t < 0.6) { c.strokeStyle = `rgba(255,107,107,${1 - t * 1.6})`; c.lineWidth = f.laser ? 10 : 4; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(D.W / 2, D.H - 60); c.stroke(); c.lineWidth = 1; } }
+      else if (f.kind === 'eatk') { if (t < 0.6) { c.strokeStyle = `rgba(255,107,107,${1 - t * 1.6})`; c.lineWidth = f.laser ? 10 : 4; c.shadowColor = '#ff3b3b'; c.shadowBlur = 12; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(D.W / 2, D.H - 60); c.stroke(); c.shadowBlur = 0; c.lineWidth = 1; } }
       else if (f.kind === 'warp') { c.strokeStyle = `rgba(99,230,190,${1 - t})`; c.beginPath(); c.arc(f.x, f.y, 10 + t * 40, 0, 7); c.stroke(); }
-      else if (f.kind === 'meteor') { if (t < 1) s.enemies.filter((e) => e.hp > 0).forEach((e, k) => { const k2 = Math.min(1, t * 2 + k * 0.1); c.fillStyle = '#ff922b'; c.beginPath(); c.arc(e.x - 80 * (1 - k2), e.y - 300 * (1 - k2), 10, 0, 7); c.fill(); }); }
+      else if (f.kind === 'meteor') { if (t < 1) s.enemies.filter((e) => e.hp > 0).forEach((e, k) => { const k2 = Math.min(1, t * 2 + k * 0.1); c.fillStyle = '#ff922b'; c.shadowColor = '#ff6b00'; c.shadowBlur = 14; c.beginPath(); c.arc(e.x - 80 * (1 - k2), e.y - 300 * (1 - k2), 10, 0, 7); c.fill(); c.shadowBlur = 0; }); }
       else if (f.kind === 'record') { if (t < 1.2) { c.fillStyle = `rgba(177,151,252,${0.25 - t * 0.2})`; c.fillRect(0, 0, D.W, D.H); for (let k = 0; k < 16; k++) { c.strokeStyle = `rgba(255,255,255,${0.5 - t * 0.4})`; c.beginPath(); c.moveTo((k * 23) % D.W, 0); c.lineTo((k * 23) % D.W - 40, D.H); c.stroke(); } label(c, '全ギミック対応・貫通', D.W / 2, 60, '#ffe066', 16, '#000'); } }
       else if (f.kind === 'zero') { // 天地創造・アカシックゼロ: 星の魔法陣 → 星が降る → 光の爆発
-        if (t < 1.35) { c.save(); c.translate(D.W / 2, D.H * 0.32); c.rotate(now / 900); c.strokeStyle = `rgba(255,224,102,${Math.min(1, t * 2)})`; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, 130, 0, 7); c.stroke(); c.beginPath(); c.arc(0, 0, 100, 0, 7); c.stroke(); c.beginPath(); for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + k * Math.PI * 4 / 5; c.lineTo(Math.cos(a) * 130, Math.sin(a) * 130); } c.stroke(); c.restore(); c.lineWidth = 1;
+        if (t < 1.35) { c.save(); c.translate(D.W / 2, D.H * 0.32); c.rotate(now / 900); c.strokeStyle = `rgba(255,224,102,${Math.min(1, t * 2)})`; c.lineWidth = 2; c.shadowColor = '#ffd43b'; c.shadowBlur = 12; c.beginPath(); c.arc(0, 0, 130, 0, 7); c.stroke(); c.beginPath(); c.arc(0, 0, 100, 0, 7); c.stroke(); c.beginPath(); for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + k * Math.PI * 4 / 5; c.lineTo(Math.cos(a) * 130, Math.sin(a) * 130); } c.stroke(); c.restore(); c.lineWidth = 1; c.shadowBlur = 0;
           for (let k = 0; k < 18; k++) { const kk = (t * 1.4 + k * 0.07) % 1; label(c, '★', (k * 53) % D.W + kk * 40, kk * D.H * 0.6, '#fff3bf', 14 + (k % 3) * 4); } }
         else { const k = t - 1.35; c.fillStyle = `rgba(255,255,255,${Math.max(0, 0.95 - k * 2)})`; c.fillRect(0, 0, D.W, D.H); }
       }
     }
   }
+  function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
   function label(c, text, x, y, color, size = 12, stroke) { c.font = `900 ${size}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; if (stroke) { c.lineWidth = 3; c.strokeStyle = stroke; c.strokeText(text, x, y); c.lineWidth = 1; } c.fillStyle = color; c.fillText(text, x, y); }
 
   function battleResult(m) {
