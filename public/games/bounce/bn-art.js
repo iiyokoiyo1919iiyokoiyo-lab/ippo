@@ -50,8 +50,14 @@
     const c = D.CHAR[charId]; if (!c) return '';
     const id = 'bn' + (uid++);
     if (c.art === 'astraea') return astraea(id);
+    if (c.art === 'image') return `<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${c.name}"><rect width="400" height="500" fill="#1a0b2e"/><image href="${c.sprite || c.stand}" x="-40" y="20" width="480" height="480" preserveAspectRatio="xMidYMid meet"/></svg>`; // 画像のキャラ: 一覧・アイコンはゲーム中の絵
     if (c.art === 'yumiko' && root.CBArt) return `<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ユミコ"><defs><radialGradient id="${id}y" cx=".5" cy=".45" r=".75"><stop offset="0" stop-color="#5f3dc4"/><stop offset=".6" stop-color="#1a0b2e"/><stop offset="1" stop-color="#05020c"/></radialGradient></defs><rect width="400" height="500" fill="url(#${id}y)"/>${Array.from({ length: 6 }, (_, i) => `<path d="M${40 + i * 64},0 l-18,90 h22 l-26,110" stroke="#ffe066" stroke-width="3" fill="none" opacity="${0.25 + (i % 3) * 0.15}"/>`).join('')}<g transform="translate(20 60) scale(3)">${root.CBArt.svg('yumiko', 'SSR').replace(/^<svg[^>]*>/, '').replace(/<\/svg>$/, '')}</g></svg>`;
     return orb(c, id);
   }
-  root.BNArt = { svg, RACE_ICON };
+  // 大きな立ち絵 (詳細・ガチャの登場)。画像のキャラは利用者の立ち絵、ほかは svg と同じ
+  function full(charId) { const c = D.CHAR[charId]; if (c?.stand) return `<img src="${c.stand}" alt="${c.name}" style="display:block;width:100%;height:auto">`; return svg(charId); }
+  // 戦闘で使う絵 (読みこみずみの Image)。ないキャラは null
+  const sprites = {};
+  function sprite(charId) { const c = D.CHAR[charId]; if (!c?.sprite) return null; if (!sprites[charId]) { const im = new Image(); im.src = c.sprite; sprites[charId] = im; } return sprites[charId].complete && sprites[charId].naturalWidth ? sprites[charId] : null; }
+  root.BNArt = { svg, full, sprite, RACE_ICON };
 })(typeof self !== 'undefined' ? self : this);

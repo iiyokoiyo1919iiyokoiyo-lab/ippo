@@ -63,8 +63,8 @@
     { id: 'limited_astraea_001', name: 'アストレア', title: '終焉を統べる星神', rarity: 'UR', attr: 'light', race: '星神', type: 'スピード型', shot: 'reflect',
       hp: 28500, atk: 35200, spd: 520, combo: 'orbital', special: 'akashic_zero', abilities: ['star_blessing', 'fate', 'resonance'], limited: true, art: 'astraea',
       profile: '星々の終わりと始まりを見届けてきた星神。その指先ひとつで、世界は無に還り、また生まれる。' },
-    { id: 'yumiko', name: 'ユミコ', title: '雷を呼ぶ母', rarity: 'UR', attr: 'dark', race: '人間', type: 'スピード型', shot: 'reflect',
-      hp: 24600, atk: 30800, spd: 480, combo: 'abc', special: 'akashic_record', abilities: ['fate'], limited: true, art: 'yumiko',
+    { id: 'yumiko', name: 'ユミコ', title: '2048年のユミコ', rarity: 'UR', attr: 'dark', race: '人間', type: 'スピード型', shot: 'reflect',
+      hp: 24600, atk: 30800, spd: 480, combo: 'abc', special: 'akashic_record', abilities: ['fate'], limited: true, art: 'image', stand: 'img/yumiko-stand.jpg', sprite: 'img/yumiko-game.png', // 立ち絵 (詳細・ガチャ) とゲーム中の絵 (戦闘・アイコン) は利用者が用意した画像
       profile: 'IppO のユミコ (キャラ ID・図鑑はそのまま)。天から雷を呼び、アカシックレコードですべての障害をすり抜ける。' },
     { id: 'ember_knight', name: 'エンバーナイト', title: '紅蓮の騎士', rarity: 'SSR', attr: 'fire', race: '騎士', type: 'バランス型', shot: 'reflect', hp: 21800, atk: 24600, spd: 360, combo: 'explode_l', special: 'dash', abilities: ['fire_up', 'anti_floor'], art: 'orb' },
     { id: 'tide_mage', name: 'タイドメイジ', title: '潮騒の魔導士', rarity: 'SSR', attr: 'water', race: '魔導士', type: 'スピード型', shot: 'pierce', hp: 19200, atk: 23400, spd: 420, combo: 'laser_l', special: 'meteor', abilities: ['water_up', 'anti_gravity'], art: 'orb' },

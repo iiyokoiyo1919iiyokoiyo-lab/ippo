@@ -140,7 +140,7 @@
         } else if (r.limited && c.id === 'yumiko') { // ユミコ: 雷が落ちて登場
           fx.className = 'gfx'; fx.style.background = 'radial-gradient(circle,#2b1450,#05030f 70%)';
           fx.innerHTML = `${[12, 38, 66, 88].map((x) => `<i class="bolt" style="left:${x}%"></i>`).join('')}<div class="ttlx">限定 UR</div>`;
-          setTimeout(() => { if (!fx.isConnected) return; fx.insertAdjacentHTML('beforeend', `<div class="flash"></div><div class="reveal" style="--oc:#b197fc">${A.svg(c.id)}</div><div class="nm" style="--oc:#b197fc">${esc(c.name)}</div><div class="tp">${r.isNew ? 'NEW!' : dupText(r)} · タップでつづける</div>`); }, 900);
+          setTimeout(() => { if (!fx.isConnected) return; fx.insertAdjacentHTML('beforeend', `<div class="flash"></div><div class="reveal" style="--oc:#b197fc;width:min(92vw,520px)">${A.full(c.id)}</div><div class="nm" style="--oc:#b197fc">${esc(c.name)}</div><div class="tp">${r.isNew ? 'NEW!' : dupText(r)} · タップでつづける</div>`); }, 900);
         } else {
           fx.className = 'gfx'; fx.style.background = '';
           fx.innerHTML = `<div class="reveal" style="--oc:${col(r.rarity)}">${A.svg(c.id)}</div><div class="nm" style="--oc:${col(r.rarity)}"><span style="color:${col(r.rarity)}">${r.rarity}</span> ${esc(c.name)}</div><div class="tp">${r.isNew ? 'NEW!' : dupText(r)} · タップでつづける (${i}/${results.length})</div>`;
@@ -163,7 +163,7 @@
     const u = me.units.find((x) => String(x.id) === String(id)); if (!u) { location.hash = '#units'; return; }
     const c = D.CHAR[u.char], cb = D.COMBOS[c.combo], sp = D.SPECIALS[c.special], have = me.items;
     const evoCost = u.evo < D.GROW.evo.max ? D.evoCost(c, u.evo) : null, lbNeed = { N: 2, R: 4, SR: 10, SSR: 30, UR: 80 }[c.rarity];
-    app.innerHTML = `<div class="detail-art" style="--rc:${D.RARITY_COLOR[c.rarity]}">${A.svg(c.id)}</div>
+    app.innerHTML = `<div class="detail-art" style="--rc:${D.RARITY_COLOR[c.rarity]}">${A.full(c.id)}</div>
       <section class="card" style="margin-top:12px"><div class="sub">${esc(c.title || '')}</div><h2 style="margin:2px 0 6px"><span style="color:${D.RARITY_COLOR[c.rarity]}">${c.rarity}</span> ${esc(c.name)} ${c.limited ? '<span class="pill" style="background:var(--goldg);color:#3b2200">限定</span>' : ''}</h2>
         <div class="kv"><b>属性</b><span>${D.ATTRS[c.attr].icon}${D.ATTRS[c.attr].name}</span><b>種族</b><span>${esc(c.race)} · ${esc(c.type)} · ${c.shot === 'pierce' ? '貫通' : '反射'}</span>
         <b>レベル</b><span>Lv ${u.level}/${u.maxLv} ${u.level < u.maxLv ? `<span class="sub">(次まで ${fmt(u.next - u.exp)})</span>` : ''}</span><b>HP</b><span>${fmt(u.hp)}</span><b>攻撃力</b><span>${fmt(u.atk)}</span><b>スピード</b><span>${u.spd}</span>
@@ -407,7 +407,9 @@
       if (moving && b.anim.trail.length) { c.strokeStyle = u.shot === 'pierce' ? 'rgba(255,212,59,.7)' : 'rgba(255,255,255,.35)'; c.lineWidth = 6; c.beginPath(); b.anim.trail.forEach(([x, y], k) => (k ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); c.lineWidth = 1; }
       c.fillStyle = col; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R, 0, 7); c.fill();
       c.fillStyle = '#120d2e'; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R - 3, 0, 7); c.fill();
-      label(c, (A.RACE_ICON[D.CHAR[u.char].race] || D.ATTRS[u.attr].icon), u.x, u.y + 1, '#fff', 17);
+      const spr = A.sprite(u.char);
+      if (spr) { c.save(); c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R - 2, 0, 7); c.clip(); c.drawImage(spr, u.x - CORE.UNIT_R * 1.25, u.y - CORE.UNIT_R * 1.3, CORE.UNIT_R * 2.5, CORE.UNIT_R * 2.5); c.restore(); }
+      else label(c, (A.RACE_ICON[D.CHAR[u.char].race] || D.ATTRS[u.attr].icon), u.x, u.y + 1, '#fff', 17);
       if (isCur) { c.strokeStyle = '#ffd43b'; c.lineWidth = 3; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R + 4 + Math.sin(now / 200) * 2, 0, 7); c.stroke(); c.lineWidth = 1; }
       if (u.immuneAll || (moving && u.shot === 'pierce')) { c.strokeStyle = 'rgba(255,212,59,.8)'; c.beginPath(); c.arc(u.x, u.y, CORE.UNIT_R + 8, 0, 7); c.stroke(); }
       if (u.status?.slow) label(c, '🐌', u.x + 16, u.y - 16, '#fff', 12);

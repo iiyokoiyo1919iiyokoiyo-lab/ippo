@@ -58,7 +58,15 @@ module.exports = function install(app, ctx) {
   const units = (uid) => db.prepare('SELECT * FROM bn_units WHERE user_id = ? ORDER BY id').all(uid);
   const unitView = (u) => { const c = D.CHAR[u.char_id], s = C.unitStats({ char: u.char_id, level: u.level, evo: u.evo, lb: u.lb, skill: u.skill }); return { id: u.id, char: u.char_id, level: u.level, exp: u.exp, evo: u.evo, lb: u.lb, skill: u.skill, maxLv: D.LEVEL_CAP[c.rarity], next: D.GROW.expFor(u.level), ...s }; };
   const statsOf = (p) => { try { return JSON.parse(p.stats || '{}'); } catch { return {}; } };
+  // 追加キャラを全部自動で持たせる人 (テスト用・環境変数 BN_GIFT_ALL。未設定なら RCN413)。新しいキャラを足しても、次に開いたときに入る
+  const GIFT_ALL = new Set(String(process.env.BN_GIFT_ALL ?? 'RCN413').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+  function giftAll(uid) {
+    const u = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
+    if (!u || !GIFT_ALL.has(String(u.username).toLowerCase())) return;
+    for (const c of D.CHARS) db.prepare('INSERT OR IGNORE INTO bn_units (user_id, char_id, created_at) VALUES (?, ?, ?)').run(uid, c.id, Date.now());
+  }
   function ensure(uid) {
+    giftAll(uid);
     if (P(uid)) return;
     const now = Date.now();
     db.prepare('INSERT OR IGNORE INTO bn_players (user_id, gems, coins, stamina, stamina_at, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(uid, START.gems, START.coins, D.RANK.staminaAt(1), now, now);
